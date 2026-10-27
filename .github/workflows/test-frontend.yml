@@ -1,0 +1,48 @@
+name: Frontend Tests & Linting
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/test-frontend.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'frontend/**'
+
+jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'frontend/package-lock.json'
+
+    - name: Install dependencies
+      run: npm ci
+      working-directory: frontend
+
+    - name: Check code style
+      run: npm run lint --if-present
+      working-directory: frontend
+      continue-on-error: true
+
+    - name: Build frontend
+      run: npm run build
+      working-directory: frontend
+      env:
+        VITE_API_URL: http://localhost:8000
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: frontend-build
+        path: frontend/dist
+        retention-days: 5

@@ -1,0 +1,84 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ job.status }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'frontend/package-lock.json'
+
+    - name: Run all tests
+      run: |
+        pip install -r backend/requirements.txt pytest pytest-django
+        cd backend
+        pytest --tb=short
+      env:
+        DEBUG: False
+        SECRET_KEY: test-secret-key
+
+    - name: Build frontend
+      run: |
+        npm ci
+        npm run build
+      working-directory: frontend
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    if: success()
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production..."
+        # Add your production deployment commands here
+
+    - name: Notify Slack
+      uses: 8398a7/action-slack@v3
+      if: always()
+      with:
+        status: ${{ job.status }}
+        text: 'Production deployment ${{ job.status }}\n${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        fields: repo,message,commit,author
+      continue-on-error: true
+
+    - name: Create Release
+      uses: actions/create-release@v1
+      if: success()
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ github.run_number }}
+        release_name: Release v${{ github.run_number }}
+        body: |
+          Production deployment successful
+          Commit: ${{ github.sha }}
+        draft: false
+        prerelease: false

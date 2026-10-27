@@ -1,0 +1,21 @@
+# Code Owners
+# This file defines who should review code in different areas
+
+# Global owners
+* @Engrdotman
+
+# Backend specific
+/backend/ @Engrdotman
+/backend/apps/accounts/ @Engrdotman
+/backend/apps/schools/ @Engrdotman
+
+# Frontend specific
+/frontend/ @Engrdotman
+/frontend/src/ @Engrdotman
+
+# Documentation
+/docs/ @Engrdotman
+*.md @Engrdotman
+
+# Workflows
+.github/workflows/ @Engrdotman
