@@ -32,6 +32,9 @@ INSTALLED_APPS = [
     "apps.core.apps.CoreConfig",
     "apps.accounts.apps.AccountsConfig",
     "apps.schools.apps.SchoolsConfig",
+    "apps.academics.apps.AcademicsConfig",
+    "apps.students.apps.StudentsConfig",
+    "apps.staff.apps.StaffConfig",
 ]
 
 MIDDLEWARE = [
@@ -191,6 +194,18 @@ if DEBUG:
         if origin.strip()
     ]
     CORS_ALLOW_CREDENTIALS = True
+    CORS_ALLOW_HEADERS = [
+        "accept",
+        "accept-encoding",
+        "authorization",
+        "content-type",
+        "dnt",
+        "origin",
+        "user-agent",
+        "x-csrftoken",
+        "x-requested-with",
+        "x-school-id",
+    ]
     CSRF_TRUSTED_ORIGINS = [
         origin.strip()
         for origin in os.getenv(
@@ -205,6 +220,18 @@ else:
         if origin.strip()
     ]
     CORS_ALLOW_CREDENTIALS = True
+    CORS_ALLOW_HEADERS = [
+        "accept",
+        "accept-encoding",
+        "authorization",
+        "content-type",
+        "dnt",
+        "origin",
+        "user-agent",
+        "x-csrftoken",
+        "x-requested-with",
+        "x-school-id",
+    ]
     CSRF_TRUSTED_ORIGINS = [
         origin.strip()
         for origin in os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
