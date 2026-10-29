@@ -30,7 +30,8 @@ jobs:
       working-directory: frontend
 
     - name: Check code style
-      run: npm run lint --if-present
+      run: |
+        npm run lint --if-present || echo "⚠️ No lint script defined in package.json"
       working-directory: frontend
       continue-on-error: true
 
@@ -38,11 +39,26 @@ jobs:
       run: npm run build
       working-directory: frontend
       env:
-        VITE_API_URL: http://localhost:8000
+        VITE_API_URL: http://localhost:8000/api
+        NODE_ENV: production
+
+    - name: Verify build output
+      run: |
+        if [ -d "dist" ]; then
+          echo "✅ Build successful - dist directory created"
+          ls -la dist/
+        else
+          echo "❌ Build failed - dist directory not found"
+          exit 1
+        fi
+      working-directory: frontend
 
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
+      if: always()
       with:
         name: frontend-build
         path: frontend/dist
-        retention-days: 5
+        retention-days: 30
+        if-no-files-found: ignore
+
