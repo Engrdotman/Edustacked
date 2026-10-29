@@ -36,14 +36,19 @@ jobs:
         cd backend
         pytest --tb=short
       env:
-        DEBUG: False
-        SECRET_KEY: test-secret-key
+        DJANGO_DEBUG: false
+        DJANGO_SECRET_KEY: test-secret-key
+        DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+        DJANGO_CORS_ALLOWED_ORIGINS: http://localhost:5173
+        DATABASE_URL: sqlite:///test_db.sqlite3
 
     - name: Build frontend
       run: |
         npm ci
         npm run build
       working-directory: frontend
+      env:
+        VITE_API_URL: http://localhost:8000/api
 
   deploy:
     needs: test
