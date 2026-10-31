@@ -23,9 +23,10 @@ Complete setup guide to enable CI/CD pipelines and branch protection for Edustac
    - ✅ **Require status checks to pass before merging**
      - Require branches to be up to date before merging
      - Select required status checks:
-       - `Backend Tests & Linting`
-       - `Frontend Tests & Linting`
-       - `Code Quality & Security`
+       - `Backend Tests & Linting / test`
+       - `Frontend Tests & Linting / lint-and-build`
+       - `Code Quality & Security / Security Scanning`
+       - `Code Quality & Security / Dependency Security Check`
    - ✅ **Restrict who can push to matching branches**
      - Select: Administrators only
 5. Click **Create**
@@ -41,8 +42,8 @@ Complete setup guide to enable CI/CD pipelines and branch protection for Edustac
    - ✅ **Require status checks to pass before merging**
      - Require branches to be up to date before merging
      - Select required status checks:
-       - `Backend Tests & Linting`
-       - `Frontend Tests & Linting`
+       - `Backend Tests & Linting / test`
+       - `Frontend Tests & Linting / lint-and-build`
 5. Click **Create**
 
 ## Step 3: Add Repository Secrets
@@ -50,11 +51,11 @@ Complete setup guide to enable CI/CD pipelines and branch protection for Edustac
 ### For Staging Environment
 
 1. Go to **Settings** → **Secrets and variables** → **Actions**
-2. Click **New repository secret** for each:
+2. The staging workflow uses an isolated PostgreSQL service for tests and migrations, so no database or Django secrets are needed to run validation. Optional settings:
 
 ```
 Name: STAGING_API_URL
-Value: https://api-staging.example.com
+Value: https://api-staging.example.com/api
 ```
 
 ```
@@ -64,12 +65,14 @@ Value: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
 
 > Optional: Add other staging-specific secrets as needed
 
+The `Staging Validation` workflow runs checks only. It does not deploy to a hosting provider; configure a provider-specific deploy step after choosing the staging host.
+
 ### For Production Environment
 
 1. Same location as above, add:
 
 ```
-Name: SECRET_KEY
+Name: DJANGO_SECRET_KEY
 Value: <your-django-secret-key>
 ```
 
@@ -79,8 +82,13 @@ Value: postgresql://user:password@host:5432/database
 ```
 
 ```
-Name: ALLOWED_HOSTS
+Name: DJANGO_ALLOWED_HOSTS
 Value: example.com,www.example.com
+```
+
+```
+Name: DJANGO_CORS_ALLOWED_ORIGINS
+Value: https://example.com,https://www.example.com
 ```
 
 ```
@@ -90,31 +98,25 @@ Value: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
 
 > ⚠️ Never commit secrets. Keep them in GitHub Secrets only.
 
-## Step 4: Create Environments (Recommended)
+## Step 4: Create Environments (Optional)
 
 This adds an extra layer of security for production deployments.
 
-### Create Staging Environment
+### Staging environment
 
-1. Go to **Settings** → **Environments**
-2. Click **New environment**
-3. Name: `staging`
-4. Optionally configure:
-   - Deployment branches: `develop`
-   - Required reviewers: (leave empty for auto-deployment)
+The current staging workflow validates the code and packages a build; it does not use a GitHub environment or deploy to a host. Create a `staging` environment after configuring a hosting provider deployment step.
 
-### Create Production Environment
+### Production release environment
 
 1. Go to **Settings** → **Environments**
 2. Click **New environment**
 3. Name: `production`
 4. Configure:
    - Deployment branches: `main`
-   - Required reviewers: Check your GitHub username
-   - Select: "Protect this environment"
+   - Required reviewers: optional; these reviewers approve publishing a GitHub release
 5. Click **Create environment**
 
-This ensures production deployments require manual approval.
+This gates release publishing. The current workflow does not deploy to a hosting provider; add a provider-specific deployment step once the hosting target is chosen.
 
 ## Step 5: Configure Slack Notifications (Optional)
 
@@ -256,9 +258,9 @@ Now GitHub Actions will send notifications to your Slack channel.
 | Event | Trigger | Runs |
 |-------|---------|------|
 | PR opened to `develop` | Pull request | All tests |
-| Push to `develop` | Code merged | Tests + Staging deploy |
+| Push to `develop` | Code merged | Backend/frontend checks + staging validation |
 | PR opened to `main` | Pull request | All tests |
-| Push to `main` | Release merge | Tests + Production deploy |
+| Push to `main` | Release merge | Tests + validated package and GitHub release |
 
 ## Next Steps
 

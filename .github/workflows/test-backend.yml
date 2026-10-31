@@ -3,13 +3,8 @@ name: Backend Tests & Linting
 on:
   push:
     branches: [ main, develop ]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/test-backend.yml'
   pull_request:
     branches: [ main, develop ]
-    paths:
-      - 'backend/**'
 
 jobs:
   test:

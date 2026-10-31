@@ -3,13 +3,8 @@ name: Frontend Tests & Linting
 on:
   push:
     branches: [ main, develop ]
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/test-frontend.yml'
   pull_request:
     branches: [ main, develop ]
-    paths:
-      - 'frontend/**'
 
 jobs:
   lint-and-build:
@@ -27,6 +22,10 @@ jobs:
 
     - name: Install dependencies
       run: npm ci
+      working-directory: frontend
+
+    - name: Run tests when configured
+      run: npm run test --if-present -- --run
       working-directory: frontend
 
     - name: Check code style

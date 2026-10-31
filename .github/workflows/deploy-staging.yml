@@ -1,4 +1,4 @@
-name: Deploy to Staging
+name: Staging Validation
 
 on:
   push:
@@ -9,9 +9,8 @@ env:
   DJANGO_SETTINGS_MODULE: config.settings
 
 jobs:
-  test-and-deploy:
+  validate:
     runs-on: ubuntu-latest
-    environment: staging
     services:
       postgres:
         image: postgres:16
@@ -57,10 +56,10 @@ jobs:
         pytest --tb=short --cov=apps --cov-fail-under=50 -v
       env:
         DJANGO_DEBUG: false
-        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+        DJANGO_SECRET_KEY: ci-staging-only-secret-not-for-deployment
         DJANGO_ALLOWED_HOSTS: staging.example.com,localhost
         DJANGO_CORS_ALLOWED_ORIGINS: https://staging.example.com,http://localhost:5173
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
 
     - name: Run backend linting
       run: |
@@ -75,9 +74,8 @@ jobs:
       continue-on-error: false
 
     - name: Run frontend tests
-      run: npm run test -- --run 2>/dev/null || echo "⚠️ No test script configured"
+      run: npm run test --if-present -- --run
       working-directory: frontend
-      continue-on-error: true
 
     - name: Build frontend
       run: npm run build
@@ -100,10 +98,10 @@ jobs:
         python manage.py migrate --noinput --verbosity 2
       env:
         DJANGO_DEBUG: false
-        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+        DJANGO_SECRET_KEY: ci-staging-only-secret-not-for-deployment
         DJANGO_ALLOWED_HOSTS: staging.example.com,localhost
         DJANGO_CORS_ALLOWED_ORIGINS: https://staging.example.com,http://localhost:5173
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
 
     - name: Collect static files
       run: |
@@ -111,19 +109,19 @@ jobs:
         python manage.py collectstatic --noinput --verbosity 2
       env:
         DJANGO_DEBUG: false
-        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+        DJANGO_SECRET_KEY: ci-staging-only-secret-not-for-deployment
       continue-on-error: false
 
     - name: Build status check
-      run: echo "✅ All staging deployment checks passed!"
+      run: echo "✅ Staging validation checks passed. No hosting deployment target is configured in this workflow."
 
-    - name: Deploy notification
+    - name: Staging validation notification
       uses: 8398a7/action-slack@v3
       if: always()
       with:
         status: ${{ job.status }}
         text: |
-           Staging Deployment: ${{ job.status }}
+          Staging validation: ${{ job.status }}
           Branch: ${{ github.ref }}
           Commit: ${{ github.sha }}
           Author: ${{ github.actor }}

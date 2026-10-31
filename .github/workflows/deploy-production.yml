@@ -1,4 +1,4 @@
-name: Deploy to Production
+name: Production Build and Release
 
 on:
   push:
@@ -8,6 +8,9 @@ on:
       - 'frontend/**'
       - '.github/workflows/deploy-production.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 env:
   DJANGO_SETTINGS_MODULE: config.settings
@@ -113,10 +116,12 @@ jobs:
         DJANGO_CORS_ALLOWED_ORIGINS: ${{ secrets.DJANGO_CORS_ALLOWED_ORIGINS }}
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-  deploy:
+  release:
     needs: test
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      contents: write
     if: success()
 
     steps:
@@ -139,12 +144,15 @@ jobs:
         cache-dependency-path: 'frontend/package-lock.json'
 
     - name: Validate secrets
+      env:
+        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
       run: |
-        if [ -z "${{ secrets.DJANGO_SECRET_KEY }}" ]; then
+        if [ -z "$DJANGO_SECRET_KEY" ]; then
           echo "❌ DJANGO_SECRET_KEY not configured"
           exit 1
         fi
-        if [ -z "${{ secrets.DATABASE_URL }}" ]; then
+        if [ -z "$DATABASE_URL" ]; then
           echo "❌ DATABASE_URL not configured"
           exit 1
         fi
@@ -186,65 +194,26 @@ jobs:
         DJANGO_DEBUG: false
         DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
 
-    - name: Prepare deployment artifacts
+    - name: Prepare production package
       run: |
         mkdir -p deployment
         cp -r frontend/dist deployment/frontend
         cp -r backend/apps deployment/backend-apps
         cp backend/manage.py deployment/
         cp backend/config deployment/ -r
-        echo "✅ Artifacts prepared for deployment"
+        cp backend/requirements.txt deployment/
+        cp -r backend/staticfiles deployment/ 2>/dev/null || true
+        echo "✅ Production package prepared. No hosting provider is configured, so this workflow publishes a package instead of deploying it."
 
-    - name: Deploy to production
-      run: |
-        echo "🚀 Starting production deployment..."
-        echo "Commit: ${{ github.sha }}"
-        echo "Branch: ${{ github.ref }}"
-        echo "Timestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-        
-        # TODO: Add your production deployment logic here
-        # Examples:
-        # - Push to production server via SSH
-        # - Deploy to cloud platform (AWS, GCP, Heroku, etc.)
-        # - Update load balancer or reverse proxy
-        # - Run smoke tests against production
-        
-        echo "✅ Production deployment completed"
-
-    - name: Verify deployment
-      run: |
-        echo "🔍 Running deployment verification..."
-        # TODO: Add health checks and verification steps
-        # Examples:
-        # - curl health endpoint
-        # - Check API responsiveness
-        # - Verify database connection
-        # - Monitor error rates
-        echo "✅ Deployment verified successfully"
-
-    - name: Create release tag
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const tag = `v${new Date().getFullYear()}.${new Date().getMonth() + 1}.${new Date().getDate()}-${context.runNumber}`;
-          github.rest.git.createRef({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            ref: `refs/tags/${tag}`,
-            sha: context.sha
-          });
-          console.log(`✅ Created release tag: ${tag}`);
-
-    - name: Create release notes
-      uses: actions/create-release@v1
-      if: success()
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Create production release
+      uses: softprops/action-gh-release@v3
       with:
         tag_name: v${{ github.run_number }}
-        release_name: Production Release v${{ github.run_number }}
+        name: Validated Release v${{ github.run_number }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+        files: deployment/**
         body: |
-          ## Production Deployment
+          ## Validated application release
           
           **Commit:** ${{ github.sha }}
           **Author:** ${{ github.actor }}
@@ -256,20 +225,22 @@ jobs:
           - Ran database migrations
           - Collected static files
           
-          ### Deployment Status
-          ✅ All tests passed
-          ✅ Build successful
-          ✅ Production deployment completed
+          ### Validation
+          - Backend tests and production build passed
+          - Database migration plan checked
+          - Package attached to this release
+
+          A hosting provider is not configured in this repository, so publishing this release does not deploy the application.
         draft: false
         prerelease: false
 
     - name: Notify Slack on success
       uses: 8398a7/action-slack@v3
-      if: success() && secrets.SLACK_WEBHOOK != ''
+      if: success()
       with:
         status: success
         text: |
-          🎉 Production Deployment Successful!
+          🎉 Production Release Published!
           Commit: ${{ github.sha }}
           Author: ${{ github.actor }}
           Release: v${{ github.run_number }}
@@ -280,11 +251,11 @@ jobs:
 
     - name: Notify Slack on failure
       uses: 8398a7/action-slack@v3
-      if: failure() && secrets.SLACK_WEBHOOK != ''
+      if: failure()
       with:
         status: failure
         text: |
-          ❌ Production Deployment Failed!
+          ❌ Production Release Workflow Failed!
           Commit: ${{ github.sha }}
           Author: ${{ github.actor }}
           Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
