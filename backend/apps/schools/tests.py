@@ -1,6 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import path
@@ -9,7 +11,11 @@ from rest_framework.generics import ListAPIView, ListCreateAPIView, RetrieveAPIV
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.test import APIRequestFactory, force_authenticate
+from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
+from io import BytesIO
+from tempfile import TemporaryDirectory
+import random
+from PIL import Image
 
 from .models import School, SchoolMembership
 from .permissions import HasSchoolPermission
@@ -137,7 +143,7 @@ class SchoolMembershipTests(TestCase):
 
     def test_membership_rejects_unknown_role(self):
         membership = SchoolMembership(
-            user=self.user, school=self.other_school, role="principal"
+            user=self.user, school=self.other_school, role="unknown_role"
         )
 
         with self.assertRaises(ValidationError):
@@ -147,7 +153,7 @@ class SchoolMembershipTests(TestCase):
             SchoolMembership.objects.create(
                 user=self.other_user,
                 school=School.objects.create(name="Temporary School"),
-                role="principal",
+                role="unknown_role",
             )
 
     def test_authorized_school_queryset_excludes_inactive_and_unrelated_schools(self):
@@ -396,4 +402,189 @@ class SchoolRoleApiTests(TestCase):
         response = self.request_permission(teacher, self.school, "results.enter")
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+@override_settings(PASSWORD_HASHERS=("django.contrib.auth.hashers.MD5PasswordHasher",))
+class SchoolProfileApiTests(TestCase):
+    def setUp(self):
+        self.temp_media = TemporaryDirectory()
+        self.addCleanup(self.temp_media.cleanup)
+        self.media_override = override_settings(MEDIA_ROOT=self.temp_media.name)
+        self.media_override.enable()
+        self.addCleanup(self.media_override.disable)
+        self.school = School.objects.create(
+            name="Profile Academy", contact_email="office@example.edu", slug="profile-academy"
+        )
+        self.other_school = School.objects.create(name="Other Academy", slug="other-academy")
+        self.admin = User.objects.create_user(
+            username="profile-admin", email="admin@example.edu", password="test-password"
+        )
+        self.membership = SchoolMembership.objects.create(
+            user=self.admin, school=self.school, role=SchoolMembership.Role.SCHOOL_ADMIN
+        )
+        self.second_membership = SchoolMembership.objects.create(
+            user=self.admin, school=self.other_school, role=SchoolMembership.Role.SCHOOL_ADMIN
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def request(self, method, path, data=None, school=None, **kwargs):
+        return getattr(self.client, method)(
+            path, data, HTTP_X_SCHOOL_ID=str((school or self.school).pk), **kwargs
+        )
+
+    @staticmethod
+    def png_file(name="school.png", size=(20, 20), content=None):
+        if content is None:
+            image = Image.new("RGB", size, "#285744")
+            output = BytesIO()
+            image.save(output, format="PNG")
+            content = output.getvalue()
+        return SimpleUploadedFile(name, content, content_type="image/png")
+
+    def test_profile_read_update_and_school_code_is_immutable_through_profile_api(self):
+        response = self.request("get", "/api/v1/schools/profile/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["slug"], "profile-academy")
+
+        response = self.request(
+            "patch", "/api/v1/schools/profile/",
+            {"name": "Profile Academy Updated", "slug": "changed-code", "state": "Lagos"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.school.refresh_from_db()
+        self.assertEqual(self.school.name, "Profile Academy Updated")
+        self.assertEqual(self.school.slug, "profile-academy")
+        self.assertEqual(self.school.state, "Lagos")
+
+    def test_settings_are_initialized_with_defaults_and_can_be_updated(self):
+        response = self.request("get", "/api/v1/schools/settings/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["default_currency"], "NGN")
+        self.assertEqual(response.data["time_zone"], "Africa/Lagos")
+        self.assertEqual(School.objects.get(pk=self.school.pk).settings.date_format, "DD/MM/YYYY")
+
+        response = self.request(
+            "patch", "/api/v1/schools/settings/",
+            {"default_currency": "usd", "date_format": "YYYY-MM-DD", "branding_primary_color": "#aabbcc"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["default_currency"], "USD")
+        self.assertEqual(response.data["branding_primary_color"], "#AABBCC")
+
+    def test_invalid_profile_and_settings_values_return_field_errors(self):
+        response = self.request("patch", "/api/v1/schools/profile/", {"name": ""}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("name", response.data)
+
+        response = self.request(
+            "patch", "/api/v1/schools/settings/", {"default_currency": "NOTACURRENCY"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("default_currency", response.data)
+
+    def test_profile_and_settings_are_scoped_to_selected_membership(self):
+        response = self.request("get", "/api/v1/schools/profile/", school=self.other_school)
+        self.assertEqual(response.data["name"], "Other Academy")
+        self.request("patch", "/api/v1/schools/profile/", {"motto": "First"}, format="json")
+        first_motto = "First"
+        self.request(
+            "patch", "/api/v1/schools/profile/", {"motto": "Second"},
+            school=self.other_school, format="json"
+        )
+        self.school.refresh_from_db()
+        self.other_school.refresh_from_db()
+        self.assertEqual(self.school.motto, first_motto)
+        self.assertEqual(self.other_school.motto, "Second")
+
+    def test_logo_upload_validates_image_and_size_and_serves_only_to_authorized_school(self):
+        upload = self.request("post", "/api/v1/schools/profile/logo/", {"logo": self.png_file()}, format="multipart")
+        self.assertEqual(upload.status_code, status.HTTP_200_OK)
+        self.assertTrue(upload.data["logo_present"])
+
+        logo = self.request("get", "/api/v1/schools/profile/logo/")
+        self.assertEqual(logo.status_code, status.HTTP_200_OK)
+        self.assertEqual(logo["Cache-Control"], "private, no-store")
+        self.assertEqual(logo["X-Content-Type-Options"], "nosniff")
+        logo.close()
+
+        other_admin = User.objects.create_user(username="other-school-admin", password="test")
+        SchoolMembership.objects.create(
+            user=other_admin, school=self.other_school, role=SchoolMembership.Role.SCHOOL_ADMIN
+        )
+        self.client.force_authenticate(other_admin)
+        denied_logo = self.request("get", "/api/v1/schools/profile/logo/")
+        self.assertEqual(denied_logo.status_code, status.HTTP_403_FORBIDDEN)
+        self.client.force_authenticate(self.admin)
+
+        wrong_type = self.request(
+            "post", "/api/v1/schools/profile/logo/",
+            {"logo": SimpleUploadedFile("bad.txt", b"not an image", content_type="text/plain")},
+            format="multipart",
+        )
+        self.assertEqual(wrong_type.status_code, status.HTTP_400_BAD_REQUEST)
+
+        output = BytesIO()
+        random_pixels = random.Random(9).randbytes(1200 * 1200 * 3)
+        Image.frombytes("RGB", (1200, 1200), random_pixels).save(output, format="PNG")
+        large = SimpleUploadedFile("large.png", output.getvalue(), content_type="image/png")
+        self.assertGreater(large.size, 2 * 1024 * 1024)
+        too_large = self.request("post", "/api/v1/schools/profile/logo/", {"logo": large}, format="multipart")
+        self.assertEqual(too_large.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_roles_can_view_but_only_admin_can_edit_and_unrelated_tenant_is_hidden(self):
+        for role in (
+            SchoolMembership.Role.SCHOOL_MANAGER,
+            SchoolMembership.Role.TEACHER,
+            SchoolMembership.Role.ACCOUNTANT,
+            SchoolMembership.Role.RECEPTIONIST,
+        ):
+            user = User.objects.create_user(username=f"viewer-{role}", password="test")
+            SchoolMembership.objects.create(user=user, school=self.school, role=role)
+            self.client.force_authenticate(user)
+            self.assertEqual(self.request("get", "/api/v1/schools/profile/").status_code, status.HTTP_200_OK)
+            denied = self.request("patch", "/api/v1/schools/profile/", {"motto": "no"}, format="json")
+            self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
+
+        outsider = User.objects.create_user(username="outsider", password="test")
+        self.client.force_authenticate(outsider)
+        self.assertEqual(
+            self.request("get", "/api/v1/schools/profile/").status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        self.assertEqual(
+            self.request("get", "/api/v1/schools/profile/", school=self.other_school).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_unauthenticated_and_platform_admin_access(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.get(
+            "/api/v1/schools/profile/", HTTP_X_SCHOOL_ID=str(self.school.pk)
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        root = User.objects.create_superuser(username="platform-root", email="root@platform.test", password="test")
+        self.client.force_authenticate(root)
+        response = self.request("get", "/api/v1/schools/profile/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response = self.request("patch", "/api/v1/schools/profile/", {"motto": "Platform-managed"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        created = self.client.post(
+            "/api/v1/schools/", {"name": "New School", "slug": "new-school"}, format="json"
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        created_school = School.objects.get(pk=created.data["id"])
+        self.assertEqual(created_school.settings.default_currency, "NGN")
+
+        duplicate_code = self.client.post(
+            "/api/v1/schools/",
+            {"name": "Duplicate School", "slug": self.school.slug},
+            format="json",
+        )
+        self.assertEqual(duplicate_code.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("slug", duplicate_code.data)
 

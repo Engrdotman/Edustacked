@@ -16,6 +16,7 @@ def authorized_schools_for(user):
 
     return School.objects.filter(
         is_active=True,
+        verification_status__in=(School.VerificationStatus.PENDING, School.VerificationStatus.UNDER_REVIEW, School.VerificationStatus.VERIFIED, School.VerificationStatus.REJECTED),
         memberships__user=user,
         memberships__is_active=True,
     ).distinct()

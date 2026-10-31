@@ -1,11 +1,16 @@
 from urllib.parse import parse_qs, urlsplit
 
+from datetime import timedelta
+from urllib.parse import parse_qs, urlparse
+
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.contrib.auth.tokens import default_token_generator
 from django.core import mail
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -15,6 +20,7 @@ from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.schools.models import School, SchoolMembership
+from apps.accounts.models import EmailVerificationToken
 
 User = get_user_model()
 
@@ -78,6 +84,7 @@ class AuthenticationApiTests(TestCase):
             format="json",
         )
         self.assertEqual(inactive.status_code, status.HTTP_400_BAD_REQUEST)
+
 
     def test_login_requires_csrf_token(self):
         client = APIClient(enforce_csrf_checks=True)
@@ -249,3 +256,89 @@ class MembershipAuthenticationTests(TestCase):
         self.assertEqual(selected.data["school_id"], second.pk)
         self.assertEqual(selected.data["role"], SchoolMembership.Role.ACCOUNTANT)
         self.assertEqual(denied.status_code, status.HTTP_404_NOT_FOUND)
+
+
+@override_settings(PASSWORD_HASHERS=("django.contrib.auth.hashers.MD5PasswordHasher",))
+class SchoolSignupApiTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.url = reverse("auth-signup", kwargs={"version": "v1"})
+        self.payload = {
+            "school_name": "Bright Future School",
+            "administrator_name": "Ada Okafor",
+            "email": "ada@example.com",
+            "phone_number": "+234 800 000 0000",
+            "password": "Strong-School-Pass-628!",
+            "password_confirmation": "Strong-School-Pass-628!",
+            "school_email": "office@brightfuture.edu.ng",
+            "school_phone": "+234 800 000 0001",
+            "school_type": "both",
+            "country": "Nigeria",
+            "state": "Lagos",
+            "local_government_area": "Ikeja",
+            "address": "15 School Road, Ikeja, Lagos",
+        }
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_signup_creates_workspace_settings_owner_membership_and_verification_link(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.url, self.payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        school = School.objects.get(name=self.payload["school_name"])
+        user = User.objects.get(email=self.payload["email"])
+        membership = SchoolMembership.objects.get(user=user, school=school)
+        self.assertEqual(membership.role, SchoolMembership.Role.SCHOOL_OWNER)
+        self.assertTrue(school.slug.startswith("bright-future-school-"))
+        self.assertTrue(school.settings)
+        self.assertTrue(school.onboarding_progress)
+        self.assertEqual(school.verification_status, School.VerificationStatus.PENDING)
+        self.assertIsNone(user.email_verified_at)
+        self.assertIsNone(user.phone_verified_at)
+        self.assertEqual(user.phone_number, self.payload["phone_number"])
+        self.assertTrue(user.check_password(self.payload["password"]))
+        self.assertNotIn("password", response.data)
+        token_record = EmailVerificationToken.objects.get(user=user)
+        self.assertNotIn(token_record.token_hash, mail.outbox[0].body)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_email_verification_is_expiring_single_use_and_enables_sign_in(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, self.payload, format="json")
+        body = mail.outbox[-1].body
+        link = next(line for line in body.splitlines() if "/verify-email?" in line)
+        values = parse_qs(urlparse(link).query)
+        verify_url = reverse("auth-verify-email", kwargs={"version": "v1"})
+        payload = {"selector": values["selector"][0], "token": values["token"][0]}
+        user = User.objects.get(email=self.payload["email"])
+        login_url = reverse("auth-login", kwargs={"version": "v1"})
+        denied = self.client.post(login_url, {"email": user.email, "password": self.payload["password"]}, format="json")
+        self.assertEqual(denied.status_code, status.HTTP_400_BAD_REQUEST)
+        verified = self.client.post(verify_url, payload, format="json")
+        self.assertEqual(verified.status_code, status.HTTP_200_OK)
+        self.assertIn("access", verified.data)
+        user.refresh_from_db()
+        self.assertIsNotNone(user.email_verified_at)
+        reused = self.client.post(verify_url, payload, format="json")
+        self.assertEqual(reused.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_expired_email_verification_token_is_rejected(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, self.payload, format="json")
+        token_record = EmailVerificationToken.objects.get()
+        token_record.expires_at = timezone.now() - timedelta(minutes=1)
+        token_record.save(update_fields=("expires_at",))
+        values = parse_qs(urlparse(next(line for line in mail.outbox[-1].body.splitlines() if "/verify-email?" in line)).query)
+        response = self.client.post(reverse("auth-verify-email", kwargs={"version": "v1"}), {"selector": values["selector"][0], "token": values["token"][0]}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_signup_rejects_duplicate_email_and_weak_password(self):
+        self.client.post(self.url, self.payload, format="json")
+        duplicate = {**self.payload, "school_name": "Another School", "email": "ADA@example.com"}
+        self.assertEqual(self.client.post(self.url, duplicate, format="json").status_code, status.HTTP_400_BAD_REQUEST)
+        same_school_new_admin = {**self.payload, "email": "other@example.com", "school_email": "", "administrator_name": "Other Admin"}
+        self.assertEqual(self.client.post(self.url, same_school_new_admin, format="json").status_code, status.HTTP_400_BAD_REQUEST)
+        weak = {**self.payload, "email": "weak@example.com", "password": "password", "password_confirmation": "password"}
+        self.assertEqual(self.client.post(self.url, weak, format="json").status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(School.objects.count(), 1)

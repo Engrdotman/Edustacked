@@ -2,6 +2,9 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
+from django.db import IntegrityError, transaction
+from hashlib import sha256
+from hmac import compare_digest
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.utils.encoding import force_str
@@ -26,12 +29,18 @@ from apps.schools.models import SchoolMembership
 from apps.schools.serializers import SchoolSelectionSerializer
 from apps.schools.tenancy import resolve_authorized_school
 from .emailing import send_password_setup_email
+from .emailing import issue_email_verification, send_email_verification
+from .models import EmailVerificationToken
 from .serializers import (
     LoginSerializer,
     PasswordChangeSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     SchoolMembershipSerializer,
+    SchoolSignupSerializer,
+    EmailVerificationSerializer,
+    ResendEmailVerificationSerializer,
+    DemoRequestSerializer,
     UserProfileSerializer,
 )
 
@@ -74,6 +83,89 @@ class CsrfTokenView(APIView):
 
     def get(self, request, version=None):
         return Response({"csrfToken": get_token(request)})
+
+
+class SchoolSignupView(APIView):
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    throttle_classes = (AnonRateThrottle,)
+
+    def post(self, request, version=None):
+        serializer = SchoolSignupSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            school = serializer.save()
+        except IntegrityError:
+            return Response(
+                {"detail": "Registration could not be completed with these details. Contact support if needed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {"detail": "Your school account has been created. Please verify your email address to continue.", "school_name": school.name},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class VerifyEmailView(APIView):
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    throttle_classes = (AnonRateThrottle,)
+
+    def post(self, request, version=None):
+        serializer = EmailVerificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        selector = serializer.validated_data["selector"]
+        secret = serializer.validated_data["token"]
+        with transaction.atomic():
+            token = EmailVerificationToken.objects.select_for_update().filter(selector=selector).first()
+            supplied_hash = sha256(secret.encode("utf-8")).hexdigest()
+            if (
+                token is None
+                or token.consumed_at is not None
+                or token.expires_at <= timezone.now()
+                or not compare_digest(token.token_hash, supplied_hash)
+            ):
+                return Response({"detail": "This verification link is invalid or has expired. Request a new link."}, status=status.HTTP_400_BAD_REQUEST)
+            user = token.user
+            user.email_verified_at = timezone.now()
+            user.save(update_fields=("email_verified_at", "updated_at"))
+            token.consumed_at = timezone.now()
+            token.save(update_fields=("consumed_at",))
+        refresh = RefreshToken.for_user(user)
+        response = Response({
+            "detail": "Your email has been verified. Your school workspace is ready.",
+            "access": str(refresh.access_token),
+            "user": UserProfileSerializer(user).data,
+        })
+        _set_refresh_cookie(response, refresh)
+        return response
+
+
+class ResendEmailVerificationView(APIView):
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    throttle_classes = (AnonRateThrottle,)
+
+    def post(self, request, version=None):
+        serializer = ResendEmailVerificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = User.objects.filter(login_email=serializer.validated_data["email"].strip().lower(), is_active=True, email_verified_at__isnull=True).first()
+        if user:
+            token, secret = issue_email_verification(user)
+            transaction.on_commit(lambda user=user, selector=token.selector, secret=secret: send_email_verification(user, selector, secret))
+        return Response({"detail": "If the account needs verification, a new link has been sent."})
+
+
+class DemoRequestView(APIView):
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    throttle_classes = (AnonRateThrottle,)
+
+    def post(self, request, version=None):
+        serializer = DemoRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"detail": "Your demo request has been received. Our team will be in touch."}, status=status.HTTP_201_CREATED)
 
 
 @method_decorator(csrf_protect, name="dispatch")
@@ -209,6 +301,9 @@ class SelectSchoolView(APIView):
                 "school_name": school.name,
                 "school_slug": school.slug,
                 "role": membership.role if membership else "platform_superadmin",
+                "school_verification_status": school.verification_status,
+                "school_verification_reason": school.verification_reason,
+                "school_accessible": school.is_active and school.verification_status != school.VerificationStatus.SUSPENDED,
             }
         )
 

@@ -2,6 +2,7 @@
 import os
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
@@ -35,6 +36,12 @@ INSTALLED_APPS = [
     "apps.academics.apps.AcademicsConfig",
     "apps.students.apps.StudentsConfig",
     "apps.staff.apps.StaffConfig",
+    "apps.attendance.apps.AttendanceConfig",
+    "apps.results.apps.ResultsConfig",
+    "apps.report_cards.apps.ReportCardsConfig",
+    "apps.billing.apps.BillingConfig",
+    "apps.parent_portal.apps.ParentPortalConfig",
+    "apps.reports.apps.ReportsConfig",
 ]
 
 MIDDLEWARE = [
@@ -66,35 +73,66 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
-DB_ENGINE = os.getenv(
-    "DB_ENGINE", "sqlite" if DEBUG else "postgresql"
-).lower()
-if DB_ENGINE == "sqlite":
-    if not DEBUG:
-        raise ImproperlyConfigured("SQLite is for development only; use PostgreSQL in production.")
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": (BASE_DIR / os.getenv("DB_NAME", "db.sqlite3")).resolve(),
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+if DATABASE_URL:
+    parsed_database_url = urlparse(DATABASE_URL)
+    if parsed_database_url.scheme in {"postgres", "postgresql"}:
+        query_options = parse_qs(parsed_database_url.query)
+        pg_options = {key: values[-1] for key, values in query_options.items() if key in {"sslmode", "application_name"} and values}
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": unquote(parsed_database_url.path.lstrip("/")),
+                "USER": unquote(parsed_database_url.username or ""),
+                "PASSWORD": unquote(parsed_database_url.password or ""),
+                "HOST": parsed_database_url.hostname or "127.0.0.1",
+                "PORT": str(parsed_database_url.port or 5432),
+                "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
+                "OPTIONS": {"connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "5")), **pg_options},
+            }
         }
-    }
-elif DB_ENGINE == "postgresql":
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.getenv("DB_NAME", "school_management"),
-            "USER": os.getenv("DB_USER", "school_management"),
-            "PASSWORD": os.getenv("DB_PASSWORD", ""),
-            "HOST": os.getenv("DB_HOST", "127.0.0.1"),
-            "PORT": os.getenv("DB_PORT", "5432"),
-            "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
-            "OPTIONS": {"connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "5"))},
-        }
-    }
+    elif parsed_database_url.scheme == "sqlite":
+        if not DEBUG:
+            raise ImproperlyConfigured("SQLite is for development only; use PostgreSQL in deployment environments.")
+        database_path = unquote(parsed_database_url.path)
+        if not parsed_database_url.netloc and database_path.startswith("/") and not database_path.startswith("//"):
+            database_path = database_path.lstrip("/")
+        DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": (BASE_DIR / database_path).resolve()}}
+    else:
+        raise ImproperlyConfigured("DATABASE_URL must use postgresql:// or sqlite://.")
 else:
-    raise ImproperlyConfigured("DB_ENGINE must be either 'sqlite' or 'postgresql'.")
+    DB_ENGINE = os.getenv("DB_ENGINE", "sqlite" if DEBUG else "postgresql").lower()
+    if DB_ENGINE == "sqlite":
+        if not DEBUG:
+            raise ImproperlyConfigured("SQLite is for development only; use PostgreSQL in deployment environments.")
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": (BASE_DIR / os.getenv("DB_NAME", "db.sqlite3")).resolve(),
+            }
+        }
+    elif DB_ENGINE == "postgresql":
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": os.getenv("DB_NAME", "school_management"),
+                "USER": os.getenv("DB_USER", "school_management"),
+                "PASSWORD": os.getenv("DB_PASSWORD", ""),
+                "HOST": os.getenv("DB_HOST", "127.0.0.1"),
+                "PORT": os.getenv("DB_PORT", "5432"),
+                "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
+                "OPTIONS": {"connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "5"))},
+            }
+        }
+    else:
+        raise ImproperlyConfigured("DB_ENGINE must be either 'sqlite' or 'postgresql'.")
 
 AUTH_USER_MODEL = "accounts.User"
+SCHOOL_VERIFIED_REQUIRED_CAPABILITIES = frozenset(
+    capability.strip()
+    for capability in os.getenv("SCHOOL_VERIFIED_REQUIRED_CAPABILITIES", "integrations.manage").split(",")
+    if capability.strip()
+)
 AUTHENTICATION_BACKENDS = [
     "apps.accounts.backends.EmailBackend",
     "django.contrib.auth.backends.ModelBackend",
@@ -167,7 +205,9 @@ if EMAIL_USE_TLS and EMAIL_USE_SSL:
     raise ImproperlyConfigured("Choose either EMAIL_USE_TLS or EMAIL_USE_SSL, not both.")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "School Management <noreply@example.com>")
 PASSWORD_RESET_TIMEOUT = int(os.getenv("PASSWORD_RESET_TIMEOUT", "3600"))
+EMAIL_VERIFICATION_TIMEOUT = int(os.getenv("EMAIL_VERIFICATION_TIMEOUT", "86400"))
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173").rstrip("/")
+PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY", "")
 
 LOG_LEVEL = os.getenv("DJANGO_LOG_LEVEL", "INFO").upper()
 LOGGING = {

@@ -25,16 +25,24 @@ function endpoint(path) {
   return `${API_BASE_URL}/${API_VERSION}/${path.replace(/^\/+/, '')}`
 }
 
+function flattenError(value) {
+  if (typeof value === 'string') return [value]
+  if (Array.isArray(value)) return value.flatMap(flattenError)
+  if (value && typeof value === 'object') return Object.values(value).flatMap(flattenError)
+  return []
+}
+
 function readableError(body, fallback) {
   if (typeof body?.detail === 'string') return body.detail
-  if (typeof body?.non_field_errors?.[0] === 'string') return body.non_field_errors[0]
-  if (body && Object.keys(body).length) return Object.values(body).flat().join(' ')
+  const messages = flattenError(body)
+  if (messages.length) return messages.join(' ')
   return fallback
 }
 
-async function send(path, { method = 'GET', body, headers = {}, signal } = {}) {
+async function send(path, { method = 'GET', body, headers = {}, signal, responseType = 'json' } = {}) {
   const requestHeaders = { Accept: 'application/json', ...headers }
-  if (body !== undefined) requestHeaders['Content-Type'] = 'application/json'
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData
+  if (body !== undefined && !isFormData) requestHeaders['Content-Type'] = 'application/json'
   if (accessToken && !requestHeaders.Authorization) {
     requestHeaders.Authorization = `Bearer ${accessToken}`
   }
@@ -51,7 +59,7 @@ async function send(path, { method = 'GET', body, headers = {}, signal } = {}) {
       method,
       credentials: 'include',
       headers: requestHeaders,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : (isFormData ? body : JSON.stringify(body)),
       signal,
     })
   } catch (error) {
@@ -59,7 +67,9 @@ async function send(path, { method = 'GET', body, headers = {}, signal } = {}) {
     throw new ApiError('The API could not be reached.')
   }
 
-  const data = await response.json().catch(() => null)
+  const data = responseType === 'blob' && response.ok
+    ? await response.blob()
+    : await response.json().catch(() => null)
   return { response, data }
 }
 
@@ -100,12 +110,68 @@ export async function apiRequest(path, options = {}, canRefresh = true) {
   }
 
   if (!response.ok) {
-    throw new ApiError(
+    const error = new ApiError(
       readableError(data, `The API returned an error (${response.status}).`),
       response.status,
     )
+    error.fields = data && typeof data === 'object' ? data : {}
+    throw error
   }
   return data
+}
+
+export async function apiBlobRequest(path, canRefresh = true) {
+  const { response, data } = await send(path, { responseType: 'blob' })
+  if (response.status === 401 && canRefresh && accessToken) {
+    await refreshSession()
+    return apiBlobRequest(path, false)
+  }
+  if (!response.ok) throw new ApiError('The requested file could not be loaded.', response.status)
+  return data
+}
+
+export function getSchoolProfile() {
+  return apiRequest('schools/profile/')
+}
+
+export function updateSchoolProfile(values) {
+  return apiRequest('schools/profile/', { method: 'PATCH', body: values })
+}
+
+export function getSchoolSettings() {
+  return apiRequest('schools/settings/')
+}
+
+export function updateSchoolSettings(values) {
+  return apiRequest('schools/settings/', { method: 'PATCH', body: values })
+}
+
+export function getSchoolLogo() {
+  return apiBlobRequest('schools/profile/logo/')
+}
+
+export function uploadSchoolLogo(file) {
+  const body = new FormData()
+  body.append('logo', file)
+  return apiRequest('schools/profile/logo/', { method: 'POST', body })
+}
+
+export async function academicList(path) {
+  let page = 1
+  const rows = []
+  let next = true
+  while (next) {
+    const response = await apiRequest(`academics/${path}${path.includes('?') ? '&' : '?'}page=${page}`)
+    if (Array.isArray(response)) return response
+    rows.push(...(response?.results || []))
+    next = Boolean(response?.next)
+    page += 1
+  }
+  return rows
+}
+
+export function academicRequest(path, options) {
+  return apiRequest(`academics/${path}`, options)
 }
 
 export async function login(email, password) {
@@ -116,6 +182,22 @@ export async function login(email, password) {
   })
   setAccessToken(data.access)
   return data.user
+}
+
+export function signupSchool(values) {
+  return apiRequest('auth/signup/', { method: 'POST', body: values })
+}
+
+export function verifySchoolEmail(values) {
+  return apiRequest('auth/verify-email/', { method: 'POST', body: values })
+}
+
+export function resendSchoolEmailVerification(email) {
+  return apiRequest('auth/verify-email/resend/', { method: 'POST', body: { email } })
+}
+
+export function requestSchoolDemo(values) {
+  return apiRequest('auth/demo-request/', { method: 'POST', body: values })
 }
 
 export async function logout() {

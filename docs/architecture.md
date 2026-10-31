@@ -9,8 +9,14 @@ The React/Vite frontend owns presentation, navigation, and user interaction. It 
 ## Initial backend boundaries
 
 - `core`: shared infrastructure and foundational endpoints such as the health check.
-- `accounts`: custom user model based on Django `AbstractUser`; no custom login or registration API is part of this module.
-- `schools`: school tenant identity and user-school memberships.
+- `accounts`: custom user model based on Django `AbstractUser`, email login, JWT sessions, password flows, and current user's school memberships.
+- `schools`: school tenant identity and memberships, centralized role permissions, school profile, and one-to-one school settings.
+- `academics`: tenant-scoped school sessions and terms, class structure, subjects and assignments, and grading configuration.
+- `students`: student identity, guardian links, and immutable enrollment history.
+- `staff`: school staff profiles, teacher designation, and dated subject/class assignments.
+- `attendance`: frozen class attendance registers, records, reports, and append-only audit history.
+- `results`: assessment templates and plans, decimal component scores, grading snapshots, per-student approval, and audit history.
+- `report_cards`: snapshot-based report-card generation, review/finalization, immutable revisions, attendance summaries, and authenticated A4 PDF output.
 
 ## Tenancy and data isolation
 
@@ -21,7 +27,7 @@ Use a shared database and shared schema. Local development defaults to SQLite fo
 3. Apply the authorized school to the query itself and to create/update validation; never treat a frontend-provided `school_id` as proof of access.
 4. Deny access when membership is missing or inactive, and avoid leaking whether another tenant's record exists.
 
-`apps.schools.tenancy.SchoolScopedQuerySetMixin` is the reusable base for tenant-owned DRF generic views. Set its school URL kwarg and lookup field when needed, keep the model's school foreign key in the queryset, and include the mixin before the DRF generic view class. It resolves a URL `school_id` or `X-School-ID` through the authenticated user's active membership, scopes `get_queryset()` (therefore list and object retrieval), and forces the authorized school on create/update. A client-supplied identifier is context only, never authorization. Missing or unauthorized tenant context returns a uniform 404. A serializer should not permit a client to set a tenant relationship as proof of authorization.
+`apps.schools.tenancy.SchoolScopedQuerySetMixin` is the reusable base for tenant-owned DRF generic views. Set its school URL kwarg and lookup field when needed, keep the model's school foreign key in the queryset, and include the mixin before the DRF generic view class. It resolves a URL `school_id` or `X-School-ID` through active membership; platform superadmins may resolve active schools. A client-supplied identifier is context only, never authorization. School profile and settings routes have no school ID in their URL and resolve the selected school from `X-School-ID`, then verify membership and role on every request.
 
 For every future tenant-owned model, add a non-null school foreign key with an appropriate deletion policy and indexes based on real query patterns. For every endpoint, authenticate the user, resolve an active membership, apply the school in queryset and write validation, and avoid error messages that reveal other tenants. Do not add broad permissions as a shortcut. Each tenant-owned API must include automated tests proving same-tenant access and denied cross-tenant reads/writes, including missing and invalid tenant context. These tests are a release requirement for future data modules.
 
@@ -37,13 +43,15 @@ The custom `accounts.User` extends `AbstractUser`. The normalized `login_email` 
 
 Authentication uses Simple JWT with five-minute access tokens and seven-day refresh tokens by default. Access tokens are returned to the frontend and kept in memory only. Refresh tokens are rotated, stored in an HttpOnly cookie, and blacklisted on rotation/logout; password changes revoke outstanding refresh tokens and invalidate password-hash-bound access tokens. Cookie security, CORS credentials, and CSRF protection are configured for browser clients. Logout cannot immediately revoke an already-issued access token; its short lifetime bounds that window. See [authentication-and-rbac.md](authentication-and-rbac.md) for endpoints and operational setup.
 
-Platform superadmins are Django `is_superuser` accounts and are separate from school roles. School roles live on `SchoolMembership`; `apps.schools.permissions.HasSchoolPermission` checks active membership and a role permission map on every request. No business workflows are included in this module. The current school primary key is Django's unique auto-incrementing identifier; it is retained to avoid a destructive primary-key conversion.
+Platform superadmins are Django `is_superuser` accounts and are separate from school roles. School roles live on `SchoolMembership`; `apps.schools.permissions.HasSchoolPermission` checks active membership and a role permission map on every request. `school.view` is granted to school admin, school manager, teacher, accountant, and receptionist roles; `school.manage` is limited to school admin, with platform superadmins bypassing school-role checks. School slugs and active status are not writable through profile endpoints. School logos are stored as image files and streamed only through the authenticated, school-scoped API; production must use durable private object storage or an equivalently protected media service. The current school primary key is Django's unique auto-incrementing identifier; it is retained to avoid a destructive primary-key conversion.
 
-The versioned API uses URL paths under `/api/v1/`. Public endpoints include health checks, CSRF token bootstrap, login, refresh, logout, and password reset. Profile, membership, school selection, password change, school creation, and membership provisioning are authenticated and permission-checked. The database health endpoint returns a generic 503 response when the selected database is unavailable.
+The versioned API uses URL paths under `/api/v1/`. Public endpoints include health checks, CSRF token bootstrap, login, refresh, logout, and password reset. Profile, membership, school selection, password change, school creation, membership provisioning, and academic configuration are authenticated and permission-checked. Academic setup reuses `academics.manage` for admins and managers. The database health endpoint returns a generic 503 response when the selected database is unavailable.
 
-## Report-card credits and billing extension point
+Staff employment profiles are separate from `accounts.User`. An optional staff-user link is accepted only for an existing active membership in the same school and does not create or elevate a membership. Staff status changes retain profiles and close active teacher assignments; they do not silently revoke the account's memberships. Teacher roster access is scoped to active enrollment placements that match that teacher's active assignments.
 
-Billing is not implemented in Module 1. Later, report-card finalization should atomically consume one credit per student/term finalization and create an immutable usage-ledger entry tied to the finalized report/version and school. A uniqueness/idempotency rule must ensure retries do not charge twice. Preview, download, and reprint of an already finalized report must not consume more credits. Credit packages, balances, payment integration, and webhook processing should be separate later module concerns; external payment notifications must be verified and processed idempotently.
+## Future report cards, credits, and billing extension point
+
+Billing and report cards are not implemented through Module 4. Later, report-card finalization should atomically consume one credit per student/term finalization and create an immutable usage-ledger entry tied to the finalized report/version and school. A uniqueness/idempotency rule must ensure retries do not charge twice. Preview, download, and reprint of an already finalized report must not consume more credits. Credit packages, balances, payment integration, and webhook processing should be separate later module concerns; external payment notifications must be verified and processed idempotently.
 
 ## Security and deployment
 

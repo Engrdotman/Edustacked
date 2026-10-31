@@ -11,10 +11,18 @@ from .views import (
     PasswordResetRequestView,
     RefreshView,
     SelectSchoolView,
+    SchoolSignupView,
+    VerifyEmailView,
+    ResendEmailVerificationView,
+    DemoRequestView,
 )
 
 urlpatterns = [
     path("csrf/", CsrfTokenView.as_view(), name="auth-csrf"),
+    path("signup/", SchoolSignupView.as_view(), name="auth-signup"),
+    path("verify-email/", VerifyEmailView.as_view(), name="auth-verify-email"),
+    path("verify-email/resend/", ResendEmailVerificationView.as_view(), name="auth-verify-email-resend"),
+    path("demo-request/", DemoRequestView.as_view(), name="demo-request"),
     path("login/", LoginView.as_view(), name="auth-login"),
     path("logout/", LogoutView.as_view(), name="auth-logout"),
     path("refresh/", RefreshView.as_view(), name="auth-refresh"),

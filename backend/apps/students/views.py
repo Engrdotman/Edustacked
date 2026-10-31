@@ -160,6 +160,13 @@ class GuardianDetailView(StudentViewMixin, RetrieveUpdateAPIView):
     student_permissions = {"GET": "students.guardians.view", "PATCH": "students.guardians.manage"}
     http_method_names = ("get", "patch", "head", "options")
 
+    def perform_update(self, serializer):
+        was_active = serializer.instance.is_active
+        guardian = serializer.save()
+        if was_active and not guardian.is_active:
+            from apps.parent_portal.models import PortalAuditEvent
+            PortalAuditEvent.objects.create(actor=self.request.user, guardian=guardian, action="guardian_portal_access_revoked")
+
 
 class StudentGuardianListCreateView(StudentViewMixin, ListCreateAPIView):
     queryset = StudentGuardian.objects.select_related("guardian")
@@ -197,11 +204,20 @@ class StudentGuardianDetailView(StudentViewMixin, RetrieveUpdateAPIView):
     def get_serializer_class(self):
         return StudentGuardianReadSerializer if self.request.method == "GET" else StudentGuardianUpdateSerializer
 
+    def perform_update(self, serializer):
+        was_active = serializer.instance.is_active
+        link = serializer.save()
+        if was_active and not link.is_active:
+            from apps.parent_portal.models import PortalAuditEvent
+            PortalAuditEvent.objects.create(actor=self.request.user, guardian=link.guardian, student_link=link, action="guardian_student_link_revoked")
+
     def delete(self, request, *args, **kwargs):
         link = self.get_object()
         link.is_active = False
         link.is_primary_contact = False
         link.save()
+        from apps.parent_portal.models import PortalAuditEvent
+        PortalAuditEvent.objects.create(actor=request.user, guardian=link.guardian, student_link=link, action="guardian_student_link_revoked")
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

@@ -1,10 +1,12 @@
-# Edustacked - School Management System
+# EDUstacked
 
 A thoughtful foundation for the everyday work of school communities. Built to grow with your school, one useful step at a time.
 
 ## Overview
 
-Edustacked is a comprehensive school management system with a Django REST API backend and a modern React frontend. It's designed to simplify administrative tasks, improve communication, and help schools focus on what matters most: education.
+EDUstacked is a modular school management platform with a Django REST API backend and a React frontend. Schools can register, verify their administrator email, and begin a guided setup while platform administrators review school legitimacy separately. School workflow modules are developed incrementally.
+
+See [Hybrid School Onboarding](docs/hybrid-school-onboarding.md) for the registration lifecycle, verification model, ownership, platform review, tenant isolation, and local testing walkthrough.
 
 ## Project Structure
 
@@ -100,12 +102,15 @@ Frontend will be available at: `http://localhost:5173`
 
 The API uses Django REST Framework. Key endpoints:
 
-- `/api/auth/` - Authentication
-- `/api/schools/` - School management
-- `/api/accounts/` - User accounts
-- `/api/health/` - API health check
+- `/api/v1/auth/` - Authentication and memberships
+- `/api/v1/schools/` - School profile, settings, and membership management
+- `/api/v1/health/` - API health check
 
 Full API documentation available at `/api/docs/` when backend is running.
+
+Module 3 profile, settings, and protected logo endpoints are documented in [School Profile and Settings](docs/school-profile-and-settings.md).
+
+Module 4 academic sessions, terms, classes, subjects, and grading configuration are documented in [Academic Setup](docs/academic-setup.md).
 
 ## Development Workflow
 
@@ -153,6 +158,16 @@ npm run test:watch             # Watch mode
 
 - [Architecture](docs/architecture.md) - System design and components
 - [Database Schema](docs/database-schema.md) - Data model documentation
+- [School Profile and Settings](docs/school-profile-and-settings.md) - Module 3 API, permissions, storage, and manual checks
+- [Academic Setup](docs/academic-setup.md) - Module 4 models, API, lifecycle rules, and manual walkthrough
+- [Student Management](docs/student-management.md) - Module 5 admissions, guardians, enrollment history, security, and acceptance checklist
+- [Staff Management](docs/staff-management.md) - Module 6 employment profiles, teacher designations, assignments, and RBAC rules
+- [Student Attendance](docs/student-attendance.md) - Module 7 register workflow, enrollment snapshots, teacher scope, reporting rules, and API
+- [Assessments and Results](docs/assessment-results.md) - Module 8 assessment plans, score calculations, approval workflow, and API
+- [Report Cards](docs/report-cards.md) - Module 9 generation, validation, review, immutable revisions, attendance policy, and secured PDFs
+- [Report-card Credits and Billing](docs/billing-and-credits.md) - Module 10 credit rules, Paystack setup, tenant APIs, and reconciliation
+- [Parent and Guardian Portal](docs/parent-guardian-portal.md) - Module 11 activation, linked-student access, attendance, report cards, announcements, and notifications
+- [School Reports and Analytics](docs/school-reports-and-analytics.md) - Module 12 role-scoped dashboards, metric definitions, filters, and safe CSV exports
 - [Development Setup](docs/development-setup.md) - Detailed setup instructions
 - [Branching Strategy](docs/BRANCHING-STRATEGY.md) - Git workflow and conventions
 - [CI/CD Setup](docs/CI-CD-SETUP.md) - GitHub Actions configuration
@@ -163,7 +178,7 @@ npm run test:watch             # Watch mode
 ### Backend
 - **Framework**: Django 5.2
 - **API**: Django REST Framework 3.16
-- **Database**: PostgreSQL 16
+- **Database**: SQLite for development; PostgreSQL for deployment
 - **Authentication**: JWT (djangorestframework-simplejwt)
 - **Security**: CORS headers, environment variables
 
