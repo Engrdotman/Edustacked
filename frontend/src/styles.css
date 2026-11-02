@@ -999,3 +999,61 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .company-section.is-visible .company-feature-card:nth-child(4),.company-section.is-visible .company-step-card:nth-child(4) { animation-delay:210ms; }
 @keyframes card-enter { from { opacity:.45; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 @media(prefers-reduced-motion:reduce) { .scroll-reveal,.scroll-reveal.is-visible { opacity:1; transform:none; transition:none; } .company-section.is-visible .company-feature-card,.company-section.is-visible .company-step-card { animation:none; } .company-menu-toggle .menu-icon i,.hero-slide-grid,.hero-slide-controls>button { transition:none; } }
+
+
+/* Story section expand/collapse */
+.story-expand-button { 
+  display: inline-block; 
+  margin: 16px 0; 
+  padding: 10px 16px; 
+  border: 1px solid #c9d9cd; 
+  border-radius: 6px; 
+  background: #f5f8f5; 
+  color: #285744; 
+  font: inherit; 
+  font-size: 14px; 
+  font-weight: 600; 
+  cursor: pointer; 
+  transition: all 0.3s ease;
+}
+
+.story-expand-button:hover {
+  border-color: #9eb4a2;
+  background: #edf5f0;
+}
+
+.story-expand-button:focus-visible {
+  outline: 3px solid rgba(47, 143, 131, 0.48);
+  outline-offset: 2px;
+}
+
+.story-content { 
+  margin-top: 16px; 
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+  }
+  to {
+    opacity: 1;
+    max-height: 500px;
+  }
+}
+
+.story-content p {
+  margin: 14px 0;
+  line-height: 1.75;
+}
+
+.story-content .inspiration-note {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-left: 3px solid #2f8f83;
+  background: #f0f7f5;
+  color: #4a6158;
+  font-size: 14px;
+}
