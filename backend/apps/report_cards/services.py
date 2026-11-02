@@ -100,6 +100,7 @@ def build_report_snapshot(enrollment, term):
             "state": school.state, "local_government_area": school.local_government_area,
             "website": school.website, "motto": school.motto, "description": school.description,
             "logo_path": school.logo.name if school.logo else "",
+            "principal_signature_path": school.principal_signature.name if school.principal_signature else "",
             "primary_color": school_settings.branding_primary_color if school_settings else "#285744",
         },
         "academic": {"session": enrollment.academic_session.name, "term": term.name, "term_start": term.start_date.isoformat(), "term_end": term.end_date.isoformat()},

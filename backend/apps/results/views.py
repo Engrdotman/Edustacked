@@ -104,8 +104,9 @@ class AssessmentComponentListCreateView(ResultsMixin, APIView):
 
     def get(self, request, **kwargs):
         queryset = AssessmentComponent.objects.filter(school=self.school()).order_by("name")
-        page = self.pagination_class().paginate_queryset(queryset, request, view=self)
-        return self.pagination_class().get_paginated_response(AssessmentComponentSerializer(page, many=True).data)
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        return paginator.get_paginated_response(AssessmentComponentSerializer(page, many=True).data)
 
     def post(self, request, **kwargs):
         serializer = AssessmentComponentSerializer(data=request.data, context=self.context())

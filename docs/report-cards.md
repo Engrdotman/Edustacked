@@ -22,7 +22,7 @@ The single finalization boundary is `apps.report_cards.services.finalize_report_
 
 ## PDF
 
-PDFs are rendered on the backend with ReportLab as A4 documents, with repeating academic table headers, school color/logo where available, student and academic details, component marks, grades, finalized attendance, remarks, and unsigned sign-off lines. PDFs are generated from the selected saved revision and require authenticated, school-scoped API access. The school logo is referenced by its storage path in the snapshot; the project's current local/private media storage policy applies. Filename pattern: `{report identifier}-{student surname}-v{revision}.pdf`.
+PDFs are rendered on the backend with ReportLab as A4 documents, with repeating academic table headers, school color/logo where available, student and academic details, component marks, grades, finalized attendance, remarks, and sign-off lines. School owners/admins and the principal can upload a JPG, PNG, or WebP principal signature (up to 2 MB) in **School profile & settings**. The signature is snapshotted when a draft is generated and appears beside the principal sign-off on finalized report cards only; draft and review PDFs remain unsigned. If the signature changes, regenerate the draft before review so its source snapshot is current. PDFs are generated from the selected saved revision and require authenticated, school-scoped API access. The school logo and signature are referenced by their storage paths in the snapshot; the project's current local/private media storage policy applies. Filename pattern: `{report identifier}-{student surname}-v{revision}.pdf`.
 
 Install requirements using the existing backend requirements file, which includes `reportlab>=4.2,<5`.
 

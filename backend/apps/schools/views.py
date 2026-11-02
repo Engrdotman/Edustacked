@@ -9,12 +9,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import School, SchoolMembership
-from .permissions import HasSchoolPermission, HasSchoolProfileAccess, IsPlatformSuperadmin
+from .permissions import HasPrincipalSignatureAccess, HasSchoolPermission, HasSchoolProfileAccess, IsPlatformSuperadmin
 from .serializers import (
     MembershipAdminUpdateSerializer,
     MembershipProvisionSerializer,
     SchoolCreateSerializer,
     SchoolLogoSerializer,
+    PrincipalSignatureSerializer,
     SchoolProfileSerializer,
     SchoolSettingsSerializer,
 )
@@ -85,6 +86,46 @@ class SchoolLogoView(APIView):
         school.save(update_fields=("logo", "updated_at"))
         if previous_logo:
             transaction.on_commit(lambda: previous_logo.delete(save=False))
+        return Response(SchoolProfileSerializer(school).data)
+
+
+class PrincipalSignatureView(APIView):
+    permission_classes = (IsAuthenticated, HasPrincipalSignatureAccess)
+    parser_classes = (MultiPartParser, FormParser)
+
+    def _school(self, request):
+        from .tenancy import resolve_authorized_school
+        return resolve_authorized_school(request.user, request.headers.get("X-School-ID"))
+
+    def get(self, request, version=None):
+        school = self._school(request)
+        if not school.principal_signature:
+            return Response({"detail": "This school has no principal signature."}, status=status.HTTP_404_NOT_FOUND)
+        extension = school.principal_signature.name.rsplit(".", 1)[-1].lower()
+        content_type = "image/jpeg" if extension in {"jpg", "jpeg"} else f"image/{extension}"
+        response = FileResponse(school.principal_signature.open("rb"), content_type=content_type)
+        response["Cache-Control"] = "private, no-store"
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
+
+    def post(self, request, version=None):
+        school = self._school(request)
+        serializer = PrincipalSignatureSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        previous_signature = school.principal_signature
+        school.principal_signature = serializer.validated_data["signature"]
+        school.save(update_fields=("principal_signature", "updated_at"))
+        if previous_signature:
+            transaction.on_commit(lambda: previous_signature.delete(save=False))
+        return Response(SchoolProfileSerializer(school).data)
+
+    def delete(self, request, version=None):
+        school = self._school(request)
+        previous_signature = school.principal_signature
+        if previous_signature:
+            school.principal_signature = None
+            school.save(update_fields=("principal_signature", "updated_at"))
+            transaction.on_commit(lambda: previous_signature.delete(save=False))
         return Response(SchoolProfileSerializer(school).data)
 
 

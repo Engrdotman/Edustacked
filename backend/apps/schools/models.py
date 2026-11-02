@@ -10,6 +10,7 @@ import uuid
 
 
 MAX_SCHOOL_LOGO_SIZE = 2 * 1024 * 1024
+MAX_PRINCIPAL_SIGNATURE_SIZE = 2 * 1024 * 1024
 
 
 def validate_school_logo_size(value):
@@ -17,9 +18,19 @@ def validate_school_logo_size(value):
         raise ValidationError("School logos must be 2 MB or smaller.")
 
 
+def validate_principal_signature_size(value):
+    if value.size > MAX_PRINCIPAL_SIGNATURE_SIZE:
+        raise ValidationError("Principal signatures must be 2 MB or smaller.")
+
+
 def school_logo_upload_path(instance, filename):
     extension = Path(filename).suffix.lower()
     return f"school-logos/{instance.pk}/{uuid4().hex}{extension}"
+
+
+def school_signature_upload_path(instance, filename):
+    extension = Path(filename).suffix.lower()
+    return f"school-signatures/{instance.pk}/{uuid4().hex}{extension}"
 
 
 class School(models.Model):
@@ -45,6 +56,12 @@ class School(models.Model):
         blank=True,
         null=True,
         validators=[FileExtensionValidator(["jpg", "jpeg", "png", "webp"]), validate_school_logo_size],
+    )
+    principal_signature = models.ImageField(
+        upload_to=school_signature_upload_path,
+        blank=True,
+        null=True,
+        validators=[FileExtensionValidator(["jpg", "jpeg", "png", "webp"]), validate_principal_signature_size],
     )
     state = models.CharField(max_length=100, blank=True)
     local_government_area = models.CharField(max_length=120, blank=True)

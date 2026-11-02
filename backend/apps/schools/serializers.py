@@ -6,7 +6,7 @@ from zoneinfo import available_timezones
 from rest_framework import serializers
 
 from apps.accounts.serializers import SchoolMembershipSerializer
-from .models import MAX_SCHOOL_LOGO_SIZE, School, SchoolMembership, SchoolSettings
+from .models import MAX_PRINCIPAL_SIGNATURE_SIZE, MAX_SCHOOL_LOGO_SIZE, School, SchoolMembership, SchoolSettings
 
 User = get_user_model()
 
@@ -31,11 +31,12 @@ class SchoolSelectionSerializer(serializers.Serializer):
 
 class SchoolProfileSerializer(serializers.ModelSerializer):
     logo_present = serializers.SerializerMethodField()
+    principal_signature_present = serializers.SerializerMethodField()
 
     class Meta:
         model = School
         fields = (
-            "id", "name", "slug", "logo_present", "contact_email", "contact_phone",
+            "id", "name", "slug", "logo_present", "principal_signature_present", "contact_email", "contact_phone",
             "address", "state", "local_government_area", "website", "motto",
             "description", "is_active", "created_at", "updated_at",
             "school_type", "country", "verification_status", "verification_reason", "verified_at",
@@ -45,6 +46,9 @@ class SchoolProfileSerializer(serializers.ModelSerializer):
     def get_logo_present(self, obj):
         return bool(obj.logo)
 
+    def get_principal_signature_present(self, obj):
+        return bool(obj.principal_signature)
+
 
 class SchoolLogoSerializer(serializers.Serializer):
     logo = serializers.ImageField()
@@ -52,6 +56,20 @@ class SchoolLogoSerializer(serializers.Serializer):
     def validate_logo(self, value):
         if value.size > MAX_SCHOOL_LOGO_SIZE:
             raise serializers.ValidationError("School logos must be 2 MB or smaller.")
+        image_format = getattr(value.image, "format", "").upper()
+        extension = Path(value.name).suffix.lower()
+        matching_extensions = {"JPEG": {".jpg", ".jpeg"}, "PNG": {".png"}, "WEBP": {".webp"}}
+        if image_format not in matching_extensions or extension not in matching_extensions[image_format]:
+            raise serializers.ValidationError("Use a JPG, PNG, or WebP image.")
+        return value
+
+
+class PrincipalSignatureSerializer(serializers.Serializer):
+    signature = serializers.ImageField()
+
+    def validate_signature(self, value):
+        if value.size > MAX_PRINCIPAL_SIGNATURE_SIZE:
+            raise serializers.ValidationError("Principal signatures must be 2 MB or smaller.")
         image_format = getattr(value.image, "format", "").upper()
         extension = Path(value.name).suffix.lower()
         matching_extensions = {"JPEG": {".jpg", ".jpeg"}, "PNG": {".png"}, "WEBP": {".webp"}}

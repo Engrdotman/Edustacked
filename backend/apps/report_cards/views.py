@@ -369,7 +369,19 @@ def render_report_pdf(card, revision, snapshot):
         story.append(Paragraph(f"<b>{label}:</b> {escape(remarks.get(key) or '—')}", styles["SmallBody"]))
     signatures = snapshot.get("signatures", {})
     story.append(Spacer(1, 10 * mm))
-    story.append(Table([[f"Class teacher: {signatures.get('class_teacher') or '________________'}", f"Head teacher: {signatures.get('head_teacher') or '________________'}"], ["", ""]], colWidths=[86 * mm, 86 * mm], style=TableStyle([("LINEBELOW", (0, 1), (0, 1), .6, colors.grey), ("LINEBELOW", (1, 1), (1, 1), .6, colors.grey), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5), ("FONTSIZE", (0, 0), (-1, -1), 8)])))
+    principal_sign = ""
+    signature_path = school.get("principal_signature_path")
+    if revision.status == ReportCardRevision.Status.FINALIZED and signature_path:
+        try:
+            with default_storage.open(signature_path, "rb") as signature_file:
+                principal_sign = Image(BytesIO(signature_file.read()), width=42 * mm, height=14 * mm, kind="proportional")
+        except (OSError, ValueError):
+            principal_sign = ""
+    signature_table = Table([
+        [f"Class teacher: {signatures.get('class_teacher') or '________________'}", f"Principal: {signatures.get('head_teacher') or '________________'}"],
+        ["", principal_sign],
+    ], colWidths=[86 * mm, 86 * mm], style=TableStyle([("LINEBELOW", (0, 1), (0, 1), .6, colors.grey), ("LINEBELOW", (1, 1), (1, 1), .6, colors.grey), ("VALIGN", (0, 0), (-1, -1), "BOTTOM"), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5), ("FONTSIZE", (0, 0), (-1, -1), 8)]))
+    story.append(signature_table)
     if revision.status != ReportCardRevision.Status.FINALIZED:
         story.append(Spacer(1, 5 * mm))
         story.append(Paragraph(f"{revision.status.upper()} — NOT AN OFFICIAL FINALIZED REPORT CARD", ParagraphStyle(name="DraftNotice", parent=styles["BodyText"], alignment=TA_CENTER, textColor=colors.HexColor("#9b3f2e"), fontName="Helvetica-Bold", fontSize=9)))

@@ -7,7 +7,7 @@ const privacySections = [
   ['3. Account and school verification', 'Email verification confirms control of an email address. It does not establish that a school is legitimate. Platform school review is a separate process. Phone verification by SMS is not currently enabled.'],
   ['4. School access and separation', 'The application enforces school membership and role checks on protected API access. The final policy must describe all processors, hosting locations, retention periods, security controls, and school responsibilities after these have been formally established.'],
   ['5. Children’s educational information', 'Student records may include information about children. Schools should use the service only with an appropriate legal basis and required notices or permissions. Specific procedures for access, correction, retention, export, and deletion must be confirmed before commercial launch.'],
-  ['6. Contact and requests', `The official privacy contact has not yet been supplied: ${companyContent.email}. Replace this placeholder and define a verified process for privacy requests before publication.`],
+  ['6. Contact and requests', `For company inquiries, contact ${companyContent.email}. A verified process for privacy requests must be defined before publication.`],
 ]
 
 const termsSections = [
@@ -16,7 +16,7 @@ const termsSections = [
   ['3. School records', 'Schools remain responsible for the accuracy and lawful handling of the student, staff, attendance, and academic records they enter. Users should not access records outside their authorized school membership.'],
   ['4. Verification and access', 'Email verification is separate from school verification. A school may begin basic setup while its status is pending. Platform verification, rejection, suspension, and reactivation follow the platform’s review process.'],
   ['5. Service availability and features', 'Features may change as the platform is developed. Payment, credits, support commitments, service levels, data retention, and termination terms must be finalized before commercial use. The credit model described on the website is planned and is not presented as an active subscription service.'],
-  ['6. Company details and contact', `The official contracting entity and contact details have not yet been provided. Current placeholders: ${companyContent.legalName}; ${companyContent.email}; ${companyContent.address}. Replace and validate these details before publication.`],
+  ['6. Company details and contact', `The company name is ${companyContent.legalName} and the contact email is ${companyContent.email}. Confirm the legal contracting entity and office details before publication.`],
 ]
 
 export default function LegalDraftPage({ type, navigate }) {

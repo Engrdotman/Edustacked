@@ -53,6 +53,24 @@ class StudentManagementApiTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         return response.data
 
+    def test_student_roster_identifies_active_and_pending_enrollments(self):
+        active = self.enrolled_admission("N-ACTIVE")
+        pending = self.admission("N-PENDING", enrollment={
+            "academic_session": self.session.pk, "class_level": self.level.pk,
+            "class_arm": self.arm.pk, "enrollment_date": "2026-09-01", "status": "pending",
+        })
+        self.assertEqual(pending.status_code, status.HTTP_201_CREATED, pending.data)
+
+        response = self.api("get", "/api/v1/students/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        rows = {row["id"]: row for row in response.data["results"]}
+        self.assertEqual(rows[active["id"]]["current_class"], self.level.name)
+        self.assertEqual(rows[active["id"]]["current_arm"], self.arm.name)
+        self.assertEqual(rows[active["id"]]["current_enrollment_status"], StudentEnrollment.Status.ACTIVE)
+        self.assertEqual(rows[pending.data["id"]]["current_class"], self.level.name)
+        self.assertEqual(rows[pending.data["id"]]["current_enrollment_status"], StudentEnrollment.Status.PENDING)
+
     def test_admission_guardians_and_enrollment_are_atomic_and_school_scoped(self):
         result = self.admission("N-001", guardians=[{
             "full_name": "Grace Okafor", "phone": "555-0100", "relationship_type": "mother", "is_primary_contact": True,

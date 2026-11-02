@@ -1,7 +1,6 @@
-// Replace these clearly marked placeholders when official company details are approved.
 export const companyContent = {
   name: 'EDUstacked',
-  legalName: '[Official company name to be confirmed]',
+  legalName: 'EDUstacked',
   description: 'A thoughtful digital workspace for the people who keep schools moving.',
   background: 'EDUstacked is being built around a practical belief: school administration should be easier to understand, easier to organize, and more useful in the decisions schools make every day.',
   whatWeDo: 'We are developing a school management platform that brings student records, staff, academic organization, attendance, results, and report cards into one school workspace.',
@@ -9,7 +8,7 @@ export const companyContent = {
   mission: 'Make dependable school management tools easier for Nigerian schools to use, one useful workflow at a time.',
   vision: 'A future where every school can make confident decisions with organized, accessible information.',
   values: ['Clarity', 'Practical progress', 'Responsible access', 'Respect for school communities'],
-  email: '[Company email to be added]',
+  email: 'edustackedng@gmail.com',
   phone: '[Support phone to be added]',
   address: '[Office address, if applicable]',
   socials: {

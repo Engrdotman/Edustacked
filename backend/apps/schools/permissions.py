@@ -170,3 +170,23 @@ class HasSchoolProfileAccess(BasePermission):
         except Http404:
             return False
         return required in ROLE_PERMISSIONS.get(membership.role, frozenset()) and school_allows_capability(membership.school, required)
+
+
+class HasPrincipalSignatureAccess(BasePermission):
+    """Allow school administrators and principals to manage the report-card signature."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_superuser:
+            return True
+        try:
+            membership = authorized_membership(user, request, view)
+        except Http404:
+            return False
+        return membership.role in {
+            SchoolMembership.Role.SCHOOL_OWNER,
+            SchoolMembership.Role.SCHOOL_ADMIN,
+            SchoolMembership.Role.PRINCIPAL,
+        }

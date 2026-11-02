@@ -5,6 +5,7 @@ from .views import (
     SchoolMembershipDetailView,
     SchoolMembershipListCreateView,
     SchoolLogoView,
+    PrincipalSignatureView,
     SchoolProfileView,
     SchoolSettingsView,
     SchoolOwnershipTransferView,
@@ -22,6 +23,7 @@ urlpatterns = [
     path("onboarding/", SchoolOnboardingView.as_view(), name="school-onboarding"),
     path("<str:school_id>/ownership/transfer/", SchoolOwnershipTransferView.as_view(), name="school-ownership-transfer"),
     path("profile/logo/", SchoolLogoView.as_view(), name="school-logo"),
+    path("profile/principal-signature/", PrincipalSignatureView.as_view(), name="school-principal-signature"),
     path(
         "<str:school_id>/memberships/",
         SchoolMembershipListCreateView.as_view(),

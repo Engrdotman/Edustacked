@@ -17,6 +17,12 @@ The chosen term must belong to the selected session and include the attendance d
 
 Registers move through `draft` → `submitted` → `finalized`. A draft can contain unmarked roster entries, but submission requires every snapshot student to have a status. Statuses are `present`, `absent`, `late`, and `excused`. Teachers can record attendance only for classes and arms covered by an active teacher assignment. School administrators and managers can finalize or reopen a finalized register; reopening requires a reason. Finalized records cannot be edited until reopened.
 
+### Teacher sign-in and daily use
+
+Each teacher signs in to EDUstacked on their own phone, tablet, or computer using the email account linked to their staff profile. When a school administrator invites a new staff member, EDUstacked sends password setup and email verification links. The teacher sets a password, verifies the email, and then signs in. Existing linked users can sign in with their existing verified account. Staff should not share a manager's credentials.
+
+After signing in, the teacher selects the school, opens **Attendance**, chooses a date, session, class, and arm covered by an active teaching assignment, loads the eligible roster, marks each student, saves, and submits the register. A school administrator or manager finalizes it. If a teacher has no linked login or active assignment, the school administrator must link the staff account and create the teaching assignment first. Paper registers can still be entered by a manager, but that requires the manager to do the data entry and records the manager as the actor.
+
 Register writes are transactional and require the current register `version`. A stale version returns HTTP 409 so the client can reload before writing. The unique register constraint prevents duplicate daily registers. Register/record actor fields and immutable audit events preserve creation, corrections, submission, finalization, and reopening history. There is no hard-delete API for registers or records.
 
 All endpoints require authentication, an explicitly selected authorized school, and the corresponding attendance permission. Receptionists and accountants have no attendance write permission. Querysets and related object validation are school scoped.

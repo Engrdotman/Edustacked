@@ -12,7 +12,7 @@ const actions = [
   ['Report cards', '/app/report-cards', ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher']],
   ['Reports & analytics', '/app/reports', ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher', 'accountant', 'receptionist']],
   ['Billing & credits', '/app/billing', ['platform_superadmin', 'school_owner', 'school_admin', 'accountant']],
-  ['School settings', '/app/school', ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'accountant', 'receptionist']],
+  ['School settings', '/app/school', ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'accountant', 'receptionist']],
 ]
 
 export default function SchoolDashboardPage({ navigate }) {

@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import Case, IntegerField, Value, When
 from rest_framework import serializers
 
 from apps.academics.models import AcademicSession, ClassArm, ClassLevel
@@ -40,14 +41,25 @@ def school_from_context(context):
 class StudentRosterSerializer(serializers.ModelSerializer):
     current_class = serializers.SerializerMethodField()
     current_arm = serializers.SerializerMethodField()
+    current_enrollment_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
-        fields = ("id", "admission_number", "first_name", "middle_name", "last_name", "status", "current_class", "current_arm")
+        fields = ("id", "admission_number", "first_name", "middle_name", "last_name", "status", "current_class", "current_arm", "current_enrollment_status")
         read_only_fields = fields
 
     def _current(self, obj):
-        return obj.enrollments.filter(status=StudentEnrollment.Status.ACTIVE).select_related("class_level", "class_arm").first()
+        return obj.enrollments.filter(
+            status__in=(StudentEnrollment.Status.ACTIVE, StudentEnrollment.Status.PENDING),
+        ).annotate(
+            status_priority=Case(
+                When(status=StudentEnrollment.Status.ACTIVE, then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
+        ).select_related("class_level", "class_arm").order_by(
+            "status_priority", "-academic_session__start_date", "-pk",
+        ).first()
 
     def get_current_class(self, obj):
         enrollment = self._current(obj)
@@ -56,6 +68,10 @@ class StudentRosterSerializer(serializers.ModelSerializer):
     def get_current_arm(self, obj):
         enrollment = self._current(obj)
         return enrollment.class_arm.name if enrollment else None
+
+    def get_current_enrollment_status(self, obj):
+        enrollment = self._current(obj)
+        return enrollment.status if enrollment else ""
 
 
 class StudentContactSerializer(StudentRosterSerializer):
@@ -66,18 +82,47 @@ class StudentContactSerializer(StudentRosterSerializer):
 class StudentManageSerializer(SafeModelSerializer):
     school = serializers.IntegerField(source="school_id", read_only=True)
     photo_present = serializers.SerializerMethodField()
+    current_class = serializers.SerializerMethodField()
+    current_arm = serializers.SerializerMethodField()
+    current_enrollment_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
         fields = (
             "id", "school", "admission_number", "first_name", "middle_name", "last_name",
             "date_of_birth", "gender", "photo_present", "email", "phone", "address",
-            "admission_date", "status", "created_at", "updated_at",
+            "admission_date", "status", "current_class", "current_arm",
+            "current_enrollment_status", "created_at", "updated_at",
         )
         read_only_fields = ("id", "school", "admission_number", "photo_present", "created_at", "updated_at")
 
     def get_photo_present(self, obj):
         return bool(obj.photo)
+
+    def _current_enrollment(self, obj):
+        return obj.enrollments.filter(
+            status__in=(StudentEnrollment.Status.ACTIVE, StudentEnrollment.Status.PENDING),
+        ).annotate(
+            status_priority=Case(
+                When(status=StudentEnrollment.Status.ACTIVE, then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
+        ).select_related("class_level", "class_arm").order_by(
+            "status_priority", "-academic_session__start_date", "-pk",
+        ).first()
+
+    def get_current_class(self, obj):
+        enrollment = self._current_enrollment(obj)
+        return enrollment.class_level.name if enrollment else None
+
+    def get_current_arm(self, obj):
+        enrollment = self._current_enrollment(obj)
+        return enrollment.class_arm.name if enrollment else None
+
+    def get_current_enrollment_status(self, obj):
+        enrollment = self._current_enrollment(obj)
+        return enrollment.status if enrollment else ""
 
 
 class StudentCreateSerializer(StudentManageSerializer):
@@ -220,7 +265,7 @@ class StudentAdmissionSerializer(serializers.Serializer):
 
 
 class StudentGuardianReadSerializer(serializers.ModelSerializer):
-    guardian_id = serializers.IntegerField(source="guardian_id", read_only=True)
+    guardian_id = serializers.IntegerField(read_only=True)
     full_name = serializers.CharField(source="guardian.full_name", read_only=True)
     phone = serializers.CharField(source="guardian.phone", read_only=True)
     email = serializers.EmailField(source="guardian.email", read_only=True)

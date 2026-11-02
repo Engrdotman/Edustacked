@@ -58,6 +58,15 @@ class AssessmentResultsApiTests(TestCase):
     def api(self, method, path, data=None, school=None):
         return getattr(self.client, method)(path, data, HTTP_X_SCHOOL_ID=str((school or self.school).pk), format="json")
 
+    def test_assessment_component_library_list_is_paginated(self):
+        AssessmentComponent.objects.create(school=self.school, name="Homework")
+
+        response = self.api("get", "/api/v1/assessment-components/?page_size=100")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["name"], "Homework")
+
     def create_plan(self, *, owner=None, method="raw"):
         if owner:
             self.client.force_authenticate(owner)

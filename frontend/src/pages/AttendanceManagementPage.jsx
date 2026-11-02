@@ -89,7 +89,11 @@ export default function AttendanceManagementPage({ navigate }) {
       const params = new URLSearchParams({ academic_session: selection.academic_session, class_level: selection.class_level, class_arm: selection.class_arm, date })
       const rows = await apiRequest(`attendance/eligible-students/?${params}`)
       setRoster(rows.map((item) => ({ ...item, student_id: item.id, note: item.note || '' })))
-      setMessage(`${rows.length} eligible student${rows.length === 1 ? '' : 's'} loaded.`)
+      if (rows.length === 0) {
+        setError('No students are eligible for this date and placement. A student needs an active or completed enrollment in the selected session, class, and arm, with an enrollment date on or before the attendance date. Check the enrollment status and date, or choose a later date.')
+      } else {
+        setMessage(`${rows.length} eligible student${rows.length === 1 ? '' : 's'} loaded.`)
+      }
     } catch (e) { setRoster([]); setError(e.message || 'Could not load eligible students.') }
     finally { setWorking(false) }
   }

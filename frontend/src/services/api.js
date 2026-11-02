@@ -156,6 +156,16 @@ export function uploadSchoolLogo(file) {
   return apiRequest('schools/profile/logo/', { method: 'POST', body })
 }
 
+export function getPrincipalSignature() {
+  return apiBlobRequest('schools/profile/principal-signature/')
+}
+
+export function uploadPrincipalSignature(file) {
+  const body = new FormData()
+  body.append('signature', file)
+  return apiRequest('schools/profile/principal-signature/', { method: 'POST', body })
+}
+
 export async function academicList(path) {
   let page = 1
   const rows = []

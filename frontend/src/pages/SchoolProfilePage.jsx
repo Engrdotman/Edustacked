@@ -4,11 +4,13 @@ import { useAuth } from '../auth/AuthContext.jsx'
 import {
   ApiError,
   getSchoolLogo,
+  getPrincipalSignature,
   getSchoolProfile,
   getSchoolSettings,
   updateSchoolProfile,
   updateSchoolSettings,
   uploadSchoolLogo,
+  uploadPrincipalSignature,
 } from '../services/api.js'
 
 const emptyProfile = {
@@ -33,6 +35,7 @@ function FieldError({ errors, name }) {
 export default function SchoolProfilePage({ navigate }) {
   const { selectedSchool, user } = useAuth()
   const canEdit = ['school_owner', 'school_admin', 'platform_superadmin'].includes(selectedSchool?.role)
+  const canEditPrincipalSignature = canEdit || selectedSchool?.role === 'principal'
   const [profile, setProfile] = useState(emptyProfile)
   const [settings, setSettings] = useState(emptySettings)
   const [savedProfile, setSavedProfile] = useState(emptyProfile)
@@ -40,6 +43,9 @@ export default function SchoolProfilePage({ navigate }) {
   const [logoUrl, setLogoUrl] = useState('')
   const [savedLogoUrl, setSavedLogoUrl] = useState('')
   const [logoFile, setLogoFile] = useState(null)
+  const [signatureUrl, setSignatureUrl] = useState('')
+  const [savedSignatureUrl, setSavedSignatureUrl] = useState('')
+  const [signatureFile, setSignatureFile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingSettings, setSavingSettings] = useState(false)
@@ -49,7 +55,7 @@ export default function SchoolProfilePage({ navigate }) {
 
   useEffect(() => {
     let active = true
-    let objectUrl = ''
+    const objectUrls = []
     async function load() {
       setLoading(true)
       setError('')
@@ -65,12 +71,24 @@ export default function SchoolProfilePage({ navigate }) {
         if (profileData.logo_present) {
           const blob = await getSchoolLogo()
           if (!active) return
-          objectUrl = URL.createObjectURL(blob)
-          setLogoUrl(objectUrl)
-          setSavedLogoUrl(objectUrl)
+          const logoObjectUrl = URL.createObjectURL(blob)
+          objectUrls.push(logoObjectUrl)
+          setLogoUrl(logoObjectUrl)
+          setSavedLogoUrl(logoObjectUrl)
         } else {
           setLogoUrl('')
           setSavedLogoUrl('')
+        }
+        if (profileData.principal_signature_present) {
+          const signatureBlob = await getPrincipalSignature()
+          if (!active) return
+          const signatureObjectUrl = URL.createObjectURL(signatureBlob)
+          objectUrls.push(signatureObjectUrl)
+          setSignatureUrl(signatureObjectUrl)
+          setSavedSignatureUrl(signatureObjectUrl)
+        } else {
+          setSignatureUrl('')
+          setSavedSignatureUrl('')
         }
       } catch (loadError) {
         if (active) setError(errorMessage(loadError))
@@ -81,7 +99,7 @@ export default function SchoolProfilePage({ navigate }) {
     load()
     return () => {
       active = false
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
+      objectUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
     }
   }, [selectedSchool?.school_id])
 
@@ -89,10 +107,14 @@ export default function SchoolProfilePage({ navigate }) {
     if (logoUrl.startsWith('blob:')) URL.revokeObjectURL(logoUrl)
   }, [logoUrl])
 
+  useEffect(() => () => {
+    if (signatureUrl.startsWith('blob:')) URL.revokeObjectURL(signatureUrl)
+  }, [signatureUrl])
+
   useEffect(() => {
     const onBeforeUnload = (event) => {
       const dirty = JSON.stringify(profile) !== JSON.stringify(savedProfile)
-        || JSON.stringify(settings) !== JSON.stringify(savedSettings) || Boolean(logoFile)
+        || JSON.stringify(settings) !== JSON.stringify(savedSettings) || Boolean(logoFile) || Boolean(signatureFile)
       if (dirty) {
         event.preventDefault()
         event.returnValue = ''
@@ -100,13 +122,16 @@ export default function SchoolProfilePage({ navigate }) {
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [profile, savedProfile, settings, savedSettings, logoFile])
+  }, [profile, savedProfile, settings, savedSettings, logoFile, signatureFile])
 
   function cancelProfile() {
     setProfile(savedProfile)
     setLogoFile(null)
+    setSignatureFile(null)
     if (logoUrl.startsWith('blob:') && logoUrl !== savedLogoUrl) URL.revokeObjectURL(logoUrl)
+    if (signatureUrl.startsWith('blob:') && signatureUrl !== savedSignatureUrl) URL.revokeObjectURL(signatureUrl)
     setLogoUrl(savedLogoUrl)
+    setSignatureUrl(savedSignatureUrl)
     setFieldErrors({})
     setSuccess('')
   }
@@ -124,10 +149,12 @@ export default function SchoolProfilePage({ navigate }) {
     setSuccess('')
     setFieldErrors({})
     try {
-      await updateSchoolProfile(profile)
+      if (canEdit) await updateSchoolProfile(profile)
       if (logoFile) await uploadSchoolLogo(logoFile)
+      if (signatureFile) await uploadPrincipalSignature(signatureFile)
       setSavedProfile(profile)
       setLogoFile(null)
+      setSignatureFile(null)
       setSuccess('School profile saved.')
       if (logoUrl.startsWith('blob:')) URL.revokeObjectURL(logoUrl)
       if (logoFile) {
@@ -135,6 +162,12 @@ export default function SchoolProfilePage({ navigate }) {
         const nextLogoUrl = URL.createObjectURL(blob)
         setLogoUrl(nextLogoUrl)
         setSavedLogoUrl(nextLogoUrl)
+      }
+      if (signatureFile) {
+        const blob = await getPrincipalSignature()
+        const nextSignatureUrl = URL.createObjectURL(blob)
+        setSignatureUrl(nextSignatureUrl)
+        setSavedSignatureUrl(nextSignatureUrl)
       }
     } catch (saveError) {
       setError(errorMessage(saveError))
@@ -175,9 +208,21 @@ export default function SchoolProfilePage({ navigate }) {
     setLogoUrl(URL.createObjectURL(file))
   }
 
+  function changeSignature(file) {
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+      setError('Choose a JPG, PNG, or WebP signature image no larger than 2 MB.')
+      return
+    }
+    setError('')
+    setSignatureFile(file)
+    if (signatureUrl.startsWith('blob:')) URL.revokeObjectURL(signatureUrl)
+    setSignatureUrl(URL.createObjectURL(file))
+  }
+
   function back() {
     const dirty = JSON.stringify(profile) !== JSON.stringify(savedProfile)
-      || JSON.stringify(settings) !== JSON.stringify(savedSettings) || Boolean(logoFile)
+      || JSON.stringify(settings) !== JSON.stringify(savedSettings) || Boolean(logoFile) || Boolean(signatureFile)
     if (!dirty || window.confirm('Discard unsaved school changes?')) navigate('/app')
   }
 
@@ -209,6 +254,13 @@ export default function SchoolProfilePage({ navigate }) {
                   {canEdit && <label className="upload-button">Choose image<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => changeLogo(event.target.files?.[0])} /></label>}
                 </div>
               </div>
+              <div className="logo-field principal-signature-field">
+                <div className="school-logo-preview principal-signature-preview">{signatureUrl ? <img src={signatureUrl} alt="Principal signature preview" /> : <span aria-label="No principal signature uploaded">✍</span>}</div>
+                <div><strong>Principal signature for report cards</strong><p>JPG, PNG, or WebP · up to 2 MB. Printed on finalized report cards only.</p>
+                  {canEditPrincipalSignature && <label className="upload-button">Choose signature<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => changeSignature(event.target.files?.[0])} /></label>}
+                  {!canEditPrincipalSignature && <span className="permission-note">Principal or school administrator access required</span>}
+                </div>
+              </div>
               <div className="form-grid">
                 <label>School name<input value={profile.name} disabled={!canEdit} required maxLength={200} onChange={(event) => setProfile({ ...profile, name: event.target.value })} /><FieldError errors={fieldErrors} name="name" /></label>
                 <label>School email<input type="email" value={profile.contact_email} disabled={!canEdit} onChange={(event) => setProfile({ ...profile, contact_email: event.target.value })} /><FieldError errors={fieldErrors} name="contact_email" /></label>
@@ -220,7 +272,7 @@ export default function SchoolProfilePage({ navigate }) {
                 <label>Motto<input value={profile.motto} disabled={!canEdit} maxLength={200} onChange={(event) => setProfile({ ...profile, motto: event.target.value })} /><FieldError errors={fieldErrors} name="motto" /></label>
                 <label className="field-wide">Description<textarea rows="3" value={profile.description} disabled={!canEdit} onChange={(event) => setProfile({ ...profile, description: event.target.value })} /><FieldError errors={fieldErrors} name="description" /></label>
               </div>
-              {canEdit && <div className="form-actions"><button className="primary-button" disabled={savingProfile}>{savingProfile ? 'Saving…' : 'Save profile'}</button><button className="secondary-button" type="button" onClick={cancelProfile}>Cancel</button></div>}
+              {(canEdit || signatureFile) && <div className="form-actions"><button className="primary-button" disabled={savingProfile}>{savingProfile ? 'Saving…' : canEdit ? 'Save profile' : 'Save principal signature'}</button><button className="secondary-button" type="button" onClick={cancelProfile}>Cancel</button></div>}
             </form>
 
             <form className="settings-card" onSubmit={saveSettings}>
