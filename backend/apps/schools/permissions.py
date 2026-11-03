@@ -31,7 +31,11 @@ ROLE_PERMISSIONS = {
             "finance.view",
             "finance.manage",
             "billing.view", "billing.purchase",
+            "services.view", "services.manage",
+            "cbt.questions.view", "cbt.questions.manage", "cbt.questions.publish",
+            "cbt.exams.view", "cbt.exams.manage", "cbt.exams.publish", "cbt.exams.assign",
             "announcements.manage",
+            "cbt.results.view", "cbt.results.manage",
             "frontdesk.manage",
             "staff.view", "staff.manage", "teacher_assignments.view", "teacher_assignments.manage",
             "reports.dashboard", "reports.enrollment", "reports.attendance", "reports.academics", "reports.report_cards", "reports.finance",
@@ -51,10 +55,14 @@ ROLE_PERMISSIONS = {
             "attendance.record",
             "results.view",
             "results.enter",
+            "services.view",
+            "cbt.questions.view", "cbt.questions.manage",
+            "cbt.exams.view", "cbt.exams.manage", "cbt.exams.assign",
             "report_cards.view", "report_cards.generate", "report_cards.review",
             "announcements.manage",
             "frontdesk.manage",
             "staff.view", "staff.manage", "teacher_assignments.view", "teacher_assignments.manage",
+            "cbt.results.view",
             "reports.dashboard", "reports.enrollment", "reports.attendance", "reports.academics", "reports.report_cards",
         }
     ),
@@ -64,14 +72,17 @@ ROLE_PERMISSIONS = {
             "students.view", "students.manage", "students.enroll",
             "students.guardians.view", "students.guardians.manage",
             "attendance.view", "attendance.manage", "attendance.record",
-            "results.view", "results.enter", "report_cards.view", "report_cards.generate",
+            "results.view", "results.enter", "services.view", "services.manage",
+            "cbt.questions.view", "cbt.questions.manage", "cbt.questions.publish",
+            "cbt.exams.view", "cbt.exams.manage", "cbt.exams.publish", "cbt.exams.assign",
+            "cbt.results.view", "cbt.results.manage", "report_cards.view", "report_cards.generate",
             "report_cards.review", "announcements.manage", "frontdesk.manage",
             "staff.view", "staff.manage", "teacher_assignments.view", "teacher_assignments.manage",
             "reports.dashboard", "reports.enrollment", "reports.attendance", "reports.academics", "reports.report_cards",
         }
     ),
     SchoolMembership.Role.TEACHER: frozenset(
-        {"school.view", "students.view", "attendance.view", "attendance.record", "results.view", "results.enter", "report_cards.view", "teacher.profile.view", "teacher_assignments.view", "reports.dashboard", "reports.attendance", "reports.academics", "reports.report_cards"}
+        {"school.view", "students.view", "attendance.view", "attendance.record", "results.view", "results.enter", "services.view", "cbt.questions.view", "cbt.questions.manage", "cbt.questions.publish", "cbt.exams.view", "cbt.exams.manage", "cbt.results.view", "report_cards.view", "teacher.profile.view", "teacher_assignments.view", "reports.dashboard", "reports.attendance", "reports.academics", "reports.report_cards"}
     ),
     SchoolMembership.Role.ACCOUNTANT: frozenset({"school.view", "finance.view", "finance.manage", "billing.view", "billing.purchase", "reports.dashboard", "reports.finance"}),
     SchoolMembership.Role.RECEPTIONIST: frozenset(

@@ -25,6 +25,9 @@ import SchoolOnboardingPage from './pages/SchoolOnboardingPage.jsx'
 import PlatformSchoolsPage from './pages/PlatformSchoolsPage.jsx'
 import PlatformSchoolDetailPage from './pages/PlatformSchoolDetailPage.jsx'
 import LegalDraftPage from './pages/LegalDraftPage.jsx'
+import CbtManagementPage from './pages/CbtManagementPage.jsx'
+import CbtResultsPage from './pages/CbtResultsPage.jsx'
+import ServicesPage from './pages/ServicesPage.jsx'
 
 function AppRoutes() {
   const [location, setLocation] = useState(() => `${window.location.pathname}${window.location.search}`)
@@ -104,6 +107,20 @@ function AppRoutes() {
     if (!selectedSchool) return <AuthenticatedHome navigate={navigate} />
     if (!['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher', 'receptionist'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <StudentManagementPage navigate={navigate} />
+  }
+  if (pathname === '/app/cbt' || pathname === '/app/cbt/results' || /^\/app\/cbt\/results\/[0-9a-f-]+$/i.test(pathname)) {
+    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (!user) return <AccessDeniedPage navigate={navigate} />
+    if (!selectedSchool || !['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
+    if (pathname === '/app/cbt') return <CbtManagementPage navigate={navigate} />
+    const resultId = pathname.match(/^\/app\/cbt\/results\/([0-9a-f-]+)$/i)?.[1] || ''
+    return <CbtResultsPage navigate={navigate} resultId={resultId} />
+  }
+  if (pathname === '/app/services') {
+    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (!user) return <AccessDeniedPage navigate={navigate} />
+    if (!selectedSchool || !['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
+    return <ServicesPage navigate={navigate} />
   }
   if (pathname === '/app/staff') {
     if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>

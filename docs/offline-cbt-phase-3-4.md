@@ -16,7 +16,7 @@ This is a separately deployable local Django service for school LAN exams. It us
 4. A school administrator with `cbt.exams.publish` POSTs `/api/v1/cbt/examinations/{exam_id}/package/`. The response includes `signed_payload`; save it as a JSON file on a trusted admin computer and transfer it to the LAN server. The current version creates one immutable package per exam; changed exams require a future explicit version/export workflow.
 5. Create a local-server bearer credential from `POST /api/v1/cbt/local-servers/` (the plaintext is returned once), and store it only in the local server environment. Local server management endpoints are listed under `/api/v1/cbt/local-servers/` and sync status at `/api/v1/cbt/sync/dashboard/`.
 
-The signed package contains snapshots, assignment mapping, instructions, dates, and an answer key. Local import validates the signature/checksum, package schedule, assignment map, license signature and license grace. The answer key is stored in a separate local database field and is never present in student API responses. The package signing mechanism uses Django's timestamped signing with a shared secret; restrict key distribution to the two trusted servers and rotate keys through a coordinated package reissue.
+The signed package contains snapshots, assignment mapping, instructions, dates, and an answer key. Local import validates the signature/checksum, package schedule, assignment map, license signature and license grace. The answer key is stored in a separate local database field and is never present in student API responses. The package signing mechanism uses Django's timestamped signing with a shared secret. Restrict the key to central and the trusted local server; the local administrator host therefore remains part of the signing trust boundary. See [Phase 6 security/readiness](offline-cbt-phase-6-production-readiness.md) for the risk and controlled key-rotation guidance.
 
 ## Local server installation (Windows, Linux, or macOS)
 
@@ -79,9 +79,9 @@ Start the durable outbox worker in a separate process (configure it as a Windows
 python manage.py sync_outbox --loop --interval 30
 ```
 
-It sends completed raw submissions only; transient navigation and each answer change are not synchronized. HMAC signatures bind the canonical JSON payload to the per-school bearer secret. Central checks the server identity, signed package ownership, assignment/student match, payload version, exam question IDs and answer format, entitlement/grace policy, event UUID, and local-session id. Repeated identical deliveries return accepted/duplicate; altered event/session replays are audited as conflicts. Failures use exponential backoff and become manually retryable after the configured retry limit. Sync does not grade or change report cards (Phase 5 is intentionally out of scope).
+It sends completed raw submissions only; transient navigation and each answer change are not synchronized. HMAC signatures bind the canonical JSON payload to the per-school bearer secret. Central checks the server identity, signed package ownership, assignment/student match, payload version, exam question IDs and answer format, entitlement/grace policy, event UUID, and local-session id. Repeated identical deliveries return accepted/duplicate; altered event/session replays are audited as conflicts. Failures use exponential backoff and become manually retryable after the configured retry limit. Central now calculates CBT results after accepted sync; see [Phase 5 Results and Analytics](offline-cbt-phase-5-results.md). CBT scores still do not alter school report cards.
 
-At `/operations/`, authenticated local Django staff can view imported packages, sessions, outbox/retry status, import signed packages, run sync/retry actions, and download a backup. `/admin/` exposes the detailed model lists. Admin API endpoints: `GET /local/api/v1/admin/overview/`, `GET/POST /local/api/v1/admin/sync/` (`sync_now`, or retry by event ID), and `GET /local/api/v1/admin/backup/`. The backup endpoint uses SQLite's online backup API; store downloaded copies off-server and verify restore by migrating a copy in a separate test environment. Keep normal scheduled backups too.
+At `/operations/`, authenticated local Django staff can view imported packages, sessions, outbox/retry status, import signed packages and renewed signed licenses, run sync/retry actions, download the original signed package, and create an integrity-checked database backup. `/admin/` exposes the detailed model lists. Admin API endpoints: `GET /local/api/v1/admin/overview/`, `GET/POST /local/api/v1/admin/sync/` (`sync_now`, or retry by event ID), `POST /local/api/v1/admin/licenses/import/`, `GET /local/api/v1/admin/packages/{package_id}/backup/`, and `GET /local/api/v1/admin/backup/`. Backups use SQLite's online backup API plus `PRAGMA integrity_check`; schedule encrypted off-server copies, apply a retention policy, and rehearse restore with the service stopped.
 
 ## Capacity and operations
 
@@ -89,9 +89,9 @@ The code has not been load-tested with 100 concurrent students. Use a wired giga
 
 ## Known limitations
 
-- No graded results, scoring, or report-card generation (Phase 5).
-- License expiry is checked at import and after offline grace; connectivity does not validate a changed entitlement during an active exam.
-- Central answer ingest stores immutable raw answer snapshots only; central grading/result ingestion is intentionally not implemented.
+- Report-card generation from CBT scores is not included; CBT results are managed in the separate Phase 5 results workflow.
+- Signed license dates/grace are checked at package import and each new exam start. A running exam is allowed to finish. While offline, the server cannot learn about immediate cloud revocation; an administrator can import a renewed signed license through `/operations/`.
+- Central ingest retains immutable raw answer snapshots and creates a separately audited central result; scoring details are documented in the Phase 5 guide.
 - Package export currently creates one immutable version per exam; replace/reissue workflow and revocation for already imported offline packages need an explicit admin process.
 - The local app's admin workflow is Django Admin/API rather than a custom branded dashboard.
 - Local student-account provisioning/reset is an administrator CLI process; account delivery is a school responsibility.

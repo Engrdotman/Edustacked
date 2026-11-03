@@ -3,6 +3,8 @@ from django.urls import path
 from .views import (
     LocalAdminOverviewView,
     LocalDatabaseBackupView,
+    LocalPackageBackupView,
+    LicenseImportView,
     PackageImportView,
     StudentAnswerView,
     StudentExamListView,
@@ -24,6 +26,8 @@ urlpatterns = [
     path("sessions/<uuid:session_id>/submit/", StudentSubmitView.as_view(), name="local-student-submit"),
     path("admin/overview/", LocalAdminOverviewView.as_view(), name="local-admin-overview"),
     path("admin/packages/import/", PackageImportView.as_view(), name="local-admin-package-import"),
+    path("admin/packages/<uuid:package_id>/backup/", LocalPackageBackupView.as_view(), name="local-admin-package-backup"),
+    path("admin/licenses/import/", LicenseImportView.as_view(), name="local-admin-license-import"),
     path("admin/sync/", SyncDashboardView.as_view(), name="local-admin-sync"),
     path("admin/backup/", LocalDatabaseBackupView.as_view(), name="local-admin-backup"),
 ]

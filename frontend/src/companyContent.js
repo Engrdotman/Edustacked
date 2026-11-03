@@ -9,11 +9,11 @@ export const companyContent = {
   vision: 'A future where every school can make confident decisions with organized, accessible information.',
   values: ['Clarity', 'Practical progress', 'Responsible access', 'Respect for school communities'],
   email: 'edustackedng@gmail.com',
-  phone: '[Support phone to be added]',
-  address: '[Office address, if applicable]',
+  phone: '08165596993',
+  address: 'we are availabe on whatsapp',
   socials: {
-    LinkedIn: '[Official LinkedIn profile to be added]',
-    Instagram: '[Official Instagram profile to be added]',
+    LinkedIn: 'will be availabe soon',
+    Instagram: 'will be availabe soon',
   },
 }
 

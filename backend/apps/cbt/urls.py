@@ -18,6 +18,7 @@ from .views import (
     QuestionListCreateView,
     QuestionPublishView,
 )
+from .result_views import CbtResultCorrectionView, CbtResultDetailView, CbtResultsDashboardView, CbtResultsExportView
 
 urlpatterns = [
     path("cbt/setup/", CbtSetupView.as_view(), name="cbt-setup"),
@@ -36,4 +37,8 @@ urlpatterns = [
     path("cbt/local-servers/<int:server_id>/revoke/", LocalServerRevokeView.as_view(), name="cbt-local-server-revoke"),
     path("cbt/sync/dashboard/", CbtSyncDashboardView.as_view(), name="cbt-sync-dashboard"),
     path("cbt/sync/ingest/", CbtSyncIngestView.as_view(), name="cbt-sync-ingest"),
+    path("cbt/results/", CbtResultsDashboardView.as_view(), name="cbt-results-dashboard"),
+    path("cbt/results/export/", CbtResultsExportView.as_view(), name="cbt-results-export"),
+    path("cbt/results/<uuid:result_id>/", CbtResultDetailView.as_view(), name="cbt-result-detail"),
+    path("cbt/results/<uuid:result_id>/corrections/", CbtResultCorrectionView.as_view(), name="cbt-result-correction"),
 ]

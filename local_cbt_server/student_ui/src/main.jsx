@@ -26,10 +26,17 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
+  const [hasPendingSaves, setHasPendingSaves] = useState(false);
   const [remaining, setRemaining] = useState(0);
   const [online, setOnline] = useState(navigator.onLine);
   const autoSubmitting = useRef(false);
+  const answerTimers = useRef(new Map());
+  const answerQueues = useRef(new Map());
   const current = exam?.questions?.[questionIndex];
+
+  function refreshPendingState() {
+    setHasPendingSaves(Array.from({ length: sessionStorage.length }, (_, index) => sessionStorage.key(index)).some(key => key?.startsWith('edustacked.localcbt.pending.')));
+  }
 
   const loadExams = useCallback(async () => setExams(await api('/exams/')), []);
   const recover = useCallback(async () => {
@@ -69,20 +76,46 @@ function App() {
     tick(); const id = setInterval(tick, 1000); return () => clearInterval(id);
   }, [exam, loadExams]);
 
-  const saveAnswer = useCallback(async (question, value) => {
+  const persistAnswer = useCallback((sessionId, data) => {
+    const storageKey = requestKey(sessionId, data.question_id);
+    const queueKey = `${sessionId}.${data.question_id}`;
+    const previous = answerQueues.current.get(queueKey) || Promise.resolve();
+    const task = previous.catch(() => {}).then(async () => {
+      const pending = sessionStorage.getItem(storageKey);
+      if (!pending || JSON.parse(pending).request_id !== data.request_id) return;
+      setSaving(true);
+      try {
+        await api(`/sessions/${sessionId}/answers/`, { method: 'POST', body: JSON.stringify(data) });
+        const latest = sessionStorage.getItem(storageKey);
+        if (latest && JSON.parse(latest).request_id === data.request_id) {
+          sessionStorage.removeItem(storageKey);
+          refreshPendingState();
+          setNotice('Answer saved on the school server.');
+        }
+      } catch (error) {
+        setNotice(`Answer is still waiting to save on the school server: ${error.message}`);
+      } finally { setSaving(false); }
+    });
+    answerQueues.current.set(queueKey, task);
+    return task;
+  }, []);
+
+  const saveAnswer = useCallback((question, value) => {
     if (!exam) return;
     const data = { request_id: crypto.randomUUID(), question_id: question.question_id, value };
     setExam(previous => previous ? ({ ...previous, questions: previous.questions.map(row => row.question_id === question.question_id ? { ...row, answer: value } : row) }) : previous);
-    sessionStorage.setItem(requestKey(exam.session_id, question.question_id), JSON.stringify(data));
-    setSaving(true);
-    try {
-      await api(`/sessions/${exam.session_id}/answers/`, { method: 'POST', body: JSON.stringify(data) });
-      sessionStorage.removeItem(requestKey(exam.session_id, question.question_id));
-      setExam(previous => ({ ...previous, questions: previous.questions.map(row => row.question_id === question.question_id ? { ...row, answer: value } : row) }));
-      setNotice('Answer saved on the school server.');
-    } catch (error) { setNotice(`Saved temporarily on this device; server sync will retry: ${error.message}`); }
-    finally { setSaving(false); }
-  }, [exam]);
+    const storageKey = requestKey(exam.session_id, question.question_id);
+    sessionStorage.setItem(storageKey, JSON.stringify(data));
+    setHasPendingSaves(true);
+    const priorTimer = answerTimers.current.get(storageKey);
+    if (priorTimer) clearTimeout(priorTimer);
+    if (question.type === 'text') {
+      answerTimers.current.set(storageKey, setTimeout(() => {
+        answerTimers.current.delete(storageKey);
+        persistAnswer(exam.session_id, data);
+      }, 450));
+    } else persistAnswer(exam.session_id, data);
+  }, [exam, persistAnswer]);
 
   useEffect(() => {
     if (!online || !exam) return;
@@ -90,16 +123,15 @@ function App() {
       for (const question of exam.questions) {
         const raw = sessionStorage.getItem(requestKey(exam.session_id, question.question_id));
         if (!raw) continue;
+        if (answerTimers.current.has(requestKey(exam.session_id, question.question_id))) continue;
         const data = JSON.parse(raw);
-        api(`/sessions/${exam.session_id}/answers/`, { method: 'POST', body: JSON.stringify(data) })
-          .then(() => sessionStorage.removeItem(requestKey(exam.session_id, question.question_id)))
-          .catch(() => {});
+        persistAnswer(exam.session_id, data);
       }
     };
     flushPending();
     const retry = setInterval(flushPending, 5000);
     return () => clearInterval(retry);
-  }, [online, exam]);
+  }, [online, exam, persistAnswer]);
 
   async function signIn(event) {
     event.preventDefault(); setBusy(true); setNotice('');
@@ -122,13 +154,26 @@ function App() {
   async function submitExam() {
     if (!exam || !confirm('Submit this examination? You cannot change answers afterwards.')) return;
     setBusy(true);
-    try { await api(`/sessions/${exam.session_id}/submit/`, { method: 'POST', body: '{}' });
+    try {
+      for (const question of exam.questions) {
+        const key = requestKey(exam.session_id, question.question_id);
+        const timer = answerTimers.current.get(key);
+        if (timer) { clearTimeout(timer); answerTimers.current.delete(key); }
+        const raw = sessionStorage.getItem(key);
+        if (raw) await persistAnswer(exam.session_id, JSON.parse(raw));
+      }
+      await Promise.all([...answerQueues.current.values()]);
+      const unsaved = exam.questions.some(question => sessionStorage.getItem(requestKey(exam.session_id, question.question_id)));
+      if (unsaved) { setNotice('Some answers are not saved on the school server. Reconnect to the school network and retry before submitting.'); return; }
+      await api(`/sessions/${exam.session_id}/submit/`, { method: 'POST', body: '{}' });
       sessionStorage.removeItem('edustacked.localcbt.session'); setExam(null); setNotice('Your examination has been submitted to the school server.'); await loadExams();
     } catch (error) { setNotice(error.message); }
     finally { setBusy(false); }
   }
 
   async function signOut() {
+    const pending = Array.from({ length: sessionStorage.length }, (_, index) => sessionStorage.key(index)).some(key => key?.startsWith('edustacked.localcbt.pending.'));
+    if (pending && !confirm('Some answers are still waiting to save on the school server. Signing out clears this browser’s temporary queue. Continue?')) return;
     try { await api('/auth/logout/', { method: 'POST', body: '{}' }); } catch {}
     for (let i = sessionStorage.length - 1; i >= 0; i--) { const key = sessionStorage.key(i); if (key?.startsWith('edustacked.localcbt.')) sessionStorage.removeItem(key); }
     setStudent(null); setExam(null); setExams([]);
@@ -142,7 +187,7 @@ function App() {
 
   if (!exam) return <main className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark small">ES</span><span>EDUstacked <small>OFFLINE CBT</small></span></div><div className="top-actions"><span className={online ? 'network good' : 'network'}>{online ? 'School server connected' : 'Connection interrupted'}</span><span>{student.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div></header><section className="content"><p className="eyebrow">STUDENT PORTAL</p><h1>Your examinations</h1><p className="muted">Your saved answers are held by the school server. Keep this device connected to the school network while you work.</p>{notice && <p className="notice">{notice}</p>}<div className="exam-list">{exams.length ? exams.map(item => <article className="exam-card" key={item.package_id}><div><p className="eyebrow">{item.subject} · {item.class_name}</p><h2>{item.title}</h2><p className="muted">{item.duration_minutes} minutes · {item.attempts_used}/{item.maximum_attempts} attempts used</p><p>{item.instructions}</p></div><button disabled={busy || item.status === 'expired' || item.attempts_used >= item.maximum_attempts} onClick={() => startExam(item)}>{item.status === 'in_progress' ? 'Resume exam' : 'Start exam'}</button></article>) : <div className="empty">No available examinations are assigned to your account.</div>}</div></section></main>;
 
-  return <main className="exam-shell"><header className="exam-top"><div><p className="eyebrow">{exam.subject} · {exam.class_name}</p><h1>{exam.title}</h1><p>{student.name} · {student.admission_number}</p></div><div className={`timer ${remaining < 300 ? 'urgent' : ''}`}><span>TIME LEFT</span><strong>{formatTime(remaining)}</strong></div></header>{exam.instructions && <details className="instructions"><summary>Examination instructions</summary><p>{exam.instructions}</p></details>}<div className="progress-line"><span>{answered} of {exam.questions.length} answered</span><span>{saving ? 'Saving…' : online ? 'Saved on school server' : 'Offline · pending saves on this device'}</span></div><div className="exam-layout"><nav className="question-nav" aria-label="Question navigation">{exam.questions.map((q, i) => <button key={q.question_id} className={`${i === questionIndex ? 'selected' : ''} ${q.answer !== undefined && q.answer !== null && q.answer !== '' ? 'answered' : ''}`} onClick={() => setQuestionIndex(i)}>{i + 1}</button>)}</nav><section className="question-card"><p className="eyebrow">QUESTION {questionIndex + 1} OF {exam.questions.length} · {current.marks} MARKS</p><h2>{current.prompt}</h2>{current.image_data && <img className="question-image" src={`data:${current.image_mime};base64,${current.image_data}`} alt="Question illustration" />}{current.type === 'text' ? <textarea value={current.answer || ''} onChange={e => saveAnswer(current, e.target.value)} placeholder="Write your answer" /> : <div className="options">{current.options.map(option => <label key={option.id} className="option"><input type={current.type === 'multiple_answer' ? 'checkbox' : 'radio'} name={`q-${current.question_id}`} checked={current.type === 'multiple_answer' ? (current.answer || []).includes(option.id) : current.answer === option.id} onChange={e => { if (current.type === 'multiple_answer') { const values = new Set(current.answer || []); e.target.checked ? values.add(option.id) : values.delete(option.id); saveAnswer(current, [...values]); } else saveAnswer(current, option.id); }} /><span>{option.text}</span></label>)}</div>}<footer className="question-footer"><button className="secondary" disabled={questionIndex === 0} onClick={() => setQuestionIndex(questionIndex - 1)}>Previous</button><span>{saving ? 'Saving answer…' : 'Changes save automatically'}</span>{questionIndex < exam.questions.length - 1 ? <button onClick={() => setQuestionIndex(questionIndex + 1)}>Next question</button> : <button onClick={submitExam} disabled={busy}>{busy ? 'Submitting…' : 'Review and submit'}</button>}</footer></section></div></main>;
+  return <main className="exam-shell"><header className="exam-top"><div><p className="eyebrow">{exam.subject} · {exam.class_name}</p><h1>{exam.title}</h1><p>{student.name} · {student.admission_number}</p></div><div className={`timer ${remaining < 300 ? 'urgent' : ''}`}><span>TIME LEFT</span><strong>{formatTime(remaining)}</strong></div></header>{exam.instructions && <details className="instructions"><summary>Examination instructions</summary><p>{exam.instructions}</p></details>}<div className="progress-line"><span>{answered} of {exam.questions.length} answered</span><span>{saving ? 'Saving…' : hasPendingSaves ? 'Waiting to save · keep the page open' : online ? 'Saved on school server' : 'Connection interrupted'}</span></div><div className="exam-layout"><nav className="question-nav" aria-label="Question navigation">{exam.questions.map((q, i) => <button key={q.question_id} className={`${i === questionIndex ? 'selected' : ''} ${q.answer !== undefined && q.answer !== null && q.answer !== '' ? 'answered' : ''}`} onClick={() => setQuestionIndex(i)}>{i + 1}</button>)}</nav><section className="question-card"><p className="eyebrow">QUESTION {questionIndex + 1} OF {exam.questions.length} · {current.marks} MARKS</p><h2>{current.prompt}</h2>{current.image_data && <img className="question-image" src={`data:${current.image_mime};base64,${current.image_data}`} alt="Question illustration" />}{current.type === 'text' ? <textarea value={current.answer || ''} onChange={e => saveAnswer(current, e.target.value)} placeholder="Write your answer" /> : <div className="options">{current.options.map(option => <label key={option.id} className="option"><input type={current.type === 'multiple_answer' ? 'checkbox' : 'radio'} name={`q-${current.question_id}`} checked={current.type === 'multiple_answer' ? (current.answer || []).includes(option.id) : current.answer === option.id} onChange={e => { if (current.type === 'multiple_answer') { const values = new Set(current.answer || []); e.target.checked ? values.add(option.id) : values.delete(option.id); saveAnswer(current, [...values]); } else saveAnswer(current, option.id); }} /><span>{option.text}</span></label>)}</div>}<footer className="question-footer"><button className="secondary" disabled={questionIndex === 0} onClick={() => setQuestionIndex(questionIndex - 1)}>Previous</button><span>{saving ? 'Saving answer…' : hasPendingSaves ? 'Answer is waiting to save' : 'Saved on school server'}</span>{questionIndex < exam.questions.length - 1 ? <button onClick={() => setQuestionIndex(questionIndex + 1)}>Next question</button> : <button onClick={submitExam} disabled={busy}>{busy ? 'Submitting…' : 'Review and submit'}</button>}</footer></section></div></main>;
 }
 
 createRoot(document.getElementById('root')).render(<App />);

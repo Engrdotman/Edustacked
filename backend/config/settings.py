@@ -11,6 +11,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "local-only-insecure-key-change-before-deployment")
+CBT_LICENSE_SIGNING_KEY = os.getenv("CBT_LICENSE_SIGNING_KEY", SECRET_KEY)
+CBT_PACKAGE_SIGNING_KEY = os.getenv("CBT_PACKAGE_SIGNING_KEY", "")
+CBT_OFFLINE_GRACE_DAYS = int(os.getenv("CBT_OFFLINE_GRACE_DAYS", "7"))
+if not 0 <= CBT_OFFLINE_GRACE_DAYS <= 90:
+    raise ImproperlyConfigured("CBT_OFFLINE_GRACE_DAYS must be between 0 and 90 days.")
 DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() in {"1", "true", "yes"}
 if not DEBUG and SECRET_KEY == "local-only-insecure-key-change-before-deployment":
     raise ImproperlyConfigured("DJANGO_SECRET_KEY must be set when DEBUG is disabled.")
@@ -40,6 +45,8 @@ INSTALLED_APPS = [
     "apps.results.apps.ResultsConfig",
     "apps.report_cards.apps.ReportCardsConfig",
     "apps.billing.apps.BillingConfig",
+    "apps.entitlements.apps.EntitlementsConfig",
+    "apps.cbt.apps.CbtConfig",
     "apps.parent_portal.apps.ParentPortalConfig",
     "apps.reports.apps.ReportsConfig",
 ]
@@ -164,7 +171,7 @@ REST_FRAMEWORK = {
     "DEFAULT_VERSION": "v1",
     "ALLOWED_VERSIONS": ["v1"],
     "VERSION_PARAM": "version",
-    "DEFAULT_THROTTLE_RATES": {"anon": "10/minute"},
+    "DEFAULT_THROTTLE_RATES": {"anon": "10/minute", "cbt_sync": "120/minute"},
 }
 
 SIMPLE_JWT = {

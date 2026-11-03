@@ -16,6 +16,8 @@ from django.utils import timezone
 from apps.students.models import Student, StudentEnrollment
 
 from .models import (
+    CbtResult,
+    CbtResultCorrection,
     CbtExaminationPackage,
     CbtSyncConflict,
     CbtSyncedSubmission,
@@ -26,6 +28,154 @@ from .models import (
     LocalCbtSyncEvent,
     Question,
 )
+
+
+def _calculate_result_values(examination, details, *, pass_mark=None):
+    objective_score = Decimal("0")
+    final_score = Decimal("0")
+    pending_manual = False
+    correct = incorrect = 0
+    for item in details:
+        marks = Decimal(str(item["marks_possible"]))
+        awarded = item.get("marks_awarded")
+        if item["question_type"] != Question.Type.TEXT:
+            objective_score += Decimal(str(awarded or "0"))
+        if awarded is None:
+            pending_manual = True
+        else:
+            final_score += Decimal(str(awarded))
+        if item.get("correct") is True:
+            correct += 1
+        if item.get("incorrect") is True:
+            incorrect += 1
+    maximum = sum((Decimal(str(item["marks_possible"])) for item in details), Decimal("0"))
+    finalized = not pending_manual
+    percentage = (final_score * Decimal("100") / maximum).quantize(Decimal("0.01")) if finalized and maximum else Decimal("0.00") if finalized else None
+    return {
+        "status": CbtResult.Status.FINALIZED if finalized else CbtResult.Status.NEEDS_MARKING,
+        "objective_score": objective_score.quantize(Decimal("0.01")),
+        "score": final_score.quantize(Decimal("0.01")) if finalized else None,
+        "maximum_score": maximum.quantize(Decimal("0.01")),
+        "percentage": percentage,
+        "passed": (final_score >= (pass_mark if pass_mark is not None else examination.pass_mark)) if finalized else None,
+        "correct_answers": correct,
+        "incorrect_answers": incorrect,
+    }
+
+
+def process_synced_submission(submission, *, calculated_by="system:offline-cbt-auto-mark-v1"):
+    """Mark an accepted raw submission using only frozen central snapshots."""
+    existing = CbtResult.objects.filter(event=submission.event).first()
+    if existing:
+        return existing, False
+    examination = submission.examination
+    answers = {str(row.get("question_id")): row.get("value") for row in submission.answers}
+    questions = list(examination.exam_questions.filter(is_snapshot=True).order_by("position"))
+    if not questions:
+        raise ValidationError("The examination has no frozen question snapshots to mark.")
+    details = []
+    attempted = unanswered = 0
+    for question in questions:
+        question_id = str(question.source_question_id)
+        response = answers.get(question_id)
+        question_type = question.type_snapshot
+        if question_type == Question.Type.TEXT:
+            attempted_answer = isinstance(response, str) and bool(response.strip())
+        elif question_type == Question.Type.MULTIPLE_ANSWER:
+            attempted_answer = isinstance(response, list) and bool(response)
+        else:
+            attempted_answer = isinstance(response, str) and bool(response)
+        attempted += int(attempted_answer)
+        unanswered += int(not attempted_answer)
+        correct_ids = [
+            f"{question_id}:{position}"
+            for position, option in enumerate(question.options_snapshot or [])
+            if option.get("is_correct")
+        ]
+        if question_type == Question.Type.TEXT:
+            is_correct = None
+            awarded = None if attempted_answer else "0.00"
+            is_incorrect = False
+        else:
+            if question_type == Question.Type.MULTIPLE_ANSWER:
+                is_correct = set(response or []) == set(correct_ids) if attempted_answer else False
+            else:
+                is_correct = response == correct_ids[0] if attempted_answer and correct_ids else False
+            awarded = str(question.marks_snapshot if is_correct else Decimal("0.00"))
+            is_incorrect = attempted_answer and not is_correct
+        details.append({
+            "question_id": question_id,
+            "position": question.position,
+            "prompt": question.prompt_snapshot,
+            "question_type": question_type,
+            "response": response,
+            "options": [
+                {"id": f"{question_id}:{position}", "text": option.get("text", "")}
+                for position, option in enumerate(question.options_snapshot or [])
+            ],
+            "attempted": attempted_answer,
+            "marks_possible": str(question.marks_snapshot),
+            "marks_awarded": awarded,
+            "correct": is_correct,
+            "incorrect": is_incorrect,
+            "correct_option_ids": correct_ids,
+            "explanation": question.explanation_snapshot,
+        })
+    values = _calculate_result_values(examination, details)
+    result = CbtResult.objects.create(
+        school=submission.school,
+        examination=examination,
+        assignment=submission.assignment,
+        event=submission.event,
+        local_session_id=submission.local_session_id,
+        submitted_at=submission.submitted_at,
+        synchronized_at=submission.event.received_at,
+        total_questions=len(questions),
+        attempted_questions=attempted,
+        unanswered_questions=unanswered,
+        pass_mark=examination.pass_mark,
+        mark_details=details,
+        calculated_by=calculated_by,
+        **values,
+    )
+    return result, True
+
+
+@transaction.atomic
+def apply_result_correction(result, *, marks, reason, actor):
+    """Apply manual marks/corrections and retain a before/after audit snapshot."""
+    if not isinstance(marks, dict) or not marks:
+        raise ValidationError({"marks": "Provide at least one question mark."})
+    if not reason or len(reason.strip()) < 5:
+        raise ValidationError({"reason": "Explain the correction (at least 5 characters)."})
+    examination = result.examination
+    before = result.mark_details
+    details = [dict(item) for item in before]
+    by_id = {item["question_id"]: item for item in details}
+    for question_id, raw_mark in marks.items():
+        item = by_id.get(str(question_id))
+        if item is None:
+            raise ValidationError({"marks": f"Question {question_id} is not part of this result."})
+        try:
+            mark = Decimal(str(raw_mark))
+        except Exception as exc:
+            raise ValidationError({"marks": f"Question {question_id} has an invalid mark."}) from exc
+        maximum = Decimal(item["marks_possible"])
+        if not mark.is_finite() or mark < 0 or mark > maximum:
+            raise ValidationError({"marks": f"Question {question_id} must be between 0 and {maximum}."})
+        if not item["attempted"] and mark != 0:
+            raise ValidationError({"marks": f"Question {question_id} was unanswered and cannot receive marks."})
+        item["marks_awarded"] = str(mark.quantize(Decimal("0.01")))
+        item["correct"] = bool(item["attempted"] and mark == maximum)
+        item["incorrect"] = bool(item["attempted"] and mark == 0)
+    values = _calculate_result_values(examination, details, pass_mark=result.pass_mark)
+    CbtResultCorrection.objects.create(
+        result=result, corrected_by=actor, reason=reason.strip(),
+        previous_details=before, corrected_details=details,
+    )
+    CbtResult.objects.filter(pk=result.pk).update(mark_details=details, updated_at=timezone.now(), **values)
+    result.refresh_from_db()
+    return result
 
 
 def _eligible_question_queryset(examination):
@@ -366,6 +516,8 @@ def ingest_local_submission(credential, envelope, bearer_token):
         if existing_event.school_id != credential.school_id:
             raise ValidationError({"event_id": "This event identifier is already owned by another school."})
         if existing_event.payload_hash == payload_hash:
+            if hasattr(existing_event, "submission") and not hasattr(existing_event, "result"):
+                process_synced_submission(existing_event.submission)
             return existing_event, False, False
         CbtSyncConflict.objects.create(
             event=existing_event, attempted_hash=payload_hash, attempted_payload=payload,
@@ -378,6 +530,8 @@ def ingest_local_submission(credential, envelope, bearer_token):
     existing_submission = CbtSyncedSubmission.objects.filter(school=credential.school, local_session_id=local_session_id).first()
     if existing_submission:
         if existing_submission.event.payload_hash == payload_hash:
+            if not hasattr(existing_submission.event, "result"):
+                process_synced_submission(existing_submission)
             return existing_submission.event, False, False
         CbtSyncConflict.objects.create(
             event=existing_submission.event, attempted_hash=payload_hash, attempted_payload=payload,
@@ -403,4 +557,5 @@ def ingest_local_submission(credential, envelope, bearer_token):
             school=credential.school, examination=examination, assignment=assignment,
             local_session_id=local_session_id, event=event, submitted_at=submitted_at, answers=answers,
         )
+        process_synced_submission(CbtSyncedSubmission.objects.select_related("examination", "assignment", "event").get(event=event))
     return event, True, False

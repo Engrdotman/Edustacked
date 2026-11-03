@@ -28,6 +28,7 @@ class ImportedExamination(models.Model):
     examination_id = models.CharField(max_length=36, db_index=True)
     version = models.PositiveSmallIntegerField()
     payload_hash = models.CharField(max_length=64)
+    signed_payload = models.TextField(blank=True)
     config = models.JSONField()
     answer_key = models.JSONField()
     assigned_student_ids = models.JSONField(default=list)
@@ -202,6 +203,7 @@ class LocalLicenseVerification(models.Model):
     license_id = models.UUIDField(unique=True)
     school_id = models.PositiveBigIntegerField(db_index=True)
     service_code = models.CharField(max_length=50)
+    starts_on = models.DateField()
     expires_on = models.DateField()
     offline_grace_days = models.PositiveSmallIntegerField(default=7)
     last_verified_at = models.DateTimeField(auto_now_add=True)
@@ -209,6 +211,16 @@ class LocalLicenseVerification(models.Model):
 
     @property
     def valid_for_offline_use(self):
-        return timezone.localdate() <= self.expires_on + timedelta(days=self.offline_grace_days)
+        today = timezone.localdate()
+        return self.starts_on <= today <= self.expires_on + timedelta(days=self.offline_grace_days)
+
+
+class LocalBackupRecord(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    size_bytes = models.PositiveBigIntegerField()
+    integrity_check = models.CharField(max_length=16, default="ok")
+
+    class Meta:
+        ordering = ("-created_at",)
 
 

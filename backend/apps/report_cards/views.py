@@ -314,6 +314,8 @@ def render_report_pdf(card, revision, snapshot):
     styles.add(ParagraphStyle(name="SchoolTitle", parent=styles["Title"], alignment=TA_CENTER, textColor=colors.HexColor(primary), fontSize=17, leading=21, spaceAfter=4))
     styles.add(ParagraphStyle(name="SubheadingSmall", parent=styles["Heading2"], textColor=colors.HexColor(primary), fontSize=12, leading=15, spaceBefore=8, spaceAfter=5))
     styles.add(ParagraphStyle(name="SmallBody", parent=styles["BodyText"], fontSize=8.5, leading=11))
+    styles.add(ParagraphStyle(name="ResultCell", parent=styles["SmallBody"], fontSize=7.5, leading=9))
+    styles.add(ParagraphStyle(name="ResultHeader", parent=styles["ResultCell"], fontName="Helvetica-Bold", textColor=colors.white))
     story = []
     school = snapshot.get("school", {})
     logo_path = school.get("logo_path")
@@ -326,7 +328,7 @@ def render_report_pdf(card, revision, snapshot):
             story.append(Paragraph(escape(school.get("name", "School")), styles["SchoolTitle"]))
     else:
         story.append(Paragraph(escape(school.get("name", "School")), styles["SchoolTitle"]))
-    contacts = " · ".join(value for value in (school.get("address"), school.get("contact_phone"), school.get("contact_email"), school.get("website")) if value)
+    contacts = " | ".join(value for value in (school.get("address"), school.get("contact_phone"), school.get("contact_email"), school.get("website")) if value)
     if contacts:
         story.append(Paragraph(escape(contacts), styles["SmallBody"]))
     if school.get("motto"):
@@ -335,7 +337,7 @@ def render_report_pdf(card, revision, snapshot):
         story.append(Paragraph(escape(school["description"]), styles["SmallBody"]))
     story.append(Spacer(1, 5 * mm))
     academic = snapshot.get("academic", {})
-    story.append(Paragraph(f"STUDENT REPORT CARD — {escape(academic.get('session', ''))} · {escape(academic.get('term', ''))}", styles["Heading2"]))
+    story.append(Paragraph(f"STUDENT REPORT CARD - {escape(academic.get('session', ''))} | {escape(academic.get('term', ''))}", styles["Heading2"]))
     student = snapshot.get("student", {})
     identity = [
         ["Student", student.get("name", ""), "Admission number", student.get("admission_number", "")],
@@ -350,13 +352,22 @@ def render_report_pdf(card, revision, snapshot):
         for index, component in enumerate(components or [{}]):
             data.append([
                 subject.get("subject_name", "") if index == 0 else "",
-                component.get("name", "—"), component.get("score") or "—", component.get("max_score", "—"),
-                subject.get("total", "—") if index == 0 else "", subject.get("percentage", "—") if index == 0 else "", subject.get("grade", "—") if index == 0 else "",
+                component.get("name", "-"), component.get("score") or "-", component.get("max_score", "-"),
+                subject.get("total", "-") if index == 0 else "", subject.get("percentage", "-") if index == 0 else "", subject.get("grade", "-") if index == 0 else "",
             ])
     if len(data) == 1:
         data.append(["No approved results", "", "", "", "", "", ""])
-    result_table = Table(data, repeatRows=1, colWidths=[31 * mm, 42 * mm, 19 * mm, 20 * mm, 23 * mm, 18 * mm, 18 * mm])
-    result_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(primary)), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 7.5), ("LEADING", (0, 0), (-1, -1), 9), ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#c8d6ca")), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f6f9f6")]), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
+    wrapped_data = [
+        [Paragraph(escape(str(value)), styles["ResultHeader"]) for value in row]
+        if row_index == 0
+        else [
+            Paragraph(escape(str(value)), styles["ResultCell"]) if column_index in (0, 1) else str(value)
+            for column_index, value in enumerate(row)
+        ]
+        for row_index, row in enumerate(data)
+    ]
+    result_table = Table(wrapped_data, repeatRows=1, colWidths=[31 * mm, 42 * mm, 19 * mm, 20 * mm, 23 * mm, 18 * mm, 18 * mm])
+    result_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(primary)), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 7.5), ("LEADING", (0, 0), (-1, -1), 9), ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#c8d6ca")), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f6f9f6")]), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (2, 1), (-1, -1), "CENTER"), ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
     story.append(result_table)
     story.append(Paragraph("Attendance (finalized registers only)", styles["SubheadingSmall"]))
     attendance = snapshot.get("attendance", {})
@@ -366,7 +377,7 @@ def render_report_pdf(card, revision, snapshot):
     remarks = snapshot.get("remarks", {})
     story.append(Paragraph("Remarks", styles["SubheadingSmall"]))
     for label, key in (("Teacher", "teacher"), ("Head teacher", "head_teacher"), ("Conduct", "conduct"), ("Effort", "effort")):
-        story.append(Paragraph(f"<b>{label}:</b> {escape(remarks.get(key) or '—')}", styles["SmallBody"]))
+        story.append(Paragraph(f"<b>{label}:</b> {escape(remarks.get(key) or '-')}", styles["SmallBody"]))
     signatures = snapshot.get("signatures", {})
     story.append(Spacer(1, 10 * mm))
     principal_sign = ""
@@ -384,6 +395,6 @@ def render_report_pdf(card, revision, snapshot):
     story.append(signature_table)
     if revision.status != ReportCardRevision.Status.FINALIZED:
         story.append(Spacer(1, 5 * mm))
-        story.append(Paragraph(f"{revision.status.upper()} — NOT AN OFFICIAL FINALIZED REPORT CARD", ParagraphStyle(name="DraftNotice", parent=styles["BodyText"], alignment=TA_CENTER, textColor=colors.HexColor("#9b3f2e"), fontName="Helvetica-Bold", fontSize=9)))
+        story.append(Paragraph(f"{revision.status.upper()} - NOT AN OFFICIAL FINALIZED REPORT CARD", ParagraphStyle(name="DraftNotice", parent=styles["BodyText"], alignment=TA_CENTER, textColor=colors.HexColor("#9b3f2e"), fontName="Helvetica-Bold", fontSize=9)))
     doc.build(story)
     return output.getvalue()

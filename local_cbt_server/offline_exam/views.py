@@ -3,12 +3,13 @@ from hashlib import sha256
 import secrets
 import sqlite3
 import tempfile
+import shutil
 from uuid import UUID
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, JsonResponse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
@@ -18,10 +19,12 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.hashers import check_password, make_password
 from django.shortcuts import render
 
 from .models import (
     AnswerSaveRequest,
+    LocalBackupRecord,
     ImportedExamination,
     ImportLog,
     LocalExamSession,
@@ -34,7 +37,10 @@ from .models import (
     SyncOutbox,
 )
 from .sync import process_due_outbox
-from .services import canonical_json, finalize_session, import_package, maybe_auto_submit, student_question_view
+from .services import canonical_json, finalize_session, import_license, import_package, maybe_auto_submit, student_question_view
+
+
+DUMMY_STUDENT_PASSWORD_HASH = make_password("not-a-valid-local-student-password")
 
 
 def student_credential(request):
@@ -73,6 +79,18 @@ def session_response(session):
     return exam_view
 
 
+def exam_license_is_valid(exam):
+    """Require the signed package license to remain within its offline grace window."""
+    payload = exam.config.get("license", {}).get("payload", {})
+    if not payload.get("license_id"):
+        return False
+    today = timezone.localdate()
+    return any(record.valid_for_offline_use for record in LocalLicenseVerification.objects.filter(
+        school_id=exam.school_id, service_code="offline_cbt", starts_on__lte=today,
+        expires_on__gte=today - timedelta(days=90),
+    ))
+
+
 @staff_member_required
 def local_admin_dashboard(request):
     return render(request, "offline_exam/dashboard.html")
@@ -90,9 +108,12 @@ class StudentLoginView(APIView):
     def post(self, request):
         admission = str(request.data.get("admission_number", "")).strip()
         password = str(request.data.get("password", ""))
+        if len(admission) > 50 or len(password) > 1024:
+            raise AuthenticationFailed("Admission number or password is incorrect.")
         credential = LocalStudentCredential.objects.filter(admission_number__iexact=admission).first()
         now = timezone.now()
         if not credential or not credential.is_active:
+            check_password(password, DUMMY_STUDENT_PASSWORD_HASH)
             raise AuthenticationFailed("Admission number or password is incorrect.")
         if credential.locked_until and credential.locked_until > now:
             raise AuthenticationFailed("This local account is temporarily locked. Contact the examination administrator.")
@@ -169,6 +190,8 @@ class StudentExamStartView(APIView):
             raise Http404
         if credential.central_student_id not in exam.assigned_student_ids:
             raise PermissionDenied("This examination is not assigned to this student.")
+        if not exam_license_is_valid(exam):
+            return Response({"detail": "The school's Offline CBT license is outside its permitted offline period. Contact the school administrator to renew and import an updated package."}, status=status.HTTP_403_FORBIDDEN)
         now = timezone.now()
         starts = timezone.datetime.fromisoformat(exam.config["starts_at"].replace("Z", "+00:00"))
         ends = timezone.datetime.fromisoformat(exam.config["ends_at"].replace("Z", "+00:00"))
@@ -213,10 +236,18 @@ class StudentSessionView(APIView):
 class StudentAnswerView(APIView):
     permission_classes = (IsAuthenticated,)
 
+    @transaction.atomic
     def post(self, request, session_id):
-        session = owned_session(request, session_id)
+        credential = student_credential(request)
+        session = LocalExamSession.objects.select_for_update().select_related("exam", "student").filter(
+            pk=session_id, student=credential,
+        ).first()
+        if not session:
+            raise Http404
+        maybe_auto_submit(session)
+        session.refresh_from_db()
         if session.status != LocalExamSession.Status.IN_PROGRESS:
-            return Response({"detail": "Submitted examination answers are locked."}, status=status.HTTP_409_CONFLICT)
+            return Response({"detail": "This examination has ended or was submitted; saved answers are locked."}, status=status.HTTP_409_CONFLICT)
         try:
             request_id = UUID(str(request.data.get("request_id", "")))
         except ValueError as exc:
@@ -243,12 +274,18 @@ class StudentAnswerView(APIView):
                 answer = LocalStudentAnswer.objects.filter(session=session, question_id=question_id).first()
                 return Response({"saved": True, "duplicate": True, "saved_at": answer.saved_at.isoformat() if answer else prior_request.created_at.isoformat()})
             return Response({"detail": "This save request identifier was reused with different answer data."}, status=status.HTTP_409_CONFLICT)
-        with transaction.atomic():
+        try:
             AnswerSaveRequest.objects.create(session=session, request_id=request_id, question_id=question_id, value_hash=digest)
             answer, _ = LocalStudentAnswer.objects.update_or_create(
                 session=session, question_id=question_id,
                 defaults={"value": value, "last_request_id": request_id},
             )
+        except IntegrityError:
+            prior_request = AnswerSaveRequest.objects.filter(session=session, request_id=request_id).first()
+            if prior_request and prior_request.question_id == question_id and prior_request.value_hash == digest:
+                answer = LocalStudentAnswer.objects.filter(session=session, question_id=question_id).first()
+                return Response({"saved": True, "duplicate": True, "saved_at": answer.saved_at.isoformat() if answer else prior_request.created_at.isoformat()})
+            raise
         return Response({"saved": True, "duplicate": False, "saved_at": answer.saved_at.isoformat()})
 
 
@@ -283,6 +320,32 @@ class PackageImportView(APIView):
         return Response({"package_id": str(package.package_id), "examination_id": package.examination_id, "version": package.version, "duplicate": not created}, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
 
+class LocalPackageBackupView(APIView):
+    permission_classes = (IsAdminUser,)
+
+    def get(self, request, package_id):
+        package = ImportedExamination.objects.filter(package_id=package_id).first()
+        if not package or not package.signed_payload:
+            raise Http404
+        return JsonResponse({"signed_payload": package.signed_payload}, json_dumps_params={"separators": (",", ":")})
+
+
+class LicenseImportView(APIView):
+    permission_classes = (IsAdminUser,)
+
+    def post(self, request):
+        try:
+            license_row, created = import_license(request.data.get("signed_license"))
+        except ValidationError as exc:
+            return Response({"detail": exc.messages}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            "license_id": str(license_row.license_id), "school_id": license_row.school_id,
+            "service_code": license_row.service_code, "starts_on": license_row.starts_on,
+            "expires_on": license_row.expires_on, "valid_for_offline_use": license_row.valid_for_offline_use,
+            "updated": not created,
+        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
 class LocalAdminOverviewView(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -290,10 +353,20 @@ class LocalAdminOverviewView(APIView):
         active = LocalExamSession.objects.filter(status=LocalExamSession.Status.IN_PROGRESS)
         outbox = SyncOutbox.objects.all()
         licenses = LocalLicenseVerification.objects.order_by("-expires_on")
-        current_license = licenses.first()
+        current_license = next((row for row in licenses if row.valid_for_offline_use), licenses.first())
+        last_backup = LocalBackupRecord.objects.order_by("-created_at").first()
+        try:
+            disk_free_bytes = shutil.disk_usage(settings.DATABASE_PATH.parent).free
+            database_size_bytes = settings.DATABASE_PATH.stat().st_size if settings.DATABASE_PATH.exists() else None
+        except OSError:
+            disk_free_bytes = None
+            database_size_bytes = None
         return Response({
             "server_time": timezone.now().isoformat(),
             "database": "sqlite",
+            "database_health": "available" if settings.DATABASE_PATH.exists() else "missing",
+            "database_size_bytes": database_size_bytes,
+            "disk_free_bytes": disk_free_bytes,
             "package_count": ImportedExamination.objects.count(),
             "active_sessions": active.count(),
             "completed_sessions": LocalExamSession.objects.filter(status__in=(LocalExamSession.Status.SUBMITTED, LocalExamSession.Status.AUTO_SUBMITTED)).count(),
@@ -304,6 +377,10 @@ class LocalAdminOverviewView(APIView):
             "sync_failed": outbox.filter(status=SyncOutbox.Status.FAILED).count(),
             "sync_complete": outbox.filter(status=SyncOutbox.Status.SYNCED).count(),
             "last_sync": SyncOutbox.objects.filter(synced_at__isnull=False).order_by("-synced_at").values_list("synced_at", flat=True).first(),
+            "sync_worker_last_attempt": SyncOutbox.objects.exclude(last_attempt_at__isnull=True).order_by("-last_attempt_at").values_list("last_attempt_at", flat=True).first(),
+            "sync_configuration": "ready" if settings.CENTRAL_SYNC_URL and settings.CENTRAL_SYNC_TOKEN else "offline/not configured",
+            "last_successful_backup": last_backup.created_at if last_backup else None,
+            "last_backup_size_bytes": last_backup.size_bytes if last_backup else None,
             "recent_sessions": [{
                 "id": str(row.pk), "student": row.student.display_name,
                 "admission_number": row.student.admission_number,
@@ -360,13 +437,21 @@ class LocalDatabaseBackupView(APIView):
         temporary = tempfile.NamedTemporaryFile(prefix="local-cbt-backup-", suffix=".sqlite3", delete=False)
         target_path = temporary.name
         temporary.close()
+        source = target = None
         try:
             source = sqlite3.connect(source_path)
             target = sqlite3.connect(target_path)
             with target:
                 source.backup(target)
+            check = target.execute("PRAGMA integrity_check").fetchone()
+            if not check or check[0] != "ok":
+                raise OSError("SQLite integrity check failed for the generated backup.")
+            size_bytes = os.path.getsize(target_path)
             target.close()
+            target = None
             source.close()
+            source = None
+            LocalBackupRecord.objects.create(size_bytes=size_bytes, integrity_check="ok")
             stream = open(target_path, "rb")
             response = FileResponse(stream, as_attachment=True, filename=f"local-cbt-{timezone.localdate().isoformat()}.sqlite3")
             # FileResponse is streamed and is never rendered; clean up after
@@ -374,6 +459,10 @@ class LocalDatabaseBackupView(APIView):
             response._resource_closers.append(lambda: os.path.exists(target_path) and os.unlink(target_path))
             return response
         except Exception:
+            if target is not None:
+                target.close()
+            if source is not None:
+                source.close()
             if os.path.exists(target_path):
                 os.unlink(target_path)
             raise

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import BrandMark from '../components/BrandMark.jsx'
-import { ApiError, getServiceEntitlements, getServicePlans } from '../services/api.js'
+import { ApiError, getServiceEntitlementLicense, getServiceEntitlements, getServicePlans } from '../services/api.js'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 const money = (amount, currency = 'NGN') => new Intl.NumberFormat('en-NG', { style: 'currency', currency }).format(amount / 100)
@@ -11,6 +11,8 @@ export default function ServicesPage({ navigate }) {
   const [licenses, setLicenses] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [downloading, setDownloading] = useState(false)
+  const canDownloadLicense = ['platform_superadmin', 'school_owner', 'school_admin', 'principal'].includes(selectedSchool?.role)
 
   useEffect(() => {
     let mounted = true
@@ -28,6 +30,23 @@ export default function ServicesPage({ navigate }) {
   }, [])
 
   const activeCbt = licenses.find((license) => license.service_code === 'offline_cbt' && license.is_current)
+
+  async function downloadLicense(license) {
+    setDownloading(true)
+    setError('')
+    try {
+      const signed = await getServiceEntitlementLicense(license.id)
+      const file = new Blob([JSON.stringify({ signed_license: signed.signed_license }, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(file)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `edustacked-cbt-license-${signed.license_id}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (requestError) {
+      setError(requestError instanceof ApiError ? requestError.message : 'Could not download this license.')
+    } finally { setDownloading(false) }
+  }
 
   async function handleSignOut() {
     await signOut()
@@ -62,6 +81,7 @@ export default function ServicesPage({ navigate }) {
                   <div><dt>Package</dt><dd>{activeCbt.plan_name || activeCbt.package_type}</dd></div>
                   <div><dt>Student capacity</dt><dd>{activeCbt.student_capacity}</dd></div>
                   <div><dt>Valid through</dt><dd>{activeCbt.expires_on}</dd></div>
+                  {canDownloadLicense && <div><button className="secondary-button" type="button" disabled={downloading} onClick={() => downloadLicense(activeCbt)}>{downloading ? 'Preparing license…' : 'Download signed license update'}</button></div>}
                 </dl>
               ) : <p className="selection-note">This school can use the core EDUstacked system without CBT. To enable offline examinations, an administrator must activate a separate CBT license.</p>}
             </section>

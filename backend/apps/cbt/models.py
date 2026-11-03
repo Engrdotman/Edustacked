@@ -398,3 +398,76 @@ class CbtSyncedSubmission(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ValidationError("Synchronized submissions cannot be deleted.")
+
+
+class CbtResult(models.Model):
+    """Immutable calculated result snapshot for one synchronized local attempt."""
+
+    class Status(models.TextChoices):
+        NEEDS_MARKING = "needs_marking", "Needs manual marking"
+        FINALIZED = "finalized", "Finalized"
+
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    school = models.ForeignKey(School, on_delete=models.PROTECT, related_name="cbt_results")
+    examination = models.ForeignKey(Examination, on_delete=models.PROTECT, related_name="results")
+    assignment = models.ForeignKey(ExaminationAssignment, on_delete=models.PROTECT, related_name="results")
+    event = models.OneToOneField(LocalCbtSyncEvent, on_delete=models.PROTECT, related_name="result")
+    local_session_id = models.UUIDField()
+    submitted_at = models.DateTimeField()
+    synchronized_at = models.DateTimeField()
+    status = models.CharField(max_length=16, choices=Status.choices)
+    total_questions = models.PositiveSmallIntegerField()
+    attempted_questions = models.PositiveSmallIntegerField()
+    unanswered_questions = models.PositiveSmallIntegerField()
+    correct_answers = models.PositiveSmallIntegerField()
+    incorrect_answers = models.PositiveSmallIntegerField()
+    objective_score = models.DecimalField(max_digits=9, decimal_places=2)
+    pass_mark = models.DecimalField(max_digits=9, decimal_places=2)
+    score = models.DecimalField(max_digits=9, decimal_places=2, null=True, blank=True)
+    maximum_score = models.DecimalField(max_digits=9, decimal_places=2)
+    percentage = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    passed = models.BooleanField(null=True, blank=True)
+    mark_details = models.JSONField(default=list)
+    calculated_by = models.CharField(max_length=80, default="system:offline-cbt-auto-mark-v1")
+    calculated_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-submitted_at",)
+        constraints = [
+            models.UniqueConstraint(fields=("school", "local_session_id"), name="cbt_result_school_session_uniq"),
+        ]
+        indexes = [
+            models.Index(fields=("school", "examination", "status"), name="cbt_result_school_exam_idx"),
+            models.Index(fields=("school", "submitted_at"), name="cbt_result_school_date_idx"),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError("Finalized CBT result snapshots can only change through the audited result service.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("CBT result records cannot be deleted.")
+
+
+class CbtResultCorrection(models.Model):
+    """Append-only audit record for manual marks and authorized corrections."""
+
+    result = models.ForeignKey(CbtResult, on_delete=models.PROTECT, related_name="corrections")
+    corrected_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="cbt_result_corrections")
+    reason = models.CharField(max_length=500)
+    previous_details = models.JSONField()
+    corrected_details = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError("CBT result correction audits are immutable.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("CBT result correction audits cannot be deleted.")

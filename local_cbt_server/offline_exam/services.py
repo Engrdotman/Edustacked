@@ -44,6 +44,8 @@ def _verify_package(signed_payload):
         envelope = signing.loads(signed_payload, key=settings.CBT_PACKAGE_SIGNING_KEY, salt="edustacked.offline-cbt-package.v1")
     except signing.BadSignature as exc:
         raise ValidationError("Package signature is invalid or the package was modified.") from exc
+    if not isinstance(envelope, dict):
+        raise ValidationError("Package envelope has an invalid structure.")
     payload = envelope.get("payload")
     if not isinstance(payload, dict):
         raise ValidationError("Package has an invalid payload structure.")
@@ -53,24 +55,43 @@ def _verify_package(signed_payload):
     required = ("package_id", "package_version", "school_id", "examination_id", "license", "assigned_student_ids", "assigned_students", "questions", "answer_key", "starts_at", "ends_at", "duration_minutes")
     if any(field not in payload for field in required):
         raise ValidationError("Package is missing required examination data.")
+    if not isinstance(payload["license"], dict) or not isinstance(payload["license"].get("payload"), dict):
+        raise ValidationError("Package license data has an invalid structure.")
+    if not isinstance(payload["assigned_student_ids"], list) or not isinstance(payload["assigned_students"], list):
+        raise ValidationError("Package student assignments have an invalid structure.")
+    if not isinstance(payload["questions"], list) or not isinstance(payload["answer_key"], list):
+        raise ValidationError("Package questions or answer keys have an invalid structure.")
+    if not all(isinstance(row, dict) for row in payload["assigned_students"] + payload["questions"] + payload["answer_key"]):
+        raise ValidationError("Package contains an invalid student, question, or answer-key entry.")
+    if not all(type(student_id) is int and student_id > 0 for student_id in payload["assigned_student_ids"]):
+        raise ValidationError("Package contains an invalid student identifier.")
+    if not all(type(row.get("student_id")) is int and row["student_id"] > 0 and isinstance(row.get("assignment_id"), str) for row in payload["assigned_students"]):
+        raise ValidationError("Package contains an invalid assigned-student mapping.")
     if payload["package_version"] != 1 or not payload["assigned_student_ids"] or not payload["questions"]:
         raise ValidationError("Package version or assignment/question contents are invalid.")
     try:
         package_id = __import__("uuid").UUID(payload["package_id"])
         __import__("uuid").UUID(payload["examination_id"])
+        start_time = _parse_time(payload["starts_at"], "starts_at")
         expiry = _parse_time(payload["ends_at"], "ends_at")
     except (ValueError, TypeError) as exc:
         raise ValidationError("Package identifiers are invalid.") from exc
+    if expiry <= start_time or type(payload["duration_minutes"]) is not int or not 1 <= payload["duration_minutes"] <= 600:
+        raise ValidationError("Package examination timing or duration is invalid.")
     if timezone.now() > expiry:
         raise ValidationError("This examination package has expired.")
     license_data = payload["license"]
+    if not isinstance(license_data.get("signed_token"), str):
+        raise ValidationError("Package signed license is missing or malformed.")
     try:
         license_payload = signing.loads(
             license_data["signed_token"], key=settings.CBT_LICENSE_SIGNING_KEY,
             salt="edustacked.service-license.v1",
         )
-    except (KeyError, signing.BadSignature) as exc:
+    except (KeyError, TypeError, ValueError, signing.BadSignature) as exc:
         raise ValidationError("Offline CBT license signature is invalid.") from exc
+    if not isinstance(license_payload, dict):
+        raise ValidationError("Offline CBT license payload has an invalid structure.")
     if license_payload != license_data.get("payload"):
         raise ValidationError("License data does not match its signature.")
     today = timezone.localdate()
@@ -82,32 +103,82 @@ def _verify_package(signed_payload):
         raise ValidationError("Offline CBT license fields are invalid.") from exc
     if license_payload.get("school_id") != payload["school_id"] or license_payload.get("service_code") != "offline_cbt":
         raise ValidationError("License does not authorize this school's CBT package.")
+    if grace < 0 or grace > 90:
+        raise ValidationError("Offline CBT license grace period is outside the supported policy limit.")
     if today < starts or today > expires + timedelta(days=grace):
         raise ValidationError("Offline CBT license is expired outside its grace period.")
     allowed_students = set(payload["assigned_student_ids"])
     mapped_students = {row.get("student_id") for row in payload["assigned_students"]}
     if allowed_students != mapped_students:
         raise ValidationError("Package student assignments are inconsistent.")
+    if len(payload["assigned_student_ids"]) != len(set(payload["assigned_student_ids"])):
+        raise ValidationError("Package contains duplicate student assignments.")
     question_ids = {item.get("question_id") for item in payload["questions"]}
+    if not all(isinstance(question_id, str) and question_id for question_id in question_ids):
+        raise ValidationError("Package contains an invalid question identifier.")
     key_ids = {item.get("question_id") for item in payload["answer_key"]}
     if question_ids != key_ids or len(question_ids) != len(payload["questions"]):
         raise ValidationError("Package question snapshots and answer keys are inconsistent.")
-    allowed_options = {
-        question["question_id"]: {option["id"] for option in question.get("options", [])}
-        for question in payload["questions"]
-    }
+    allowed_options = {}
+    for question in payload["questions"]:
+        options = question.get("options", [])
+        if not isinstance(options, list) or not all(isinstance(option, dict) and isinstance(option.get("id"), str) for option in options):
+            raise ValidationError("Package question options have an invalid structure.")
+        option_ids = [option["id"] for option in options]
+        if len(option_ids) != len(set(option_ids)):
+            raise ValidationError("Package question contains duplicate option identifiers.")
+        allowed_options[question["question_id"]] = set(option_ids)
     for key in payload["answer_key"]:
-        if any(option_id not in allowed_options[key["question_id"]] for option_id in key.get("correct_option_ids", [])):
+        correct_ids = key.get("correct_option_ids", [])
+        if not isinstance(correct_ids, list) or not all(isinstance(option_id, str) for option_id in correct_ids):
+            raise ValidationError("Package answer key has an invalid structure.")
+        if any(option_id not in allowed_options[key["question_id"]] for option_id in correct_ids):
             raise ValidationError("Package answer key references an unknown option.")
     return package_id, payload_hash, payload
+
+
+def import_license(signed_license):
+    if not isinstance(signed_license, str) or not signed_license or len(signed_license) > 10000:
+        raise ValidationError("Provide a signed license string no larger than 10 KB.")
+    if not settings.CBT_LICENSE_SIGNING_KEY:
+        raise ValidationError("Configure CBT_LICENSE_SIGNING_KEY before importing license updates.")
+    try:
+        payload = signing.loads(signed_license, key=settings.CBT_LICENSE_SIGNING_KEY, salt="edustacked.service-license.v1")
+        license_id = __import__("uuid").UUID(payload["license_id"])
+        school_id = int(payload["school_id"])
+        starts_on = timezone.datetime.fromisoformat(payload["starts_on"]).date()
+        expires_on = timezone.datetime.fromisoformat(payload["expires_on"]).date()
+        grace = int(payload["offline_grace_days"])
+    except (signing.BadSignature, KeyError, TypeError, ValueError) as exc:
+        raise ValidationError("The signed license is invalid or incomplete.") from exc
+    if payload.get("service_code") != "offline_cbt" or school_id < 1 or expires_on < starts_on or not 0 <= grace <= 90:
+        raise ValidationError("The signed license has invalid service, date, or grace-period values.")
+    known_schools = set(ImportedExamination.objects.values_list("school_id", flat=True).distinct())
+    if known_schools and school_id not in known_schools:
+        raise ValidationError("This signed license belongs to a different school than the local CBT server.")
+    row, created = LocalLicenseVerification.objects.update_or_create(
+        license_id=license_id,
+        defaults={
+            "school_id": school_id, "service_code": "offline_cbt", "starts_on": starts_on,
+            "expires_on": expires_on, "offline_grace_days": grace,
+            "payload_hash": sha256(canonical_json(payload)).hexdigest(),
+        },
+    )
+    return row, created
 
 
 @transaction.atomic
 def import_package(signed_payload):
     package_id, digest, payload = _verify_package(signed_payload)
+    known_schools = set(ImportedExamination.objects.values_list("school_id", flat=True).distinct())
+    if known_schools and payload["school_id"] not in known_schools:
+        raise ValidationError("This package belongs to a different school than the local CBT server.")
     existing = ImportedExamination.objects.filter(package_id=package_id).first()
     if existing:
         if existing.payload_hash == digest:
+            if not existing.signed_payload:
+                existing.signed_payload = signed_payload
+                existing.save(update_fields=("signed_payload",))
             ImportLog.objects.create(package_id=package_id, examination_id=existing.examination_id, status="duplicate", detail="Identical package already imported.")
             return existing, False
         raise ValidationError("Package identifier already exists with different contents.")
@@ -122,6 +193,7 @@ def import_package(signed_payload):
         examination_id=payload["examination_id"],
         version=payload["package_version"],
         payload_hash=digest,
+        signed_payload=signed_payload,
         config={key: value for key, value in payload.items() if key != "answer_key"},
         answer_key=payload["answer_key"],
         assigned_student_ids=payload["assigned_student_ids"],
@@ -131,7 +203,7 @@ def import_package(signed_payload):
         license_id=license_payload["license_id"],
         defaults={
             "school_id": payload["school_id"], "service_code": license_payload["service_code"],
-            "expires_on": license_payload["expires_on"],
+            "starts_on": license_payload["starts_on"], "expires_on": license_payload["expires_on"],
             "offline_grace_days": license_payload["offline_grace_days"], "payload_hash": sha256(canonical_json(license_payload)).hexdigest(),
         },
     )

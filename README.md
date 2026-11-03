@@ -167,6 +167,11 @@ npm run test:watch             # Watch mode
 - [Report Cards](docs/report-cards.md) - Module 9 generation, validation, review, immutable revisions, attendance policy, and secured PDFs
 - [Report-card Credits and Billing](docs/billing-and-credits.md) - Module 10 credit rules, Paystack setup, tenant APIs, and reconciliation
 - [Parent and Guardian Portal](docs/parent-guardian-portal.md) - Module 11 activation, linked-student access, attendance, report cards, announcements, and notifications
+- [Offline CBT Phase 0–1](docs/offline-cbt-phase-0-1.md) - separately licensed offline CBT foundations and school setup
+- [Offline CBT Phase 2](docs/offline-cbt-phase-2.md) - question bank and examination management
+- [Offline CBT Phase 3–4](docs/offline-cbt-phase-3-4.md) - local exam server, student client, and signed synchronization
+- [Offline CBT Phase 5 Results](docs/offline-cbt-phase-5-results.md) - central scoring, audited essay marking, analytics, and exports
+- [Offline CBT Phase 6 Readiness](docs/offline-cbt-phase-6-production-readiness.md) - security audit, Windows operations, backup/restore, manual pilot checklist, and load-test procedure
 - [School Reports and Analytics](docs/school-reports-and-analytics.md) - Module 12 role-scoped dashboards, metric definitions, filters, and safe CSV exports
 - [Development Setup](docs/development-setup.md) - Detailed setup instructions
 - [Branching Strategy](docs/BRANCHING-STRATEGY.md) - Git workflow and conventions

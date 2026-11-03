@@ -123,6 +123,19 @@ class ReportCardApiTests(TestCase):
         self.assertEqual(correction.data["current"]["snapshot"]["subjects"][0]["total"], "99.00")
         self.assertTrue(ReportCardAuditEvent.objects.filter(report_card_id=card["id"], action="correction_revision_started", reason="Approved assessment result corrected").exists())
 
+    def test_pdf_wraps_long_subject_and_assessment_component_labels(self):
+        self.subject.name = "Integrated Environmental and Community Health Studies"
+        self.subject.save(update_fields=("name",))
+        self.result.approved_calculation["components"][0]["name"] = "End of Term Written and Practical Assessment"
+        self.result.save(update_fields=("approved_calculation",))
+
+        card = self.generate()
+        pdf = self.api("get", f"/api/v1/report-cards/{card['id']}/pdf/")
+
+        self.assertEqual(pdf.status_code, status.HTTP_200_OK)
+        self.assertEqual(pdf["Content-Type"], "application/pdf")
+        self.assertTrue(pdf.content.startswith(b"%PDF"))
+
     def test_permissions_teacher_scope_and_cross_tenant_access(self):
         card = self.generate()
         self.client.force_authenticate(self.teacher_user)

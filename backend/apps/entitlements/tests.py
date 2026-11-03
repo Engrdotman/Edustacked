@@ -48,6 +48,22 @@ class ServiceEntitlementTests(TestCase):
         self.assertEqual([row["id"] for row in response.data], [str(own.id)])
         self.assertNotIn("signed_license", response.data[0])
 
+    def test_only_school_administrators_can_download_the_signed_license(self):
+        entitlement = self._entitlement()
+        self.client.force_authenticate(self.admin)
+        response = self.client.get(
+            f"/api/v1/services/entitlements/{entitlement.id}/license/",
+            HTTP_X_SCHOOL_ID=str(self.school.pk),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["signed_license"], entitlement.signed_license)
+        self.client.force_authenticate(self.other_admin)
+        hidden = self.client.get(
+            f"/api/v1/services/entitlements/{entitlement.id}/license/",
+            HTTP_X_SCHOOL_ID=str(self.other_school.pk),
+        )
+        self.assertEqual(hidden.status_code, 404)
+
     def test_offline_license_signature_and_grace_window_are_validated(self):
         entitlement = self._entitlement(
             starts_on=timezone.localdate() - timedelta(days=10),

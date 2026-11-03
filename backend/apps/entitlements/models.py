@@ -78,6 +78,8 @@ class ServiceEntitlement(models.Model):
 
     def clean(self):
         super().clean()
+        if self.offline_grace_days > settings.CBT_OFFLINE_GRACE_DAYS:
+            raise ValidationError({"offline_grace_days": "Offline grace cannot exceed the centrally configured CBT grace policy."})
         if self.expires_on and self.starts_on and self.expires_on < self.starts_on:
             raise ValidationError({"expires_on": "Expiry date must be on or after the start date."})
         if self.plan_id and self.plan.service_code != self.service_code:

@@ -43,11 +43,6 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ["offline_exam.authentication.StudentTokenAuthentication", "rest_framework.authentication.SessionAuthentication"],
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
-    "DEFAULT_THROTTLE_RATES": {"anon": "20/minute"},
-}
 DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
 CBT_PACKAGE_SIGNING_KEY = os.environ.get("CBT_PACKAGE_SIGNING_KEY", "")
 CBT_LICENSE_SIGNING_KEY = os.environ.get("CBT_LICENSE_SIGNING_KEY", "")
@@ -57,5 +52,23 @@ CENTRAL_SYNC_VERIFY_TLS = os.environ.get("CENTRAL_SYNC_VERIFY_TLS", "true").lowe
 LOCAL_CBT_TOKEN_TTL_HOURS = int(os.environ.get("LOCAL_CBT_TOKEN_TTL_HOURS", "12"))
 LOCAL_CBT_MAX_SYNC_RETRIES = int(os.environ.get("LOCAL_CBT_MAX_SYNC_RETRIES", "12"))
 LOCAL_CBT_SYNC_BATCH_SIZE = int(os.environ.get("LOCAL_CBT_SYNC_BATCH_SIZE", "25"))
+LOCAL_CBT_LOGIN_RATE = os.environ.get("LOCAL_CBT_LOGIN_RATE", "20/minute")
+LOCAL_CBT_NUM_PROXIES = int(os.environ.get("LOCAL_CBT_NUM_PROXIES", "0"))
+if not 1 <= LOCAL_CBT_TOKEN_TTL_HOURS <= 24:
+    raise RuntimeError("LOCAL_CBT_TOKEN_TTL_HOURS must be between 1 and 24 hours.")
+if LOCAL_CBT_MAX_SYNC_RETRIES < 1 or LOCAL_CBT_SYNC_BATCH_SIZE < 1:
+    raise RuntimeError("Sync retry and batch settings must be positive integers.")
+if not DEBUG and CENTRAL_SYNC_URL and not CENTRAL_SYNC_URL.lower().startswith("https://"):
+    raise RuntimeError("Configure CENTRAL_SYNC_URL with HTTPS when LOCAL_CBT_DEBUG is false.")
+if not DEBUG and not CENTRAL_SYNC_VERIFY_TLS:
+    raise RuntimeError("CENTRAL_SYNC_VERIFY_TLS cannot be disabled outside local debug mode.")
+if LOCAL_CBT_NUM_PROXIES < 0:
+    raise RuntimeError("LOCAL_CBT_NUM_PROXIES cannot be negative.")
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": ["offline_exam.authentication.StudentTokenAuthentication", "rest_framework.authentication.SessionAuthentication"],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_THROTTLE_RATES": {"anon": LOCAL_CBT_LOGIN_RATE},
+    "NUM_PROXIES": LOCAL_CBT_NUM_PROXIES or None,
+}
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"

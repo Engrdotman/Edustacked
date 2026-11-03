@@ -184,6 +184,37 @@ export function academicRequest(path, options) {
   return apiRequest(`academics/${path}`, options)
 }
 
+export function cbtRequest(path, options) {
+  return apiRequest(`cbt/${path}`, options)
+}
+
+export async function cbtList(path) {
+  let page = 1
+  const rows = []
+  let next = true
+  while (next) {
+    const separator = path.includes('?') ? '&' : '?'
+    const response = await cbtRequest(`${path}${separator}page=${page}`)
+    if (Array.isArray(response)) return response
+    rows.push(...(response?.results || []))
+    next = Boolean(response?.next)
+    page += 1
+  }
+  return rows
+}
+
+export function getServiceEntitlements() {
+  return apiRequest('services/entitlements/')
+}
+
+export function getServicePlans() {
+  return apiRequest('services/plans/')
+}
+
+export function getServiceEntitlementLicense(licenseId) {
+  return apiRequest(`services/entitlements/${licenseId}/license/`)
+}
+
 export async function login(email, password) {
   await getCsrfToken()
   const data = await apiRequest('auth/login/', {

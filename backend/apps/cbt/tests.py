@@ -15,8 +15,8 @@ from apps.entitlements.models import ServiceEntitlement
 from apps.schools.models import School, SchoolMembership
 from apps.students.models import Student, StudentEnrollment
 
-from .models import CbtSyncConflict, CbtSyncedSubmission, Examination, ExaminationAssignment, ExaminationQuestion, Question, QuestionOption
-from .services import create_examination_package, ingest_local_submission, issue_local_server_credential
+from .models import CbtResult, CbtResultCorrection, CbtSyncConflict, CbtSyncedSubmission, Examination, ExaminationAssignment, ExaminationQuestion, LocalCbtSyncEvent, Question, QuestionOption
+from .services import apply_result_correction, create_examination_package, ingest_local_submission, issue_local_server_credential, process_synced_submission
 
 
 User = get_user_model()
@@ -279,6 +279,11 @@ class CbtApiTests(TestCase):
         self.assertFalse(created_again)
         self.assertFalse(conflict_again)
         self.assertEqual(CbtSyncedSubmission.objects.count(), 1)
+        result = CbtResult.objects.get(event=first)
+        self.assertEqual(result.status, CbtResult.Status.FINALIZED)
+        self.assertEqual(result.score, Decimal("5.00"))
+        self.assertEqual(result.percentage, Decimal("100.00"))
+        self.assertTrue(result.passed)
 
         altered = dict(payload, event_id=str(uuid4()), answers=[])
         altered_bytes = json.dumps(altered, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
@@ -289,3 +294,107 @@ class CbtApiTests(TestCase):
         _, _, detected_conflict = ingest_local_submission(credential, altered_envelope, token)
         self.assertTrue(detected_conflict)
         self.assertEqual(CbtSyncConflict.objects.count(), 1)
+
+    def test_missing_answers_text_manual_marking_and_correction_audit(self):
+        objective = self.create_question(text="Select the correct option", marks="5.00")
+        written = self.create_question(question_type=Question.Type.TEXT, text="Explain your reasoning", marks="5.00")
+        missing = self.create_question(text="A second objective question", marks="5.00")
+        exam_response = self.create_exam([objective.pk, written.pk, missing.pk], pass_mark="7.00")
+        self.assertEqual(exam_response.status_code, 201, exam_response.data)
+        self.authenticate()
+        self.client.post(f"/api/v1/cbt/examinations/{exam_response.data['id']}/publish/")
+        student = Student.objects.create(school=self.school, admission_number="MARK-001", first_name="Mina", last_name="Learner")
+        StudentEnrollment.objects.create(
+            school=self.school, student=student, academic_session=self.session, class_level=self.class_level,
+            class_arm=self.class_arm, enrollment_date=timezone.localdate(), status=StudentEnrollment.Status.ACTIVE,
+        )
+        self.client.post(f"/api/v1/cbt/examinations/{exam_response.data['id']}/assignments/", {"student_ids": [student.pk]}, format="json")
+        assignment = ExaminationAssignment.objects.get(examination_id=exam_response.data["id"], student=student)
+        event = LocalCbtSyncEvent.objects.create(
+            event_id=uuid4(), school=self.school, examination=assignment.examination, assignment=assignment,
+            local_session_id=uuid4(), payload_version=1, payload_hash="a" * 64, payload={},
+        )
+        submission = CbtSyncedSubmission.objects.create(
+            school=self.school, examination=assignment.examination, assignment=assignment,
+            local_session_id=event.local_session_id, event=event, submitted_at=timezone.now(),
+            answers=[
+                {"question_id": str(objective.pk), "value": f"{objective.pk}:1"},
+                {"question_id": str(written.pk), "value": "A written explanation."},
+            ],
+        )
+        result, created = process_synced_submission(submission)
+        self.assertTrue(created)
+        self.assertEqual(result.status, CbtResult.Status.NEEDS_MARKING)
+        self.assertEqual(result.total_questions, 3)
+        self.assertEqual(result.attempted_questions, 2)
+        self.assertEqual(result.unanswered_questions, 1)
+        self.assertEqual(result.objective_score, Decimal("5.00"))
+        self.assertIsNone(result.score)
+        self.assertIsNone(result.passed)
+        corrected = apply_result_correction(
+            result, marks={str(written.pk): "3.00"}, reason="Teacher graded written response", actor=self.admin,
+        )
+        self.assertEqual(corrected.status, CbtResult.Status.FINALIZED)
+        self.assertEqual(corrected.score, Decimal("8.00"))
+        self.assertEqual(corrected.percentage, Decimal("53.33"))
+        self.assertTrue(corrected.passed)
+        self.assertEqual(corrected.corrections.count(), 1)
+        audit = CbtResultCorrection.objects.get(result=corrected)
+        self.assertEqual(audit.corrected_by, self.admin)
+        self.assertEqual(audit.reason, "Teacher graded written response")
+
+    def test_results_api_is_tenant_scoped_and_hides_answer_key_before_exam_end(self):
+        question = self.create_question(text="Release protected prompt")
+        exam_response = self.create_exam([question.pk])
+        self.authenticate()
+        self.client.post(f"/api/v1/cbt/examinations/{exam_response.data['id']}/publish/")
+        student = Student.objects.create(school=self.school, admission_number="VIEW-001", first_name="Lee", last_name="Student")
+        StudentEnrollment.objects.create(
+            school=self.school, student=student, academic_session=self.session, class_level=self.class_level,
+            class_arm=self.class_arm, enrollment_date=timezone.localdate(), status=StudentEnrollment.Status.ACTIVE,
+        )
+        self.client.post(f"/api/v1/cbt/examinations/{exam_response.data['id']}/assignments/", {"student_ids": [student.pk]}, format="json")
+        assignment = ExaminationAssignment.objects.get(examination_id=exam_response.data["id"], student=student)
+        event = LocalCbtSyncEvent.objects.create(
+            event_id=uuid4(), school=self.school, examination=assignment.examination, assignment=assignment,
+            local_session_id=uuid4(), payload_version=1, payload_hash="b" * 64, payload={},
+        )
+        submission = CbtSyncedSubmission.objects.create(
+            school=self.school, examination=assignment.examination, assignment=assignment,
+            local_session_id=event.local_session_id, event=event, submitted_at=timezone.now(),
+            answers=[{"question_id": str(question.pk), "value": f"{question.pk}:1"}],
+        )
+        result, _ = process_synced_submission(submission)
+        detail = self.client.get(f"/api/v1/cbt/results/{result.pk}/", HTTP_X_SCHOOL_ID=str(self.school.pk))
+        self.assertEqual(detail.status_code, 200, detail.data)
+        self.assertFalse(detail.data["review_allowed"])
+        self.assertNotIn("correct_option_ids", detail.data["answers"][0])
+        dashboard = self.client.get("/api/v1/cbt/results/", HTTP_X_SCHOOL_ID=str(self.school.pk))
+        self.assertEqual(dashboard.status_code, 200, dashboard.data)
+        self.assertEqual(dashboard.data["summary"]["participated"], 1)
+        self.assertEqual(dashboard.data["summary"]["average_score"], 100)
+        exported = self.client.get("/api/v1/cbt/results/export/", HTTP_X_SCHOOL_ID=str(self.school.pk))
+        self.assertEqual(exported.status_code, 200)
+        self.assertIn("text/csv", exported["Content-Type"])
+        self.authenticate(self.teacher, self.school)
+        denied_correction = self.client.post(
+            f"/api/v1/cbt/results/{result.pk}/corrections/",
+            {"marks": {str(question.pk): "0"}, "reason": "Unauthorized test correction"}, format="json",
+        )
+        self.assertEqual(denied_correction.status_code, 403)
+        accountant = User.objects.create_user(username="cbt-accountant", email="cbt-accountant@example.test", password="test-pass")
+        SchoolMembership.objects.create(user=accountant, school=self.school, role=SchoolMembership.Role.ACCOUNTANT)
+        self.authenticate(accountant, self.school)
+        denied_export = self.client.get("/api/v1/cbt/results/export/")
+        self.assertEqual(denied_export.status_code, 403)
+        self.authenticate(self.other_admin, self.other_school)
+        denied = self.client.get(f"/api/v1/cbt/results/{result.pk}/")
+        self.assertIn(denied.status_code, (403, 404))
+
+    def test_teacher_without_matching_teacher_assignment_cannot_view_school_results(self):
+        self.authenticate(self.teacher)
+        response = self.client.get("/api/v1/cbt/results/")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["results"], [])
+        denied_export = self.client.get("/api/v1/cbt/results/export/")
+        self.assertEqual(denied_export.status_code, 200)

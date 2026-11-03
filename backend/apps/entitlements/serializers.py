@@ -21,7 +21,7 @@ class ServiceEntitlementSerializer(serializers.ModelSerializer):
             "package_type", "student_capacity", "starts_on", "expires_on", "status",
             "payment_reference", "offline_grace_days", "is_current", "created_at",
         )
-        read_only_fields = ("id", "license_id", "school_name", "plan_name", "is_current", "created_at")
+        read_only_fields = ("id", "license_id", "school_name", "plan_name", "is_current", "created_at", "offline_grace_days", "signed_license")
 
     def validate(self, attrs):
         plan = attrs.get("plan")

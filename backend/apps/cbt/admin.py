@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from .models import (
-    CbtExaminationPackage, CbtSyncedSubmission, CbtSyncConflict, LocalCbtServerCredential,
+    CbtExaminationPackage, CbtResult, CbtResultCorrection, CbtSyncedSubmission, CbtSyncConflict, LocalCbtServerCredential,
     LocalCbtSyncEvent, Examination, ExaminationAssignment, ExaminationQuestion, Question, QuestionOption,
 )
 
@@ -83,6 +83,32 @@ class CbtSyncedSubmissionAdmin(admin.ModelAdmin):
 class CbtSyncConflictAdmin(admin.ModelAdmin):
     list_display = ("event", "reason", "created_at")
     readonly_fields = tuple(field.name for field in CbtSyncConflict._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(CbtResult)
+class CbtResultAdmin(admin.ModelAdmin):
+    list_display = ("assignment", "examination", "status", "score", "maximum_score", "percentage", "passed", "submitted_at")
+    list_filter = ("school", "status", "passed", "examination__academic_session", "examination__subject")
+    search_fields = ("assignment__student__admission_number", "assignment__student__first_name", "examination__title")
+    readonly_fields = tuple(field.name for field in CbtResult._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(CbtResultCorrection)
+class CbtResultCorrectionAdmin(admin.ModelAdmin):
+    list_display = ("result", "corrected_by", "reason", "created_at")
+    readonly_fields = tuple(field.name for field in CbtResultCorrection._meta.fields)
 
     def has_add_permission(self, request):
         return False
