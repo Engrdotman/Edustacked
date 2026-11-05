@@ -108,7 +108,7 @@ export default function WelcomePage({ onLogin, onSignup, onDemo }) {
     </div><div className="company-hero-visual"><div className="hero-orbit hero-orbit-one"/><div className="hero-orbit hero-orbit-two"/><div className="hero-showcase" onMouseEnter={() => setHeroHovered(true)} onMouseLeave={() => setHeroHovered(false)} onFocusCapture={() => setHeroFocused(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setHeroFocused(false) }}>
       <div className="hero-showcase-window"><div className="hero-slide-grid" style={{ transform: `translateX(-${activeHeroSlide * 20}%)` }}>
         {heroSlides.map((slide, index) => <div key={index} className={`hero-slide hero-${slide.type}-slide`} aria-hidden={activeHeroSlide !== index} inert={activeHeroSlide !== index}>
-          {slide.type === 'dashboard' ? <PreviewWindow kind="dashboard" /> : <figure className="hero-campus-frame"><img src={slide.image} alt={slide.alt} fetchPriority={index === 0 ? 'high' : 'low'} decoding="async" /></figure>}
+          {slide.type === 'dashboard' ? <PreviewWindow kind="dashboard" /> : <figure className="hero-image-frame"><img src={slide.image} alt={slide.alt} fetchPriority={index === 0 ? 'high' : 'low'} decoding="async" /></figure>}
         </div>)}
       </div></div>
       <div className="hero-slide-controls" role="group" aria-label="Hero showcase slides"><span>{heroSlides[activeHeroSlide].label}</span>{heroSlides.map((slide, index) => <button key={index} className={activeHeroSlide === index ? 'is-active' : ''} type="button" aria-label={`Show ${slide.label}`} aria-pressed={activeHeroSlide === index} onClick={() => setActiveHeroSlide(index)} />)}</div>

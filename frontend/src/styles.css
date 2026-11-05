@@ -556,15 +556,16 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .hero-showcase-window { overflow:hidden; aspect-ratio:16/10; border:1px solid rgba(255,255,255,.94); border-radius:24px; background:#e7f1e9; box-shadow:0 32px 76px rgba(27,64,42,.2),0 10px 24px rgba(27,64,42,.12),inset 0 1px 0 rgba(255,255,255,.65); }
 .hero-slide-grid { display:flex; width:500%; height:100%; transition:transform .8s cubic-bezier(.2,.75,.25,1); will-change:transform; }
 .hero-slide { flex:0 0 20%; width:20%; min-width:0; height:100%; padding:4px; }
+.hero-image-slide { display:grid; place-items:stretch; }
 .hero-dashboard-slide .product-preview { display:flex; width:100%; max-width:none; height:100%; flex-direction:column; margin:0; border:0; border-radius:19px; box-shadow:none; transform:none; }
 .hero-dashboard-slide .preview-app { grid-template-columns:112px minmax(0,1fr); min-height:0; flex:1; }
 .hero-dashboard-slide .preview-sidebar,.hero-dashboard-slide .preview-main { min-height:0; overflow:hidden; }
 .hero-dashboard-slide .preview-main { padding:12px 14px; }
 .hero-dashboard-slide .preview-chart,.hero-dashboard-slide .preview-activity { min-height:110px; padding:8px; }
 .hero-dashboard-slide .preview-bars { height:54px; margin-top:8px; }
-.hero-campus-slide { display:grid; place-items:stretch; }
-.hero-campus-frame { width:100%; height:100%; overflow:hidden; border-radius:19px; background:#e5f1eb; }
-.hero-campus-frame img { display:block; width:100%; height:100%; object-fit:cover; object-position:center; }
+.hero-image-slide { display:grid; place-items:stretch; }
+.hero-image-frame { width:100%; height:100%; overflow:hidden; border-radius:19px; background:#e5f1eb; box-shadow:0 16px 48px rgba(27,64,42,.18),0 6px 18px rgba(27,64,42,.1); }
+.hero-image-frame img { display:block; width:100%; height:100%; object-fit:cover; object-position:center; }
 .hero-slide-controls { display:flex; align-items:center; justify-content:flex-end; gap:8px; padding:11px 4px 0; color:#65786a; }
 .hero-slide-controls>span { margin-right:auto; font-size:11px; font-weight:700; letter-spacing:.03em; }
 .hero-slide-controls>button { display:grid; width:32px; height:32px; place-items:center; padding:0; border:0; border-radius:99px; background:transparent; cursor:pointer; }
