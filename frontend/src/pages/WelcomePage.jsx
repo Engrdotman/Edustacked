@@ -61,14 +61,21 @@ export default function WelcomePage({ onLogin, onSignup, onDemo }) {
   const [heroFocused, setHeroFocused] = useState(false)
   const [openFaq, setOpenFaq] = useState(0)
   const [expandStory, setExpandStory] = useState(false)
+  const heroSlides = [
+    { type: 'dashboard', label: 'School dashboard', title: 'See your workspace' },
+    { type: 'image', label: 'Campus life', title: 'Students learning', image: '/images/sunny-hillside-school-campus.png', alt: 'Students studying together on a sunny school campus in Nigeria' },
+    { type: 'image', label: 'Teaching & learning', title: 'Classroom moments', image: '/images/pexels-ron-lach-10638065.jpg', alt: 'Students engaged in collaborative learning activities' },
+    { type: 'image', label: 'School community', title: 'Growing together', image: '/images/pexels-ron-lach-10638070.jpg', alt: 'Educational environment fostering student growth and development' },
+    { type: 'image', label: 'Learning spaces', title: 'Modern education', image: '/images/pexels-kwakugriffn-14554003.jpg', alt: 'Contemporary learning spaces supporting educational excellence' },
+  ]
   const navItems = [['About Us', '#about'], ['Our Inspiration', '#inspiration'], ['Features', '#features'], ['Offline CBT', '#offline-cbt'], ['How It Works', '#how-it-works'], ['Contact', '#contact']]
   function goTo(id) { setMenuOpen(false); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
 
   useEffect(() => {
     if (heroHovered || heroFocused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const timer = window.setInterval(() => setActiveHeroSlide((slide) => (slide + 1) % 2), 7000)
+    const timer = window.setInterval(() => setActiveHeroSlide((slide) => (slide + 1) % heroSlides.length), 6000)
     return () => window.clearInterval(timer)
-  }, [heroHovered, heroFocused])
+  }, [heroHovered, heroFocused, heroSlides.length])
 
   useEffect(() => {
     const sections = document.querySelectorAll('.company-section, .company-trust-strip, .company-hero-copy, .company-hero-visual')
@@ -99,11 +106,12 @@ export default function WelcomePage({ onLogin, onSignup, onDemo }) {
       <button className="company-demo-link" onClick={() => goTo('contact')}>Prefer a walkthrough? <span>Request a demo →</span></button>
       <div className="company-hero-proof"><span>For Nigerian primary and secondary schools</span><span>School-level access controls</span><span>Set up at your own pace</span></div>
     </div><div className="company-hero-visual"><div className="hero-orbit hero-orbit-one"/><div className="hero-orbit hero-orbit-two"/><div className="hero-showcase" onMouseEnter={() => setHeroHovered(true)} onMouseLeave={() => setHeroHovered(false)} onFocusCapture={() => setHeroFocused(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setHeroFocused(false) }}>
-      <div className="hero-showcase-window"><div className="hero-slide-grid" style={{ transform: `translateX(-${activeHeroSlide * 50}%)` }}>
-        <div className="hero-slide hero-dashboard-slide" aria-hidden={activeHeroSlide !== 0} inert={activeHeroSlide !== 0}><PreviewWindow kind="dashboard" /></div>
-        <div className="hero-slide hero-campus-slide" aria-hidden={activeHeroSlide !== 1} inert={activeHeroSlide !== 1}><figure className="hero-campus-frame"><img src="/images/sunny-hillside-school-campus.png" alt="Students studying together on a sunny school campus in Nigeria" fetchPriority="high" decoding="async" /></figure></div>
+      <div className="hero-showcase-window"><div className="hero-slide-grid" style={{ transform: `translateX(-${activeHeroSlide * 20}%)` }}>
+        {heroSlides.map((slide, index) => <div key={index} className={`hero-slide hero-${slide.type}-slide`} aria-hidden={activeHeroSlide !== index} inert={activeHeroSlide !== index}>
+          {slide.type === 'dashboard' ? <PreviewWindow kind="dashboard" /> : <figure className="hero-campus-frame"><img src={slide.image} alt={slide.alt} fetchPriority={index === 0 ? 'high' : 'low'} decoding="async" /></figure>}
+        </div>)}
       </div></div>
-      <div className="hero-slide-controls" role="group" aria-label="Hero showcase slides"><span>{activeHeroSlide === 0 ? 'School dashboard' : 'Campus life'}</span>{['School dashboard', 'Campus life'].map((label, index) => <button key={label} className={activeHeroSlide === index ? 'is-active' : ''} type="button" aria-label={`Show ${label}`} aria-pressed={activeHeroSlide === index} onClick={() => setActiveHeroSlide(index)} />)}</div>
+      <div className="hero-slide-controls" role="group" aria-label="Hero showcase slides"><span>{heroSlides[activeHeroSlide].label}</span>{heroSlides.map((slide, index) => <button key={index} className={activeHeroSlide === index ? 'is-active' : ''} type="button" aria-label={`Show ${slide.label}`} aria-pressed={activeHeroSlide === index} onClick={() => setActiveHeroSlide(index)} />)}</div>
     </div></div></section>
 
     <div className="company-trust-strip"><span>One school workspace</span><i/><span>Role-based access</span><i/><span>Guided setup</span><i/><span>Built step by step</span></div>

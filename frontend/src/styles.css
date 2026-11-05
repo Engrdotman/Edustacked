@@ -554,8 +554,8 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .hero-orbit-two { width:430px; height:430px; top:-31px; left:22%; }
 .hero-showcase { position:relative; z-index:1; width:100%; }
 .hero-showcase-window { overflow:hidden; aspect-ratio:16/10; border:1px solid rgba(255,255,255,.94); border-radius:24px; background:#e7f1e9; box-shadow:0 32px 76px rgba(27,64,42,.2),0 10px 24px rgba(27,64,42,.12),inset 0 1px 0 rgba(255,255,255,.65); }
-.hero-slide-grid { display:flex; width:200%; height:100%; transition:transform .8s cubic-bezier(.2,.75,.25,1); will-change:transform; }
-.hero-slide { flex:0 0 50%; width:50%; min-width:0; height:100%; padding:4px; }
+.hero-slide-grid { display:flex; width:500%; height:100%; transition:transform .8s cubic-bezier(.2,.75,.25,1); will-change:transform; }
+.hero-slide { flex:0 0 20%; width:20%; min-width:0; height:100%; padding:4px; }
 .hero-dashboard-slide .product-preview { display:flex; width:100%; max-width:none; height:100%; flex-direction:column; margin:0; border:0; border-radius:19px; box-shadow:none; transform:none; }
 .hero-dashboard-slide .preview-app { grid-template-columns:112px minmax(0,1fr); min-height:0; flex:1; }
 .hero-dashboard-slide .preview-sidebar,.hero-dashboard-slide .preview-main { min-height:0; overflow:hidden; }
