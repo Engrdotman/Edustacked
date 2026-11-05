@@ -36,6 +36,7 @@ h1 em { color: #64816d; font-weight: 500; }.intro { max-width: 440px; color: #76
 @media (max-width: 760px) { .page-shell { padding: 0 6%; }.topbar { height: 76px; }.edition { font-size: 8px; }.hero { grid-template-columns: 1fr; gap: 35px; padding: 58px 0 40px; }.hero-art { height: 340px; width: min(100%, 470px); justify-self: center; }.intro { font-size: 14px; }.footer { gap: 12px; }.footer > span:last-child { text-align: right; } }
 
 .topbar-actions { display: flex; align-items: center; gap: 26px; }
+.page-actions { display: flex; align-items: center; gap: 16px; }
 .text-button { border: 0; padding: 8px 0; color: #285744; background: transparent; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 .text-button:hover { color: #183d2d; text-decoration: underline; text-underline-offset: 4px; }
 .text-button:focus-visible, .primary-button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid #2f8f83; outline-offset: 3px; }
