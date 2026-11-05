@@ -132,9 +132,44 @@ To inspect generated SQL for an individual migration locally, use `python manage
 
 ## Current project limitations to resolve before production use
 
-- `gunicorn` is not pinned in `backend/requirements.txt` (the sample build command installs it for Railway).
-- WhiteNoise/static serving is not configured; `collectstatic` alone does not serve Django admin files.
-- Media uses local `MEDIA_ROOT`; persistent private object storage is not connected.
-- SMTP values must be supplied to send verification and password-reset emails.
-- The current report-card credit Paystack flow exists, but Paystack does not yet purchase/activate Offline CBT entitlements. Do not sell CBT packages until that separate payment fulfillment is implemented and tested.
-- The current GitHub production workflow publishes a release package and is not configured as Railway deployment. Ensure only one deployment path runs production migrations.
+~~- `gunicorn` is not pinned in `backend/requirements.txt` (the sample build command installs it for Railway).~~ ✅ **FIXED:** Pinned to `gunicorn>=23.0,<24`
+
+~~- WhiteNoise/static serving is not configured; `collectstatic` alone does not serve Django admin files.~~ ✅ **FIXED:** WhiteNoise middleware and storage configured in settings.py
+
+- Media uses local `MEDIA_ROOT`; persistent private object storage is not connected. **ACTION REQUIRED:** See `docs/media-storage-setup.md` for S3/Railway Volumes/Supabase options before uploading production files.
+
+~~- SMTP values must be supplied to send verification and password-reset emails.~~ ✅ **FIXED:** EMAIL_HOST_USER validation added; production deployment fails if not configured.
+
+- The current report-card credit Paystack flow exists, but Paystack does not yet purchase/activate Offline CBT entitlements. **Do not sell CBT packages until that separate payment fulfillment is implemented and tested.** See `docs/cbt-payment-fulfillment.md` for implementation roadmap.
+
+~~- The current GitHub production workflow publishes a release package and is not configured as Railway deployment. Ensure only one deployment path runs production migrations.~~ ✅ **FIXED:** GitHub workflow removed migrations; Railway Pre-Deploy Command is now the single source of truth. See `docs/railway-deployment-checklist.md`.
+
+## What Changed in This Update
+
+1. **requirements.txt:** Added `gunicorn>=23.0,<24` and `whitenoise>=6.8,<7`
+2. **settings.py:** 
+   - Added WhiteNoise middleware (before CORS)
+   - Configured `STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"`
+   - Added email validation: production requires `EMAIL_HOST_USER`
+3. **GitHub workflow (deploy-production.yml):**
+   - Removed database migrations (they were running twice: in GitHub and Railway)
+   - Kept static file collection for WhiteNoise
+   - Updated release notes to clarify package-validation-only purpose
+   - Documented "deploy to Railway" instructions in release body
+4. **New documentation:**
+   - `docs/railway-deployment-checklist.md` — Complete step-by-step Railway setup and troubleshooting
+   - `docs/media-storage-setup.md` — Options for persistent object storage before production
+   - `docs/cbt-payment-fulfillment.md` — Roadmap for CBT entitlement fulfillment via Paystack
+
+## Updated Build Command for Railway
+
+The Railway backend service **build command** can now be simplified (no longer needs to install gunicorn separately):
+
+```bash
+python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+```
+
+The Start Command remains:
+```bash
+python -m gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+```

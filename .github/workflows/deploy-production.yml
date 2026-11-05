@@ -172,19 +172,6 @@ jobs:
         NODE_ENV: production
         VITE_API_BASE_URL: /api
 
-    - name: Run database migrations
-      run: |
-        cd backend
-        echo "Starting database migrations..."
-        python manage.py migrate --noinput --verbosity 2
-        echo "✅ Migrations completed successfully"
-      env:
-        DJANGO_DEBUG: false
-        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
-        DJANGO_ALLOWED_HOSTS: ${{ secrets.DJANGO_ALLOWED_HOSTS }}
-        DJANGO_CORS_ALLOWED_ORIGINS: ${{ secrets.DJANGO_CORS_ALLOWED_ORIGINS }}
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
     - name: Collect static files
       run: |
         cd backend
@@ -213,24 +200,38 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         files: deployment/**
         body: |
-          ## Validated application release
+          ## Validated Application Release Package
           
           **Commit:** ${{ github.sha }}
           **Author:** ${{ github.actor }}
           **Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           
-          ### Changes
-          - Updated backend code
-          - Updated frontend code
-          - Ran database migrations
-          - Collected static files
+          ### Contents
+          - Backend application (apps, config, manage.py, requirements.txt)
+          - Collected static files (Django admin CSS/JS via WhiteNoise)
+          - Frontend production build (dist/)
           
-          ### Validation
-          - Backend tests and production build passed
-          - Database migration plan checked
-          - Package attached to this release
-
-          A hosting provider is not configured in this repository, so publishing this release does not deploy the application.
+          ### Pre-deployment checks performed
+          - ✅ Backend unit and integration tests (50%+ coverage)
+          - ✅ Backend code quality checks (flake8, black, isort)
+          - ✅ Frontend build validation
+          - ✅ Database migration plan validation (no actual migrations run in GitHub)
+          - ✅ Static files collected for WhiteNoise serving
+          
+          ### Deployment instructions
+          **IMPORTANT:** This package is for release validation only. To deploy:
+          
+          1. **Railway backend:** Configure Pre-Deploy Command in Railway backend service:
+             ```bash
+             python manage.py migrate --noinput
+             ```
+             Railway runs this command automatically before starting the web process.
+          
+          2. **Do not:** Run migrations in this GitHub workflow. The Railway Pre-Deploy Command is the single source of truth for production migrations.
+          
+          3. **Frontend:** Deploy the `frontend/dist/` to Vercel separately.
+          
+          4. **Environment variables:** Configure Railway backend variables per `docs/railway-deployment-setup.md`.
         draft: false
         prerelease: false
 
