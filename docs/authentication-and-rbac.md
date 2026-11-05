@@ -1,5 +1,11 @@
 # Authentication, memberships, and RBAC
 
+## Login rate limiting and temporary lockout
+
+Password login is rate limited per source IP using `AUTH_LOGIN_RATE` (default `10/minute`). Five consecutive invalid email/password attempts for an active account within the configured failure window trigger a 15-minute account lockout. The counter and lock timestamp are stored on the account in the database, so the lockout survives worker restarts and applies across backend instances. A successful verified login clears the counter. Correct credentials for an unverified account do not count as a failed password attempt.
+
+Lockouts return the same generic invalid-credentials response as a bad password to avoid revealing account state. The user can retry after the lock expires; an administrator can also clear the lockout by resetting the account's `failed_login_attempts`, `failed_login_window_started_at`, and `locked_until` fields. Tune `AUTH_LOGIN_RATE`, `AUTH_LOGIN_FAILURE_LIMIT`, `AUTH_LOGIN_FAILURE_WINDOW_SECONDS`, and `AUTH_LOGIN_LOCKOUT_SECONDS` through deployment environment settings. Configure the deployment's trusted proxy/client-IP handling so the per-IP throttle sees client IPs correctly.
+
 Module 2 adds authentication and authorization only. It does not add student, attendance, fee, result, or other school workflow APIs.
 
 ## Authentication approach

@@ -22,6 +22,9 @@ class User(AbstractUser):
     phone_number = models.CharField(max_length=30, blank=True)
     email_verified_at = models.DateTimeField(null=True, blank=True, default=timezone.now)
     phone_verified_at = models.DateTimeField(null=True, blank=True)
+    failed_login_attempts = models.PositiveSmallIntegerField(default=0, editable=False)
+    failed_login_window_started_at = models.DateTimeField(null=True, blank=True, editable=False)
+    locked_until = models.DateTimeField(null=True, blank=True, editable=False)
 
     REQUIRED_FIELDS = ["email"]
 

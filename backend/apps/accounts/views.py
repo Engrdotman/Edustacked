@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -45,6 +47,12 @@ from .serializers import (
 )
 
 User = get_user_model()
+
+
+class LoginRateThrottle(AnonRateThrottle):
+    """Limit password login attempts per source IP independently of other endpoints."""
+
+    scope = "login"
 
 
 def _set_refresh_cookie(response, token):
@@ -172,12 +180,69 @@ class DemoRequestView(APIView):
 class LoginView(APIView):
     authentication_classes = ()
     permission_classes = (AllowAny,)
-    throttle_classes = (AnonRateThrottle,)
+    throttle_classes = (LoginRateThrottle,)
+
+    @staticmethod
+    def _account_is_locked(email, now):
+        if not isinstance(email, str) or not email.strip():
+            return False
+        return User.objects.filter(
+            login_email=email.strip().lower(), locked_until__gt=now
+        ).exists()
+
+    @staticmethod
+    def _record_failed_login(email, now):
+        if not isinstance(email, str) or not email.strip():
+            return
+        with transaction.atomic():
+            user = User.objects.select_for_update().filter(
+                login_email=email.strip().lower(), is_active=True
+            ).first()
+            if user is None:
+                return
+
+            window = settings.AUTH_LOGIN_FAILURE_WINDOW_SECONDS
+            if (
+                user.failed_login_window_started_at is None
+                or (now - user.failed_login_window_started_at).total_seconds() >= window
+            ):
+                user.failed_login_attempts = 0
+                user.failed_login_window_started_at = now
+
+            user.failed_login_attempts += 1
+            update_fields = ["failed_login_attempts", "failed_login_window_started_at", "updated_at"]
+            if user.failed_login_attempts >= settings.AUTH_LOGIN_FAILURE_LIMIT:
+                user.locked_until = now + timedelta(
+                    seconds=settings.AUTH_LOGIN_LOCKOUT_SECONDS
+                )
+                update_fields.append("locked_until")
+            user.save(update_fields=update_fields)
+
+    @staticmethod
+    def _clear_failed_logins(user):
+        if user.failed_login_attempts or user.failed_login_window_started_at or user.locked_until:
+            user.failed_login_attempts = 0
+            user.failed_login_window_started_at = None
+            user.locked_until = None
+            user.save(update_fields=(
+                "failed_login_attempts", "failed_login_window_started_at", "locked_until", "updated_at"
+            ))
 
     def post(self, request, version=None):
+        now = timezone.now()
+        email = request.data.get("email", "")
+        if self._account_is_locked(email, now):
+            raise ValidationError("Invalid email or password.")
+
         serializer = LoginSerializer(data=request.data, context={"request": request})
-        serializer.is_valid(raise_exception=True)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except ValidationError:
+            if getattr(serializer, "authentication_failed", False):
+                self._record_failed_login(email, now)
+            raise
         user = serializer.validated_data["user"]
+        self._clear_failed_logins(user)
         refresh = RefreshToken.for_user(user)
         access = str(refresh.access_token)
 

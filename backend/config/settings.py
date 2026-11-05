@@ -171,8 +171,18 @@ REST_FRAMEWORK = {
     "DEFAULT_VERSION": "v1",
     "ALLOWED_VERSIONS": ["v1"],
     "VERSION_PARAM": "version",
-    "DEFAULT_THROTTLE_RATES": {"anon": "10/minute", "cbt_sync": "120/minute"},
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "10/minute",
+        "login": os.getenv("AUTH_LOGIN_RATE", "10/minute"),
+        "cbt_sync": "120/minute",
+    },
 }
+
+AUTH_LOGIN_FAILURE_LIMIT = int(os.getenv("AUTH_LOGIN_FAILURE_LIMIT", "5"))
+AUTH_LOGIN_FAILURE_WINDOW_SECONDS = int(os.getenv("AUTH_LOGIN_FAILURE_WINDOW_SECONDS", "900"))
+AUTH_LOGIN_LOCKOUT_SECONDS = int(os.getenv("AUTH_LOGIN_LOCKOUT_SECONDS", "900"))
+if AUTH_LOGIN_FAILURE_LIMIT < 1 or AUTH_LOGIN_FAILURE_WINDOW_SECONDS < 1 or AUTH_LOGIN_LOCKOUT_SECONDS < 1:
+    raise ImproperlyConfigured("Login rate-limit and lockout settings must be positive integers.")
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(

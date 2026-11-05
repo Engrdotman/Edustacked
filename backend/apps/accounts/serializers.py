@@ -149,12 +149,14 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, trim_whitespace=False)
 
     def validate(self, attrs):
+        self.authentication_failed = False
         user = authenticate(
             request=self.context.get("request"),
             email=attrs["email"].strip().lower(),
             password=attrs["password"],
         )
         if user is None:
+            self.authentication_failed = True
             raise serializers.ValidationError("Invalid email or password.")
         if user.email_verified_at is None:
             raise serializers.ValidationError({"email": "Please verify your email address before signing in."})
