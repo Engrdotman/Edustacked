@@ -975,10 +975,10 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .signup-card { width:min(100%,560px); margin-top:72px; }
 .welcome-signup { margin:0; min-height:40px; padding:9px 14px; font-size:13px; }
 .school-dashboard { min-height:100vh; display:grid; grid-template-columns:245px minmax(0,1fr); color:#202c25; background:#f7f8f5; }
-.dashboard-sidebar { position:sticky; top:0; height:100vh; display:flex; flex-direction:column; gap:32px; padding:22px 18px; color:#fff; background:#203c2c; }
+.dashboard-sidebar { position:sticky; top:0; height:100vh; height:100dvh; min-height:0; display:flex; flex-direction:column; gap:24px; padding:22px 18px; color:#fff; background:#203c2c; }
 .dashboard-sidebar .brand { color:#fff; }
 .dashboard-sidebar .brand-name,.dashboard-sidebar .brand-mark { color:#fff; }
-.dashboard-sidebar nav { display:grid; gap:6px; }
+.dashboard-sidebar nav { flex:1 1 auto; min-height:0; display:grid; align-content:start; gap:6px; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#64836c #203c2c; }
 .dashboard-nav { padding:11px 13px; border:0; border-radius:7px; color:#e6eee7; background:transparent; font:inherit; font-size:14px; text-align:left; cursor:pointer; }
 .dashboard-nav:hover,.dashboard-nav.active { color:#fff; background:#315b42; }
 .dashboard-user { display:grid; gap:5px; margin-top:auto; padding:12px; border-top:1px solid rgba(255,255,255,.18); }
@@ -1016,9 +1016,9 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .dashboard-footer { margin-top:26px; color:#768078; font-size:12px; }
 @media (max-width:760px) {
   .school-dashboard { grid-template-columns:1fr; }
-  .dashboard-sidebar { position:static; height:auto; gap:15px; padding:14px; }
-  .dashboard-sidebar nav { display:flex; overflow:auto; }
-  .dashboard-nav { flex:0 0 auto; }
+  .dashboard-sidebar { position:static; height:auto; min-height:0; gap:15px; padding:14px; overflow:visible; }
+  .dashboard-sidebar nav { flex:none; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; overflow:visible; }
+  .dashboard-nav { min-width:0; }
   .dashboard-user { display:none; }
   .dashboard-topbar { display:flex; flex-direction:row; align-items:center; gap:12px; padding:10px clamp(14px,4vw,22px); }
   .dashboard-school-name { flex:1 1 auto; min-width:0; overflow:hidden; font-size:13px; line-height:1.3; text-overflow:ellipsis; white-space:nowrap; }

@@ -18,6 +18,13 @@ const actions = [
   ['School settings', '/app/school', ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'accountant', 'receptionist']],
 ]
 
+function greetingForCurrentTime() {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good morning'
+  if (hour < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
 export default function SchoolDashboardPage({ navigate }) {
   const { user, selectedSchool, signOut } = useAuth()
   const role = selectedSchool?.role
@@ -47,7 +54,7 @@ export default function SchoolDashboardPage({ navigate }) {
   return <main className="school-dashboard">
     <aside className="dashboard-sidebar"><BrandMark /><nav aria-label="School workspace">{[['Dashboard', '/app'], ...permittedActions].map(([label, path]) => <button key={path} className={path === '/app' ? 'dashboard-nav active' : 'dashboard-nav'} onClick={() => navigate(path)}>{label}</button>)}{user?.is_superuser && <button className="dashboard-nav" onClick={() => navigate('/platform/schools')}>Platform administration</button>}</nav><div className="dashboard-user"><strong>{user?.first_name || user?.email}</strong><span>{role?.replaceAll('_', ' ')}</span></div></aside>
     <section className="dashboard-main"><header className="dashboard-topbar"><strong className="dashboard-school-name">{selectedSchool?.school_name || 'School workspace'}</strong><div className="dashboard-topbar-actions"><span>{data?.session?.name || 'No active session'}</span><button className="text-button" onClick={exit}>Sign out</button></div></header>
-      <div className="dashboard-content"><p className="panel-kicker">SCHOOL OVERVIEW</p><h1>Good morning, {user?.first_name || 'there'}.</h1><p className="dashboard-subtitle">Here’s a snapshot of your school’s current activity.</p>
+      <div className="dashboard-content"><p className="panel-kicker">SCHOOL OVERVIEW</p><h1>{greetingForCurrentTime()}, {user?.first_name || 'there'}.</h1><p className="dashboard-subtitle">Here’s a snapshot of your school’s current activity.</p>
         {selectedSchool?.school_verification_status && <div className={`school-status school-status-${selectedSchool.school_verification_status}`} role="status">{selectedSchool.school_verification_status === 'pending_verification' ? 'Your school is awaiting verification. You can continue setting it up while verification is pending.' : selectedSchool.school_verification_status === 'under_review' ? 'Your school is under review. You can continue using the workspace.' : selectedSchool.school_verification_status === 'rejected' ? `Your school registration needs attention. ${selectedSchool.school_verification_reason || 'Contact support for next steps.'}` : selectedSchool.school_verification_status === 'verified' ? 'Your school has been successfully verified.' : 'Your school account is currently suspended. Please contact support.'}</div>}
         {['school_owner', 'school_admin', 'school_manager', 'principal'].includes(role) && selectedSchool?.school_verification_status !== 'suspended' && <button className="dashboard-onboarding-link" onClick={() => navigate('/app/onboarding')}>Continue school setup →</button>}
         {error && <p className="form-error" role="alert">{error}</p>}

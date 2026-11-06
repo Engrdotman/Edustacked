@@ -88,10 +88,10 @@ Generate distinct values for `DJANGO_SECRET_KEY`, `CBT_LICENSE_SIGNING_KEY`, and
 In the Vercel project for `/frontend`, set this for Production (and set appropriate API URLs separately for Preview/Development):
 
 ```dotenv
-VITE_API_BASE_URL=https://<your-railway-api-domain>/api
+VITE_API_BASE_URL=/api
 ```
 
-Vite embeds `VITE_` values into the public browser build. Never put a Paystack secret, Django secret, SMTP password, database URL, or CBT signing key in a `VITE_` variable. After changing this variable, trigger a Vercel rebuild so the new API origin is compiled into the frontend.
+`frontend/vercel.json` proxies `/api/*` to the Railway service without changing the browser origin. This keeps auth cookies first-party on mobile browsers. Add the exact Vercel origin to Railway's `DJANGO_CSRF_TRUSTED_ORIGINS`; keep `DJANGO_CORS_ALLOWED_ORIGINS` set for direct clients if needed. Vite embeds `VITE_` values into the public browser build. Never put a Paystack secret, Django secret, SMTP password, database URL, or CBT signing key in a `VITE_` variable. After changing this variable, trigger a Vercel rebuild.
 
 ## PostgreSQL tables: use Django migrations
 
@@ -127,7 +127,7 @@ To inspect generated SQL for an individual migration locally, use `python manage
 1. Add Railway PostgreSQL; keep it private.
 2. Set backend Root Directory `/backend`, build/start commands, pre-deploy migration, and database health-check path.
 3. Add required backend variables and exact Vercel origin values. Keep secrets in Railway's variable vault.
-4. Configure Vercel `VITE_API_BASE_URL` and rebuild the frontend.
+4. Configure Vercel `VITE_API_BASE_URL=/api` and rebuild the frontend; the Vercel rewrite proxies API calls to Railway.
 5. Deploy the backend, inspect build/runtime logs, and confirm Railway health check succeeds at `/api/v1/health/database/`.
 6. Confirm Django admin static assets. If unstyled, finish WhiteNoise/static-host configuration before relying on admin.
 7. Test signup/verification email, login/refresh/logout across the production Vercel/Railway domains, and a Paystack **test-mode** purchase. Do not switch to live Paystack until that flow and webhook are verified.

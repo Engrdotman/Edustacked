@@ -122,7 +122,11 @@ class GuardianProfileView(APIView):
 
     def get(self, request, **kwargs):
         if not linked_student_queryset(request.user).exists():
-            raise Http404
+            # This profile is probed during sign-in to determine whether the
+            # account has guardian access. Most school staff have no linked
+            # students, so an empty result is expected rather than a missing
+            # route/resource error.
+            return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(GuardianProfileSerializer(request.user).data)
 
     def patch(self, request, **kwargs):

@@ -4,6 +4,7 @@ const API_VERSION = 'v1'
 let accessToken = null
 let selectedSchoolId = null
 let csrfToken = null
+let refreshInFlight = null
 
 export class ApiError extends Error {
   constructor(message, statusCode = 0) {
@@ -83,17 +84,27 @@ export async function getCsrfToken() {
 }
 
 export async function refreshSession() {
-  await getCsrfToken()
-  const { response, data } = await send('auth/refresh/', {
-    method: 'POST',
-    body: {},
-  })
-  if (!response.ok || !data?.access) {
-    setAccessToken(null)
-    throw new ApiError('Your session has expired. Please sign in again.', response.status)
+  if (refreshInFlight) return refreshInFlight
+
+  refreshInFlight = (async () => {
+    await getCsrfToken()
+    const { response, data } = await send('auth/refresh/', {
+      method: 'POST',
+      body: {},
+    })
+    if (!response.ok || !data?.access) {
+      setAccessToken(null)
+      throw new ApiError('Your session has expired. Please sign in again.', response.status)
+    }
+    setAccessToken(data.access)
+    return data.access
+  })()
+
+  try {
+    return await refreshInFlight
+  } finally {
+    refreshInFlight = null
   }
-  setAccessToken(data.access)
-  return data.access
 }
 
 export async function apiRequest(path, options = {}, canRefresh = true) {
@@ -104,8 +115,9 @@ export async function apiRequest(path, options = {}, canRefresh = true) {
     try {
       await refreshSession()
       return apiRequest(path, options, false)
-    } catch {
-      setAccessToken(null)
+    } catch (refreshError) {
+      if ([401, 403].includes(refreshError.statusCode)) setAccessToken(null)
+      else throw refreshError
     }
   }
 
