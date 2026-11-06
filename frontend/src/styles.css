@@ -1044,7 +1044,7 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 }
 
 /* Branded authentication screens */
-.auth-page-split { min-height:100vh; min-height:100dvh; display:grid; grid-template-columns:minmax(280px,.9fr) minmax(420px,1.1fr); align-items:stretch; justify-items:stretch; gap:clamp(22px,4vw,64px); padding:clamp(14px,2.5vw,36px); background:#f2f6f2; }
+.auth-page-split { min-height:100vh; min-height:100dvh; display:grid; grid-template-columns:minmax(280px,.9fr) minmax(420px,1.1fr); align-items:stretch; justify-items:stretch; gap:clamp(16px,2.2vw,34px); padding:clamp(14px,2.5vw,36px); background:#f2f6f2; }
 .auth-visual { position:sticky; top:clamp(14px,2.5vw,36px); min-height:calc(100vh - clamp(28px,5vw,72px)); min-height:calc(100dvh - clamp(28px,5vw,72px)); display:flex; flex-direction:column; justify-content:space-between; gap:24px; overflow:hidden; padding:clamp(24px,4vw,54px); border-radius:22px; color:#fff; background:linear-gradient(180deg,rgba(19,54,40,.18) 0%,rgba(17,46,34,.24) 28%,rgba(14,39,30,.87) 100%),url('/images/sunny-hillside-school-campus.png') center 54%/cover no-repeat; box-shadow:0 24px 70px rgba(26,56,39,.18); }
 .auth-visual .brand,.auth-visual .brand-name,.auth-visual .brand-name span { color:#fff; }
 .auth-visual .brand-mark { box-shadow:0 5px 18px rgba(0,0,0,.2); }
@@ -1056,6 +1056,8 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .auth-panel { width:min(100%,520px); align-self:center; justify-self:center; }
 .auth-panel .auth-card { width:100%; padding:clamp(28px,4vw,48px); border-color:#e1e9e1; border-radius:18px; box-shadow:0 18px 55px rgba(31,58,40,.09); }
 .auth-panel .auth-card h1 { margin-top:16px; font-size:clamp(36px,5vw,48px); }
+.auth-card-login h1,.auth-card-login > .auth-intro { text-align:center; }
+.signup-card > .eyebrow,.signup-card > h1,.signup-card > .auth-intro { justify-content:center; text-align:center; }
 .auth-page-signup { grid-template-columns:minmax(270px,.78fr) minmax(450px,1.22fr); align-items:start; }
 .auth-panel-signup { width:min(100%,720px); padding:4px 0; }
 .auth-panel-signup .auth-topbar { position:static; padding:0; margin:0 0 18px; }

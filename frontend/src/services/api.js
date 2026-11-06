@@ -43,6 +43,15 @@ function readableError(body, fallback) {
   return fallback
 }
 
+function userFacingHttpFallback(status) {
+  if (status === 401) return 'Please sign in again to continue.'
+  if (status === 403) return 'Your account does not have permission to do this. Contact your school administrator if you need access.'
+  if (status === 404) return 'We could not find that information. Refresh the page and try again.'
+  if (status === 429) return 'You have tried this too many times. Wait a moment and try again.'
+  if (status >= 500) return 'Something went wrong on our side. Please try again shortly.'
+  return 'We could not complete that request. Check the information and try again.'
+}
+
 async function send(path, { method = 'GET', body, headers = {}, signal, responseType = 'json' } = {}) {
   const requestHeaders = { Accept: 'application/json', ...headers }
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData
@@ -68,7 +77,10 @@ async function send(path, { method = 'GET', body, headers = {}, signal, response
     })
   } catch (error) {
     if (error.name === 'AbortError') throw error
-    throw new ApiError('The API could not be reached.')
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false
+    throw new ApiError(offline
+      ? 'Your device appears to be offline. Check your internet connection, then try again.'
+      : 'We could not connect to EDUstacked. Check your connection and try again in a moment.')
   }
 
   const data = responseType === 'blob' && response.ok
@@ -78,9 +90,27 @@ async function send(path, { method = 'GET', body, headers = {}, signal, response
 }
 
 export async function getCsrfToken() {
-  const { response, data } = await send('auth/csrf/')
-  if (!response.ok || !data?.csrfToken) {
-    throw new ApiError('Could not prepare a secure sign-in request.', response.status)
+  let result
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      result = await send('auth/csrf/')
+      if (![502, 503, 504].includes(result.response.status) || attempt > 0) break
+    } catch (error) {
+      if (attempt > 0 || (typeof navigator !== 'undefined' && navigator.onLine === false)) throw error
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 900))
+  }
+  const { response, data } = result
+  if (!response.ok) {
+    const message = response.status >= 500
+      ? 'Sign-in is temporarily unavailable. Please wait a moment and try again.'
+      : response.status === 404
+        ? 'We could not find the sign-in service. Refresh this page and try again. If it continues, contact EDUstacked support (AUTH-404).'
+        : 'We could not start sign-in. Refresh this page and try again. If it continues, contact EDUstacked support.'
+    throw new ApiError(message, response.status)
+  }
+  if (!data?.csrfToken) {
+    throw new ApiError('The sign-in service sent an unexpected response. Refresh this page and try again. If it continues, contact EDUstacked support (AUTH-RESPONSE).', response.status)
   }
   csrfToken = data.csrfToken
   return csrfToken
@@ -125,8 +155,9 @@ export async function apiRequest(path, options = {}, canRefresh = true) {
   }
 
   if (!response.ok) {
+    const fallback = userFacingHttpFallback(response.status)
     const error = new ApiError(
-      readableError(data, `The API returned an error (${response.status}).`),
+      response.status >= 500 ? fallback : readableError(data, fallback),
       response.status,
     )
     error.fields = data && typeof data === 'object' ? data : {}
