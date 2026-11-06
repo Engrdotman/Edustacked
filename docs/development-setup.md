@@ -23,12 +23,12 @@ For deployment, set `DJANGO_DEBUG=false` and `DB_ENGINE=postgresql`; provide `DB
 
 ## Frontend (separate terminal)
 
-1. Copy `frontend/.env.example` to `frontend/.env` (the example value targets the local backend).
+1. Copy `frontend/.env.example` to `frontend/.env`. For local development, leave `VITE_API_BASE_URL` empty; Vite proxies `/api` to `http://127.0.0.1:8000` so browser requests remain same-origin.
 2. Install dependencies: `cd frontend`, then `npm.cmd install`.
 3. Start Vite: `npm.cmd run dev`.
 4. Verify a production bundle with `npm.cmd run build`.
 
-The Vite development server normally listens at `http://localhost:5173`; the API uses `http://localhost:8000/api/v1/`. Health endpoints are `/health/` and `/health/database/`. The CORS and CSRF development allowlists are set with `DJANGO_CORS_ALLOWED_ORIGINS` and `DJANGO_CSRF_TRUSTED_ORIGINS`. Local email defaults to Django's in-memory backend; configure SMTP or a local mail-capture service to manually receive password reset and account setup links.
+The Vite development server normally listens at `http://localhost:5173`. The frontend proxy forwards `/api/*` to the Django server, normally `http://127.0.0.1:8000`, and can be changed with `VITE_DEV_API_PROXY`. For Vercel production, set `VITE_API_BASE_URL` in the Vercel project to `https://<your-railway-api-domain>/api`, then rebuild. On Railway, allow the exact Vercel site origin in `DJANGO_CORS_ALLOWED_ORIGINS` and `DJANGO_CSRF_TRUSTED_ORIGINS`; production refresh and CSRF cookies default to `SameSite=None; Secure` for this cross-site setup. Health endpoints are `/health/` and `/health/database/`. Local email defaults to Django's in-memory backend; configure SMTP or a local mail-capture service to manually receive password reset and account setup links.
 
 ## Project commands
 

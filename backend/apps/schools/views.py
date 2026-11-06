@@ -1,6 +1,6 @@
 from django.db import transaction
 from django.http import FileResponse
-from django.db import transaction
+from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.generics import CreateAPIView, ListCreateAPIView, RetrieveUpdateAPIView
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -155,6 +155,36 @@ class SchoolMembershipDetailView(SchoolScopedQuerySetMixin, RetrieveUpdateAPIVie
         if self.request.method in {"PATCH", "PUT"}:
             return MembershipAdminUpdateSerializer
         return SchoolMembershipSerializer
+
+
+class SchoolMembershipResendInvitationView(SchoolScopedQuerySetMixin, APIView):
+    permission_classes = (IsAuthenticated, HasSchoolPermission)
+    required_school_permission = "memberships.manage"
+
+    def post(self, request, school_id, pk, **kwargs):
+        school = self.get_authorized_school()
+        membership = get_object_or_404(
+            SchoolMembership.objects.select_related("user"),
+            pk=pk, school=school, is_active=True, user__is_active=True,
+        )
+        user = membership.user
+        if user.email_verified_at is not None and user.has_usable_password():
+            return Response({"detail": "This staff member already has an active, verified account."}, status=status.HTTP_400_BAD_REQUEST)
+
+        from apps.accounts.emailing import issue_email_verification, send_staff_invitation_emails
+
+        verification = None
+        delivery = {}
+        with transaction.atomic():
+            if user.email_verified_at is None:
+                token, secret = issue_email_verification(user)
+                verification = (token.selector, secret)
+
+            def send_invitation():
+                delivery.update(send_staff_invitation_emails(user, verification))
+
+            transaction.on_commit(send_invitation)
+        return Response({"account_id": user.pk, "invitation_email_delivery": delivery})
 
 
 class SchoolOwnershipTransferView(SchoolScopedQuerySetMixin, APIView):

@@ -207,7 +207,10 @@ AUTH_REFRESH_COOKIE_PATH = "/api/v1/auth/"
 AUTH_REFRESH_COOKIE_DOMAIN = os.getenv("AUTH_REFRESH_COOKIE_DOMAIN") or None
 AUTH_REFRESH_COOKIE_SECURE = not DEBUG
 AUTH_REFRESH_COOKIE_HTTPONLY = True
-AUTH_REFRESH_COOKIE_SAMESITE = os.getenv("AUTH_REFRESH_COOKIE_SAMESITE", "Lax")
+AUTH_REFRESH_COOKIE_SAMESITE = os.getenv(
+    "AUTH_REFRESH_COOKIE_SAMESITE", "Lax" if DEBUG else "None"
+)
+CSRF_COOKIE_SAMESITE = os.getenv("CSRF_COOKIE_SAMESITE", "Lax" if DEBUG else "None")
 AUTH_REFRESH_COOKIE_MAX_AGE = int(os.getenv("JWT_REFRESH_TOKEN_DAYS", "7")) * 24 * 60 * 60
 
 EMAIL_BACKEND = os.getenv(
@@ -255,13 +258,15 @@ LOGGING = {
 }
 
 if DEBUG:
-    CORS_ALLOWED_ORIGINS = [
-        origin.strip()
-        for origin in os.getenv(
-            "DJANGO_CORS_ALLOWED_ORIGINS", "http://localhost:5173"
-        ).split(",")
-        if origin.strip()
-    ]
+    local_dev_origins = ("http://localhost:5173", "http://127.0.0.1:5173")
+    CORS_ALLOWED_ORIGINS = list(dict.fromkeys(
+        [
+            origin.strip()
+            for origin in os.getenv("DJANGO_CORS_ALLOWED_ORIGINS", "").split(",")
+            if origin.strip()
+        ]
+        + list(local_dev_origins)
+    ))
     CORS_ALLOW_CREDENTIALS = True
     CORS_ALLOW_HEADERS = [
         "accept",
@@ -275,13 +280,14 @@ if DEBUG:
         "x-requested-with",
         "x-school-id",
     ]
-    CSRF_TRUSTED_ORIGINS = [
-        origin.strip()
-        for origin in os.getenv(
-            "DJANGO_CSRF_TRUSTED_ORIGINS", "http://localhost:5173"
-        ).split(",")
-        if origin.strip()
-    ]
+    CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(
+        [
+            origin.strip()
+            for origin in os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+            if origin.strip()
+        ]
+        + list(local_dev_origins)
+    ))
 else:
     CORS_ALLOWED_ORIGINS = [
         origin.strip()

@@ -4,6 +4,7 @@ from .views import (
     SchoolCreateView,
     SchoolMembershipDetailView,
     SchoolMembershipListCreateView,
+    SchoolMembershipResendInvitationView,
     SchoolLogoView,
     PrincipalSignatureView,
     SchoolProfileView,
@@ -28,6 +29,11 @@ urlpatterns = [
         "<str:school_id>/memberships/",
         SchoolMembershipListCreateView.as_view(),
         name="school-memberships",
+    ),
+    path(
+        "<str:school_id>/memberships/<int:pk>/resend-invitation/",
+        SchoolMembershipResendInvitationView.as_view(),
+        name="school-membership-resend-invitation",
     ),
     path(
         "<str:school_id>/memberships/<int:pk>/",

@@ -3,6 +3,7 @@ from rest_framework import serializers
 from apps.academics.models import AcademicSession, ClassArm, ClassLevel, Term
 
 from .models import ReportCard, ReportCardAuditEvent, ReportCardRevision
+from .ratings import RATING_GROUPS
 
 
 class ReportCardRevisionSerializer(serializers.ModelSerializer):
@@ -115,3 +116,32 @@ class ReportCardRemarksSerializer(serializers.Serializer):
     effort = serializers.CharField(required=False, allow_blank=True, max_length=300)
     class_teacher_signature_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
     head_teacher_signature_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    ratings = serializers.DictField(required=False)
+
+    def validate_ratings(self, value):
+        errors = {}
+        validated = {}
+        for group, items in value.items():
+            definition = RATING_GROUPS.get(group)
+            if definition is None:
+                errors[group] = "Choose a supported rating group."
+                continue
+            if not isinstance(items, dict):
+                errors[group] = "Ratings must be provided as a map of trait names to scores."
+                continue
+            group_errors = {}
+            validated[group] = {}
+            for item, rating in items.items():
+                if item not in definition["items"]:
+                    group_errors[item] = "Choose a supported trait."
+                elif rating in (None, ""):
+                    validated[group][item] = None
+                elif isinstance(rating, bool) or not isinstance(rating, int) or rating not in range(1, 6):
+                    group_errors[item] = "Use a rating from 1 to 5, or leave it unrated."
+                else:
+                    validated[group][item] = rating
+            if group_errors:
+                errors[group] = group_errors
+        if errors:
+            raise serializers.ValidationError(errors)
+        return validated

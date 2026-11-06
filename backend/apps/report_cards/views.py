@@ -29,6 +29,7 @@ from apps.staff.models import TeacherAssignment, TeacherProfile
 from apps.students.models import StudentEnrollment
 
 from .models import ReportCard, ReportCardAuditEvent, ReportCardRevision
+from .ratings import RATING_GROUPS, RATING_LABELS, empty_ratings, merge_ratings
 from .permissions import HasReportCardPermission
 from .serializers import (
     GenerateClassReportCardsSerializer, GenerateReportCardSerializer,
@@ -190,6 +191,11 @@ class ReportCardDetailView(ReportCardViewMixin, APIView):
             if key in serializer.validated_data:
                 signature_key = "class_teacher" if key.startswith("class_teacher") else "head_teacher"
                 snapshot["signatures"][signature_key] = serializer.validated_data[key]
+        if "ratings" in serializer.validated_data:
+            snapshot["ratings"] = merge_ratings(
+                snapshot.get("ratings", empty_ratings()),
+                serializer.validated_data["ratings"],
+            )
         snapshot["signatures"]["signed"] = False
         revision.snapshot = snapshot
         revision.generated_by = request.user
@@ -485,6 +491,41 @@ def render_report_pdf(card, revision, snapshot):
     attendance_table = Table(attendance_row, repeatRows=1, colWidths=[27 * mm, 27 * mm, 27 * mm, 27 * mm, 39 * mm, 39 * mm], hAlign="LEFT")
     attendance_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), pale), ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#c8d6ca")), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 7), ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
     story.extend([attendance_table, Paragraph("Based on finalized registers only; missing registers are not counted as absences.", styles["SchoolMeta"])])
+
+    ratings = merge_ratings(empty_ratings(), snapshot.get("ratings") or {})
+    rating_tables = []
+    for group, definition in RATING_GROUPS.items():
+        group_rows = [
+            [Paragraph(escape(definition["label"].upper()), styles["ResultHeader"]), ""],
+            [para("Trait", "MetaLabel"), para("Score", "MetaLabel")],
+        ]
+        group_rows.extend(
+            [para(item, "ResultCell"), para(ratings[group].get(item) if ratings[group].get(item) is not None else "—", "ResultCell")]
+            for item in definition["items"]
+        )
+        group_table = Table(group_rows, colWidths=[47 * mm, 13 * mm], hAlign="LEFT")
+        group_table.setStyle(TableStyle([
+            ("SPAN", (0, 0), (-1, 0)), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(primary)),
+            ("BACKGROUND", (0, 1), (-1, 1), pale), ("GRID", (0, 0), (-1, -1), .3, colors.HexColor("#c8d6ca")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (1, 1), (1, -1), "CENTER"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+            ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ]))
+        rating_tables.append(group_table)
+    ratings_table = Table([rating_tables], colWidths=[62 * mm] * 3, hAlign="LEFT")
+    ratings_table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    rating_key = "Rating scale: " + "  ·  ".join(
+        f"{score} = {label}" for score, label in RATING_LABELS.items()
+    )
+    story.extend([
+        Paragraph("PSYCHOMOTOR, BEHAVIOUR AND AFFECTIVE RATINGS", styles["SectionTitle"]),
+        ratings_table,
+        Paragraph(escape(rating_key), styles["SchoolMeta"]),
+    ])
 
     remarks = snapshot.get("remarks", {})
     story.append(Paragraph("TEACHER AND SCHOOL REMARKS", styles["SectionTitle"]))

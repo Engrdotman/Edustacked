@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ApiError } from '../services/api.js'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { resendSchoolEmailVerification } from '../services/api.js'
+import PasswordField from '../components/PasswordField.jsx'
 
 export default function LoginPage({ navigate }) {
   const { signIn } = useAuth()
@@ -45,7 +46,7 @@ export default function LoginPage({ navigate }) {
           <label htmlFor="email">Email address</label>
           <input id="email" name="email" type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} />
           <label htmlFor="password">Password</label>
-          <input id="password" name="password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
+          <PasswordField id="password" name="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
           {error && <p className="form-error" role="alert">{error}</p>}
           <button className="primary-button" type="submit" disabled={submitting}>
             {submitting ? 'Signing in…' : 'Sign in'}

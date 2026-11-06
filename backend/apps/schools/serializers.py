@@ -182,15 +182,33 @@ class MembershipProvisionSerializer(serializers.Serializer):
             school=school,
             role=role,
         )
-        if is_new_user:
-            from apps.accounts.emailing import issue_email_verification, send_email_verification, send_password_setup_email
-            verification, secret = issue_email_verification(user)
-            transaction.on_commit(lambda user=user: send_password_setup_email(user))
-            transaction.on_commit(lambda user=user, selector=verification.selector, secret=secret: send_email_verification(user, selector, secret))
+        if not user.has_usable_password() or user.email_verified_at is None:
+            from apps.accounts.emailing import issue_email_verification, send_staff_invitation_emails
+
+            verification = None
+            if user.email_verified_at is None:
+                token, secret = issue_email_verification(user)
+                verification = (token.selector, secret)
+            transaction.on_commit(
+                lambda user=user, verification=verification, membership=membership: setattr(
+                    membership,
+                    "invitation_email_delivery",
+                    send_staff_invitation_emails(user, verification),
+                )
+            )
+        else:
+            membership.invitation_email_delivery = {
+                "password_setup": "not_needed",
+                "email_verification": "not_needed",
+            }
         return membership
 
     def to_representation(self, instance):
-        return SchoolMembershipSerializer(instance, context=self.context).data
+        data = dict(SchoolMembershipSerializer(instance, context=self.context).data)
+        delivery = getattr(instance, "invitation_email_delivery", None)
+        if delivery is not None:
+            data["invitation_email_delivery"] = delivery
+        return data
 
 
 class MembershipAdminUpdateSerializer(serializers.ModelSerializer):

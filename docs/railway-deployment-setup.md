@@ -43,14 +43,18 @@ Create these in **backend service → Variables**. Do not paste actual secrets i
 | `DJANGO_ALLOWED_HOSTS` | Railway API hostname, e.g. `edustacked-api-production.up.railway.app`, plus any API custom domain. Hostnames only: no scheme, path, or wildcard. |
 | `DJANGO_CORS_ALLOWED_ORIGINS` | Exact frontend origins, e.g. `https://your-vercel-project.vercel.app,https://www.yourdomain.ng`. Include every actual production frontend origin; no paths or trailing slash. |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | Full origins with scheme, e.g. `https://your-vercel-project.vercel.app,https://www.yourdomain.ng`. |
+| `AUTH_REFRESH_COOKIE_SAMESITE` | Set to `None` for separate Vercel/Railway domains; the refresh cookie is Secure and HttpOnly. |
+| `CSRF_COOKIE_SAMESITE` | Set to `None` so browser requests can send the CSRF cookie to the Railway API. Both cookies require HTTPS in production. |
 | `FRONTEND_BASE_URL` | Exact HTTPS frontend origin, e.g. `https://www.yourdomain.ng`. The code reads this name when it creates Paystack callback URLs. |
-| `EMAIL_BACKEND` | `django.core.mail.backends.smtp.EmailBackend` |
-| `EMAIL_HOST` | SMTP hostname from the chosen email provider. |
-| `EMAIL_PORT` | Usually provider-specific `587` (STARTTLS) or `465` (implicit TLS). |
-| `EMAIL_HOST_USER` | SMTP username. |
-| `EMAIL_HOST_PASSWORD` | SMTP password/API credential; keep secret. |
-| `EMAIL_USE_TLS` | `true` for STARTTLS where required; do not also set SSL true. |
-| `EMAIL_USE_SSL` | `true` only if the provider requires implicit TLS; do not also set TLS true. |
+| `EMAIL_BACKEND` | For SendGrid Web API use `apps.core.sendgrid_backend.SendgridBackend`; for SMTP use `django.core.mail.backends.smtp.EmailBackend`. |
+| `SENDGRID_API_KEY` | Required server-only SendGrid key when using the SendGrid Web API backend. Keep it in Railway's secret variables; never put it in Vercel or source. |
+| `SENDGRID_SANDBOX_MODE` | `false` for real delivery; `true` accepts test requests without delivering messages. |
+| `EMAIL_HOST` | Required only for SMTP: hostname from the chosen email provider. |
+| `EMAIL_PORT` | SMTP only; usually provider-specific `587` (STARTTLS) or `465` (implicit TLS). |
+| `EMAIL_HOST_USER` | SMTP only: username. |
+| `EMAIL_HOST_PASSWORD` | SMTP only: password/API credential; keep secret. |
+| `EMAIL_USE_TLS` | SMTP only: `true` for STARTTLS where required; do not also set SSL true. |
+| `EMAIL_USE_SSL` | SMTP only: `true` if the provider requires implicit TLS; do not also set TLS true. |
 | `DEFAULT_FROM_EMAIL` | Verified sender, such as `EDUstacked <edustackedng@gmail.com>` if that address is configured to send through the SMTP provider. |
 | `PAYSTACK_SECRET_KEY` | Start with a Paystack test secret (`sk_test_...`) for test-mode checkout. The key is server-only. Set a live secret only after test-mode acceptance and business approval. |
 | `CBT_LICENSE_SIGNING_KEY` | Stable, long random secret for central CBT license signing; coordinate the matching verifier secret with each school-local server. |

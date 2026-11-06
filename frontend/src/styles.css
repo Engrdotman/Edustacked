@@ -49,6 +49,12 @@ h1 em { color: #64816d; font-weight: 500; }.intro { max-width: 440px; color: #76
 .auth-form label, .school-picker > span { margin-top: 8px; color: #435b4a; font-size: 12px; font-weight: 700; }
 .auth-form input, .school-picker select { width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid #dce2dc; border-radius: 7px; color: #202c25; background: #fff; font: inherit; font-size: 14px; }
 .auth-form input:focus, .school-picker select:focus { border-color: #64816d; }
+.password-field { position: relative; display: block; width: 100%; }
+.auth-form .password-field input { padding-right: 52px; }
+.password-toggle { position: absolute; top: 50%; right: 7px; display: grid; width: 36px; height: 36px; place-items: center; transform: translateY(-50%); border: 0; border-radius: 7px; color: #64776a; background: transparent; cursor: pointer; transition: color .16s ease, background .16s ease; }
+.password-toggle svg { width: 19px; height: 19px; }
+.password-toggle:hover { color: #285744; background: #edf4ef; }
+.password-toggle:focus-visible { outline: 3px solid rgba(47,143,131,.55); outline-offset: 1px; }
 .primary-button { min-height: 46px; margin-top: 16px; padding: 11px 18px; border: 0; border-radius: 7px; color: #fff; background: #285744; font: inherit; font-weight: 700; cursor: pointer; }
 .primary-button:hover:not(:disabled) { background: #1d4935; }
 .primary-button:disabled { cursor: wait; opacity: .65; }
@@ -425,6 +431,12 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .report-card-remarks { margin-top:22px; padding-top:18px; border-top:1px solid #e2eae2; }
 .report-card-remarks-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:13px; margin:12px 0; }
 .report-card-remarks textarea { resize:vertical; }
+.report-card-rating-groups { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin:14px 0 20px; }
+.report-card-rating-group { display:grid; gap:8px; min-width:0; padding:13px; border:1px solid #dce7de; border-radius:10px; background:#fbfdfb; }
+.report-card-rating-group legend { padding:0 5px; color:#285744; font-size:13px; font-weight:750; }
+.report-card-rating-group label { display:flex; align-items:center; justify-content:space-between; gap:10px; color:#435b4a; font-size:12px; }
+.report-card-rating-group select { width:124px; min-height:34px; padding:5px 7px; border:1px solid #d0ddd1; border-radius:6px; color:#203c29; background:#fff; font:inherit; font-size:11px; }
+.report-card-rating-group select:focus-visible { outline:3px solid rgba(47,143,131,.45); outline-offset:2px; }
 .report-card-history { display:grid; gap:8px; margin-top:22px; padding-top:14px; border-top:1px solid #e2eae2; }
 .report-card-history h3 { margin-bottom:4px; }
 .report-card-history div { display:grid; gap:4px; padding:11px 13px; border:1px solid #e1e9e1; border-radius:9px; }
@@ -945,6 +957,7 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .membership-invite label,.ownership-transfer-form label { display:grid; gap:6px; color:#355743; font-size:13px; font-weight:700; }
 .membership-invite input,.membership-invite select { width:100%; min-height:42px; padding:8px 10px; border:1px solid #d0ddd1; border-radius:7px; color:#203c29; background:#fff; font:inherit; font-size:14px; }
 .membership-invite .primary-button { min-height:42px; margin:0; }
+.membership-invite .invite-retry-button { min-height:42px; margin:0; }
 .ownership-transfer { grid-template-columns:minmax(190px,1fr) minmax(0,2fr); }
 .ownership-transfer .auth-intro { margin:8px 0 0; font-size:13px; }
 .ownership-transfer-form { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); align-items:end; gap:11px; }
@@ -1007,11 +1020,27 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
   .dashboard-sidebar nav { display:flex; overflow:auto; }
   .dashboard-nav { flex:0 0 auto; }
   .dashboard-user { display:none; }
-  .dashboard-topbar { padding:12px 16px; }
-  .dashboard-content { padding:22px 16px; }
+  .dashboard-topbar { display:flex; flex-direction:row; align-items:center; gap:12px; padding:10px clamp(14px,4vw,22px); }
+  .dashboard-school-name { flex:1 1 auto; min-width:0; overflow:hidden; font-size:13px; line-height:1.3; text-overflow:ellipsis; white-space:nowrap; }
+  .dashboard-topbar-actions { flex:0 0 auto; gap:clamp(8px,2.5vw,16px); }
+  .dashboard-topbar-actions > span { max-width:clamp(70px,22vw,130px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dashboard-topbar-actions .text-button { flex:0 0 auto; white-space:nowrap; font-size:12px; }
+  .dashboard-content { padding:22px clamp(14px,4vw,22px); }
   .dashboard-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .dashboard-columns { grid-template-columns:1fr; }
-  .dashboard-content h1 { font-size:27px; }
+  .dashboard-content h1 { font-size:clamp(25px,7vw,30px); line-height:1.2; }
+  .dashboard-kpi,.dashboard-panel { min-width:0; padding:clamp(13px,3.5vw,18px); }
+  .dashboard-kpi strong { font-size:clamp(21px,6vw,28px); }
+  .dashboard-panel-heading { flex-direction:row; align-items:center; }
+  .dashboard-performance > div { grid-template-columns:minmax(64px,84px) minmax(36px,1fr) 42px; gap:8px; font-size:12px; }
+  .dashboard-quick-actions { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .dashboard-quick-actions button { overflow-wrap:anywhere; }
+}
+@media (max-width:380px) {
+  .dashboard-topbar-actions > span { display:none; }
+  .dashboard-topbar { gap:8px; }
+  .dashboard-kpi { padding:12px; }
+  .dashboard-kpi strong { font-size:21px; }
 }
 
 .scroll-reveal { opacity:0; transform:translateY(22px); transition:opacity .65s ease,transform .65s cubic-bezier(.2,.65,.3,1); }

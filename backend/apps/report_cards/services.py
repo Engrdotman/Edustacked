@@ -14,6 +14,7 @@ from apps.students.models import StudentEnrollment
 from apps.staff.models import TeacherAssignment, TeacherProfile
 
 from .models import ReportCard, ReportCardAuditEvent, ReportCardRevision
+from .ratings import empty_ratings
 
 
 def report_enrollments(school, session, term, class_level, class_arm):
@@ -190,6 +191,7 @@ def build_report_snapshot(enrollment, term):
         "subjects": rows,
         "attendance": attendance_summary(enrollment, term),
         "overall": overall,
+        "ratings": empty_ratings(),
         "remarks": {"teacher": "", "head_teacher": "", "conduct": "", "effort": ""},
         "signatures": {"class_teacher": "", "head_teacher": "", "signed": False},
     }

@@ -50,6 +50,7 @@ export default function StaffManagementPage({ navigate }) {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [invite, setInvite] = useState({ email: '', first_name: '', last_name: '', role: 'teacher' })
+  const [inviteRetryId, setInviteRetryId] = useState(null)
 
   const loadAssignments = useCallback(async (filterValues = filters) => {
     const params = new URLSearchParams(Object.entries(filterValues).filter(([, value]) => value))
@@ -107,10 +108,34 @@ export default function StaffManagementPage({ navigate }) {
     try {
       const membership = await apiRequest(`schools/${selectedSchool.school_id}/memberships/`, { method: 'POST', body: invite })
       setInvite({ email: '', first_name: '', last_name: '', role: 'teacher' })
+      const delivery = membership.invitation_email_delivery || {}
+      const deliveryStates = Object.values(delivery)
+      const needsRetry = deliveryStates.some((state) => ['failed', 'local_only'].includes(state))
+      setInviteRetryId(needsRetry ? membership.id : null)
       setMessage(membership.user_email_verified
         ? `School access added to the existing verified account (account ID ${membership.account_id}). Use this ID to link the employment profile.`
-        : `School account created or added (account ID ${membership.account_id}). New accounts receive password setup and email verification links. Use this ID to link the employment profile.`)
+        : `School account created or added (account ID ${membership.account_id}). Use this ID to link the employment profile.`)
+      if (deliveryStates.includes('local_only')) {
+        setError('The account was created, but this server captures email locally and does not send to Gmail. Configure SendGrid or SMTP in the live backend, then retry the invitation.')
+      } else if (deliveryStates.includes('failed')) {
+        setError('The account was created, but the email provider did not accept every setup message. Check the backend email logs and provider activity, then retry the invitation.')
+      } else if (deliveryStates.includes('accepted')) {
+        setMessage((current) => `${current} The email provider accepted the setup and verification messages; ask the staff member to check Spam as well as Inbox.`)
+      }
     } catch (e) { setError(e.message || 'Could not invite this staff member.') }
+    finally { setBusy(false) }
+  }
+
+  async function retryInvite() {
+    if (!inviteRetryId) return
+    setBusy(true); setError(''); setMessage('')
+    try {
+      const result = await apiRequest(`schools/${selectedSchool.school_id}/memberships/${inviteRetryId}/resend-invitation/`, { method: 'POST', body: {} })
+      const states = Object.values(result.invitation_email_delivery || {})
+      if (states.includes('local_only')) setError('This environment still uses local-only email. Set the SendGrid or SMTP backend on Railway before retrying.')
+      else if (states.includes('failed')) setError('The provider still rejected the message. Check its backend logs and delivery activity.')
+      else { setInviteRetryId(null); setMessage('The provider accepted the staff setup email. Ask the recipient to check their Inbox and Spam folder.') }
+    } catch (e) { setError(e.message || 'Could not resend the staff invitation.') }
     finally { setBusy(false) }
   }
 
@@ -162,7 +187,7 @@ export default function StaffManagementPage({ navigate }) {
     <section className="app-content student-page"><p className="eyebrow">{selectedSchool?.school_name} · STAFF</p><h1 className="app-heading">Staff &amp; <em>teachers</em></h1><p className="intro">Employment profiles are separate from account access. Teaching responsibilities are recorded by session, class, arm, and subject.</p>
       {error && <p className="form-error" role="alert">{error}</p>}{message && <p className="success-message" role="status">{message}</p>}
       {!isTeacher && <div className="student-toolbar"><input aria-label="Search staff" placeholder="Search name, staff number, or job title" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && reload()} /><select aria-label="Filter staff by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="">All staff</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="suspended">Suspended</option><option value="former">Former</option></select>{canManage && <button className="primary-button" onClick={() => { setStaffForm(blankStaff); setEditingId(null); setShowStaffForm(!showStaffForm) }}>Add staff</button>}</div>}
-      {canInvite && <form className="membership-invite" onSubmit={sendInvite}><div><p className="panel-kicker">SCHOOL ACCESS</p><h2>Invite a staff member</h2></div><label>Email<input type="email" required value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} /></label><label>First name<input required value={invite.first_name} onChange={(e) => setInvite({ ...invite, first_name: e.target.value })} /></label><label>Last name<input value={invite.last_name} onChange={(e) => setInvite({ ...invite, last_name: e.target.value })} /></label><label>Role<select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })}><option value="principal">Principal</option><option value="school_manager">School administrator</option><option value="teacher">Teacher</option><option value="accountant">Bursar</option><option value="receptionist">Other staff</option></select></label><button className="primary-button" disabled={busy}>{busy ? 'Sending…' : 'Invite staff'}</button></form>}
+      {canInvite && <form className="membership-invite" onSubmit={sendInvite}><div><p className="panel-kicker">SCHOOL ACCESS</p><h2>Invite a staff member</h2></div><label>Email<input type="email" required value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} /></label><label>First name<input required value={invite.first_name} onChange={(e) => setInvite({ ...invite, first_name: e.target.value })} /></label><label>Last name<input value={invite.last_name} onChange={(e) => setInvite({ ...invite, last_name: e.target.value })} /></label><label>Role<select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })}><option value="principal">Principal</option><option value="school_manager">School administrator</option><option value="teacher">Teacher</option><option value="accountant">Bursar</option><option value="receptionist">Other staff</option></select></label><button className="primary-button" disabled={busy}>{busy ? 'Sending…' : 'Invite staff'}</button>{inviteRetryId && <button className="secondary-button invite-retry-button" type="button" onClick={retryInvite} disabled={busy}>{busy ? 'Retrying…' : 'Retry setup email'}</button>}</form>}
       {canManage && !canInvite && <p className="academic-hint">You can manage employment profiles and teaching assignments. Only a school owner, school admin, or principal can create school login accounts.</p>}
       {role === 'school_owner' && <OwnershipTransferPanel schoolId={selectedSchool.school_id} />}
       {showStaffForm && canManage && <form className="student-form" onSubmit={saveStaff}><h2>{editingId ? 'Edit staff profile' : 'New staff profile'}</h2><div className="student-fields">

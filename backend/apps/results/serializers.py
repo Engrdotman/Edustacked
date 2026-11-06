@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from rest_framework import serializers
@@ -178,7 +180,7 @@ class AssessmentResultSerializer(serializers.ModelSerializer):
 
 class ScoreValueSerializer(serializers.Serializer):
     plan_component_id = serializers.IntegerField(min_value=1)
-    score = serializers.DecimalField(max_digits=7, decimal_places=2, min_value=0)
+    score = serializers.DecimalField(max_digits=7, decimal_places=2, min_value=Decimal("0"))
 
 
 class StudentScoreEntrySerializer(serializers.Serializer):

@@ -9,9 +9,13 @@ from django.utils.http import urlsafe_base64_encode
 from datetime import timedelta
 from hashlib import sha256
 import secrets
+import logging
 
 
-def send_password_setup_email(user):
+logger = logging.getLogger(__name__)
+
+
+def send_password_setup_email(user, *, fail_silently=True):
     uid = urlsafe_base64_encode(force_bytes(user.pk))
     token = default_token_generator.make_token(user)
     reset_url = f"{settings.FRONTEND_BASE_URL}/reset-password?uid={uid}&token={token}"
@@ -24,7 +28,7 @@ def send_password_setup_email(user):
         ),
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[user.email],
-        fail_silently=True,
+        fail_silently=fail_silently,
     )
 
 
@@ -42,7 +46,7 @@ def issue_email_verification(user):
     return token, secret
 
 
-def send_email_verification(user, selector, secret):
+def send_email_verification(user, selector, secret, *, fail_silently=True):
     verification_url = (
         f"{settings.FRONTEND_BASE_URL}/verify-email?selector={selector}&token={secret}"
     )
@@ -55,5 +59,35 @@ def send_email_verification(user, selector, secret):
         ),
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[user.email],
-        fail_silently=True,
+        fail_silently=fail_silently,
     )
+
+
+def send_staff_invitation_emails(user, verification=None):
+    """Send needed staff access emails and report delivery without losing the membership."""
+    statuses = {}
+    jobs = []
+    if not user.has_usable_password():
+        jobs.append(("password_setup", lambda: send_password_setup_email(user, fail_silently=False)))
+    if user.email_verified_at is None and verification:
+        selector, secret = verification
+        jobs.append(("email_verification", lambda: send_email_verification(user, selector, secret, fail_silently=False)))
+
+    if not jobs:
+        return {"password_setup": "not_needed", "email_verification": "not_needed"}
+
+    if settings.EMAIL_BACKEND.endswith(("locmem.EmailBackend", "console.EmailBackend", "filebased.EmailBackend")):
+        return {name: "local_only" for name, _ in jobs} | {
+            name: "not_needed" for name in ("password_setup", "email_verification")
+            if name not in {job_name for job_name, _ in jobs}
+        }
+
+    for name, send in jobs:
+        try:
+            statuses[name] = "accepted" if send() == 1 else "failed"
+        except Exception:
+            logger.exception("Staff invitation email delivery failed (%s).", name)
+            statuses[name] = "failed"
+    for name in ("password_setup", "email_verification"):
+        statuses.setdefault(name, "not_needed")
+    return statuses

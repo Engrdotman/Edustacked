@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import BrandMark from '../components/BrandMark.jsx'
 import { ApiError, signupSchool } from '../services/api.js'
+import PasswordField from '../components/PasswordField.jsx'
 
 export default function SignupPage({ navigate }) {
   const [values, setValues] = useState({ school_name: '', administrator_name: '', email: '', phone_number: '', password: '', password_confirmation: '', school_email: '', school_phone: '', school_type: 'both', country: 'Nigeria', state: '', local_government_area: '', address: '' })
@@ -37,8 +38,8 @@ export default function SignupPage({ navigate }) {
         <label htmlFor="local_government_area">Local Government Area</label><input id="local_government_area" name="local_government_area" required value={values.local_government_area} onChange={update} />
         <label htmlFor="address">School address</label><textarea id="address" name="address" autoComplete="street-address" rows="3" required value={values.address} onChange={update} />
         <div className="signup-section-title">Secure your account</div>
-        <label htmlFor="signup_password">Password</label><input id="signup_password" name="password" type="password" autoComplete="new-password" minLength="8" required value={values.password} onChange={update} />
-        <label htmlFor="signup_password_confirmation">Confirm password</label><input id="signup_password_confirmation" name="password_confirmation" type="password" autoComplete="new-password" minLength="8" required value={values.password_confirmation} onChange={update} />
+        <label htmlFor="signup_password">Password</label><PasswordField id="signup_password" name="password" autoComplete="new-password" minLength="8" required value={values.password} onChange={update} />
+        <label htmlFor="signup_password_confirmation">Confirm password</label><PasswordField id="signup_password_confirmation" name="password_confirmation" autoComplete="new-password" minLength="8" required value={values.password_confirmation} onChange={update} />
         {error && <p className="form-error" role="alert">{error}</p>}
         <button className="primary-button" type="submit" disabled={working || values.password !== values.password_confirmation}>{working ? 'Creating workspace…' : 'Register your school'}</button>
       </form>
