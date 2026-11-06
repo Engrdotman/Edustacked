@@ -1,3 +1,5 @@
+from collections import defaultdict
+from decimal import Decimal
 from uuid import uuid4
 
 from django.core.exceptions import ValidationError
@@ -9,6 +11,7 @@ from apps.academics.models import ClassSubject
 from apps.attendance.services import finalized_enrollment_summary
 from apps.results.models import AssessmentPlan, AssessmentResult
 from apps.students.models import StudentEnrollment
+from apps.staff.models import TeacherAssignment, TeacherProfile
 
 from .models import ReportCard, ReportCardAuditEvent, ReportCardRevision
 
@@ -28,7 +31,7 @@ def attendance_summary(enrollment, term):
     return finalized_enrollment_summary(enrollment, term.start_date, term.end_date)
 
 
-def _subject_data(enrollment, subject, plans):
+def _subject_data(enrollment, subject, plans, cohort_enrollment_ids, teacher_assignment=None):
     subject_plans = plans.get(subject.pk, [])
     if not subject_plans:
         return None, f"No assessment plan exists for {subject.name}."
@@ -48,6 +51,19 @@ def _subject_data(enrollment, subject, plans):
     if not result.approved_calculation or result.approved_percentage is None or not result.approved_grade:
         return None, f"The approved result for {subject.name} is missing its saved calculation snapshot."
     calculation = result.approved_calculation
+    peer_results = list(AssessmentResult.objects.filter(
+        school=enrollment.school, plan=plan, enrollment_id__in=cohort_enrollment_ids,
+        status=AssessmentResult.Status.APPROVED, approved_total__isnull=False,
+        approved_percentage__isnull=False,
+    ).values_list("approved_total", "approved_percentage"))
+    score_values = [Decimal(str(total)) for total, _ in peer_results]
+    position = 1 + sum(Decimal(str(percentage)) > result.approved_percentage for _, percentage in peer_results)
+    teacher_name = ""
+    teacher_qualification = ""
+    if teacher_assignment:
+        staff = teacher_assignment.teacher.staff
+        teacher_name = " ".join(part for part in (staff.first_name, staff.middle_name, staff.last_name) if part)
+        teacher_qualification = teacher_assignment.teacher.qualification_summary
     return {
         "subject_id": subject.pk,
         "subject_name": subject.name,
@@ -63,6 +79,12 @@ def _subject_data(enrollment, subject, plans):
         "grade_point": str(result.approved_grade_point) if result.approved_grade_point is not None else None,
         "grade_description": next((band.get("description") or band.get("label") for band in plan.grading_scale_snapshot.get("bands", []) if band.get("label") == result.approved_grade), result.approved_grade),
         "grading_scale_snapshot": plan.grading_scale_snapshot,
+        "class_position": position if peer_results else None,
+        "class_size_with_result": len(peer_results),
+        "highest_total": str(max(score_values)) if score_values else None,
+        "lowest_total": str(min(score_values)) if score_values else None,
+        "teacher_name": teacher_name,
+        "teacher_qualification": teacher_qualification,
     }, None
 
 
@@ -78,6 +100,10 @@ def build_report_snapshot(enrollment, term):
     if not class_subjects:
         errors.append("No active subjects are assigned to this class.")
     subjects = [entry.subject for entry in class_subjects]
+    cohort = list(report_enrollments(
+        school, enrollment.academic_session, term, enrollment.class_level, enrollment.class_arm,
+    ))
+    cohort_enrollment_ids = [entry.pk for entry in cohort]
     plans = {}
     for plan in AssessmentPlan.objects.filter(
             school=school, academic_session=enrollment.academic_session, term=term,
@@ -86,13 +112,63 @@ def build_report_snapshot(enrollment, term):
         ).select_related("subject").prefetch_related("results").order_by("subject_id", "-created_at"):
         plans.setdefault(plan.subject_id, []).append(plan)
     rows = []
+    assignments = TeacherAssignment.objects.filter(
+        school=school, academic_session=enrollment.academic_session,
+        class_level=enrollment.class_level, class_arm=enrollment.class_arm,
+        subject__in=subjects, status=TeacherAssignment.Status.ACTIVE,
+        start_date__lte=term.end_date,
+        teacher__teaching_status=TeacherProfile.TeachingStatus.ACTIVE,
+        teacher__staff__status="active",
+    ).filter(Q(end_date__isnull=True) | Q(end_date__gte=term.start_date)).select_related(
+        "teacher__staff"
+    ).order_by("subject_id", "start_date", "pk")
+    assignment_by_subject = {}
+    for assignment in assignments:
+        assignment_by_subject.setdefault(assignment.subject_id, assignment)
     for subject in subjects:
-        row, error = _subject_data(enrollment, subject, plans)
+        row, error = _subject_data(
+            enrollment, subject, plans, cohort_enrollment_ids,
+            assignment_by_subject.get(subject.pk),
+        )
         if row:
             rows.append(row)
         if error:
             errors.append(error)
     school_settings = getattr(school, "settings", None)
+    totals = [Decimal(row["total"]) for row in rows]
+    maxima = [Decimal(row["maximum"]) for row in rows]
+    percentages = [Decimal(row["percentage"]) for row in rows]
+    overall = None
+    if rows:
+        overall = {
+            "total": str(sum(totals, Decimal("0"))),
+            "maximum": str(sum(maxima, Decimal("0"))),
+            "average_percentage": str((sum(percentages, Decimal("0")) / len(percentages)).quantize(Decimal("0.01"))),
+            "subjects_taken": len(rows),
+            "class_size": len(cohort),
+            "class_position": None,
+            "class_position_size": 0,
+        }
+        can_rank_class = bool(subjects) and len(rows) == len(subjects)
+        if can_rank_class:
+            eligible_plan_ids = [row["assessment_plan_id"] for row in rows]
+            peer_scores = defaultdict(list)
+            for enrollment_id, percentage in AssessmentResult.objects.filter(
+                school=school, plan_id__in=eligible_plan_ids,
+                enrollment_id__in=cohort_enrollment_ids,
+                status=AssessmentResult.Status.APPROVED,
+                approved_percentage__isnull=False,
+            ).values_list("enrollment_id", "approved_percentage"):
+                peer_scores[enrollment_id].append(Decimal(str(percentage)))
+            complete_peers = {
+                enrollment_id: sum(scores, Decimal("0")) / len(scores)
+                for enrollment_id, scores in peer_scores.items()
+                if len(scores) == len(eligible_plan_ids)
+            }
+            current_average = sum(percentages, Decimal("0")) / len(percentages)
+            if enrollment.pk in complete_peers:
+                overall["class_position"] = 1 + sum(score > current_average for score in complete_peers.values())
+                overall["class_position_size"] = len(complete_peers)
     snapshot = {
         "school": {
             "name": school.name, "contact_email": school.contact_email,
@@ -113,7 +189,7 @@ def build_report_snapshot(enrollment, term):
         },
         "subjects": rows,
         "attendance": attendance_summary(enrollment, term),
-        "overall": None,
+        "overall": overall,
         "remarks": {"teacher": "", "head_teacher": "", "conduct": "", "effort": ""},
         "signatures": {"class_teacher": "", "head_teacher": "", "signed": False},
     }

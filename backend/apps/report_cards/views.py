@@ -308,93 +308,226 @@ class ReportCardPdfView(ReportCardViewMixin, APIView):
 
 def render_report_pdf(card, revision, snapshot):
     output = BytesIO()
-    doc = SimpleDocTemplate(output, pagesize=A4, rightMargin=16 * mm, leftMargin=16 * mm, topMargin=16 * mm, bottomMargin=16 * mm, title=f"Report card {card.identifier}")
+    doc = SimpleDocTemplate(
+        output, pagesize=A4, rightMargin=12 * mm, leftMargin=12 * mm,
+        topMargin=10 * mm, bottomMargin=18 * mm,
+        title=f"Report card {card.identifier}", author="EDUstacked",
+    )
     styles = getSampleStyleSheet()
-    primary = snapshot.get("school", {}).get("primary_color") or "#285744"
-    styles.add(ParagraphStyle(name="SchoolTitle", parent=styles["Title"], alignment=TA_CENTER, textColor=colors.HexColor(primary), fontSize=17, leading=21, spaceAfter=4))
-    styles.add(ParagraphStyle(name="SubheadingSmall", parent=styles["Heading2"], textColor=colors.HexColor(primary), fontSize=12, leading=15, spaceBefore=8, spaceAfter=5))
-    styles.add(ParagraphStyle(name="SmallBody", parent=styles["BodyText"], fontSize=8.5, leading=11))
-    styles.add(ParagraphStyle(name="ResultCell", parent=styles["SmallBody"], fontSize=7.5, leading=9))
-    styles.add(ParagraphStyle(name="ResultHeader", parent=styles["ResultCell"], fontName="Helvetica-Bold", textColor=colors.white))
-    story = []
     school = snapshot.get("school", {})
+    primary = school.get("primary_color") or "#285744"
+    ink = colors.HexColor("#193629")
+    muted = colors.HexColor("#59675e")
+    pale = colors.HexColor("#edf3ee")
+    styles.add(ParagraphStyle(name="SchoolTitle", parent=styles["Title"], alignment=TA_CENTER, textColor=ink, fontName="Helvetica-Bold", fontSize=18, leading=21, spaceAfter=2))
+    styles.add(ParagraphStyle(name="SchoolMeta", parent=styles["BodyText"], alignment=TA_CENTER, textColor=muted, fontSize=7.2, leading=9))
+    styles.add(ParagraphStyle(name="ReportTitle", parent=styles["Heading2"], alignment=TA_CENTER, textColor=colors.white, fontName="Helvetica-Bold", fontSize=10, leading=13))
+    styles.add(ParagraphStyle(name="SectionTitle", parent=styles["Heading2"], textColor=colors.HexColor(primary), fontName="Helvetica-Bold", fontSize=9, leading=11, spaceBefore=5, spaceAfter=3))
+    styles.add(ParagraphStyle(name="SmallBody", parent=styles["BodyText"], fontSize=7.5, leading=9.2, textColor=ink))
+    styles.add(ParagraphStyle(name="ResultCell", parent=styles["BodyText"], fontSize=6.6, leading=8, textColor=ink))
+    styles.add(ParagraphStyle(name="ResultHeader", parent=styles["ResultCell"], fontName="Helvetica-Bold", textColor=colors.white, fontSize=6.5, leading=7.5))
+    styles.add(ParagraphStyle(name="MetaLabel", parent=styles["SmallBody"], fontName="Helvetica-Bold", textColor=muted, fontSize=6.5, leading=7.5))
+    styles.add(ParagraphStyle(name="MetricValue", parent=styles["SmallBody"], fontName="Helvetica-Bold", fontSize=10, leading=12, alignment=TA_CENTER))
+    styles.add(ParagraphStyle(name="MetricLabel", parent=styles["SmallBody"], textColor=muted, fontSize=6.4, leading=7.5, alignment=TA_CENTER))
+    story = []
+
+    def para(value, style="SmallBody"):
+        return Paragraph(escape(str(value or "-")), styles[style])
+
     logo_path = school.get("logo_path")
+    logo = ""
     if logo_path:
         try:
             with default_storage.open(logo_path, "rb") as logo_file:
                 logo = Image(BytesIO(logo_file.read()), width=22 * mm, height=22 * mm, kind="proportional")
-            story.append(Table([[logo, Paragraph(escape(school.get("name", "School")), styles["SchoolTitle"])]], colWidths=[28 * mm, 145 * mm], style=TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (1, 0), (1, 0), "CENTER"), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)])))
-        except (OSError, ValueError):
-            story.append(Paragraph(escape(school.get("name", "School")), styles["SchoolTitle"]))
-    else:
-        story.append(Paragraph(escape(school.get("name", "School")), styles["SchoolTitle"]))
-    contacts = " | ".join(value for value in (school.get("address"), school.get("contact_phone"), school.get("contact_email"), school.get("website")) if value)
+        except Exception:
+            logo = ""
+    contacts = "  |  ".join(value for value in (
+        school.get("address"), school.get("contact_phone"), school.get("contact_email"), school.get("website"),
+    ) if value)
+    school_identity = [para(school.get("name") or "School", "SchoolTitle")]
     if contacts:
-        story.append(Paragraph(escape(contacts), styles["SmallBody"]))
+        school_identity.append(Paragraph(escape(contacts), styles["SchoolMeta"]))
     if school.get("motto"):
-        story.append(Paragraph(escape(school["motto"]), styles["SmallBody"]))
-    if school.get("description"):
-        story.append(Paragraph(escape(school["description"]), styles["SmallBody"]))
-    story.append(Spacer(1, 5 * mm))
+        school_identity.append(Paragraph(f"<i>{escape(school['motto'])}</i>", styles["SchoolMeta"]))
+    header = Table([[logo, school_identity]], colWidths=[25 * mm, 161 * mm], hAlign="LEFT")
+    header.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (0, 0), (0, 0), "CENTER"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5), ("LINEBELOW", (0, 0), (-1, -1), 1, colors.HexColor(primary)),
+    ]))
+    story.append(header)
+
     academic = snapshot.get("academic", {})
-    story.append(Paragraph(f"STUDENT REPORT CARD - {escape(academic.get('session', ''))} | {escape(academic.get('term', ''))}", styles["Heading2"]))
+    title_bar = Table([[Paragraph(
+        f"{escape(str(academic.get('term', 'TERM')).upper())} REPORT CARD  &nbsp; | &nbsp;  {escape(str(academic.get('session', '')))}",
+        styles["ReportTitle"],
+    )]], colWidths=[186 * mm], hAlign="LEFT")
+    title_bar.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(primary)), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
+    story.extend([title_bar, Spacer(1, 2 * mm)])
+
     student = snapshot.get("student", {})
+    overall = snapshot.get("overall") or {}
+    class_position = overall.get("class_position")
+    position_text = f"{class_position} of {overall.get('class_position_size')}" if class_position else "Not ranked"
     identity = [
-        ["Student", student.get("name", ""), "Admission number", student.get("admission_number", "")],
-        ["Class", f"{student.get('class_name', '')} {student.get('arm_name', '')}", "Date of birth", student.get("date_of_birth", "")],
-        ["Gender", student.get("gender", ""), "Identifier", card.identifier],
+        ["Student", student.get("name", ""), "Admission no.", student.get("admission_number", "")],
+        ["Class / arm", f"{student.get('class_name', '')} {student.get('arm_name', '')}", "Session", academic.get("session", "")],
+        ["Term", academic.get("term", ""), "Date of birth", student.get("date_of_birth", "")],
+        ["Gender", student.get("gender", ""), "Term dates", f"{academic.get('term_start', '')} to {academic.get('term_end', '')}"],
     ]
-    story.append(Table(identity, colWidths=[27 * mm, 62 * mm, 33 * mm, 48 * mm], style=TableStyle([("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#eef4ef")), ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#eef4ef")), ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#c8d6ca")), ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"), ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 8), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 5), ("RIGHTPADDING", (0, 0), (-1, -1), 5), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)])))
-    story.append(Paragraph("Academic performance", styles["SubheadingSmall"]))
-    data = [["Subject", "Assessment component", "Score", "Maximum", "Total", "%", "Grade"]]
-    for subject in snapshot.get("subjects", []):
-        components = subject.get("components", [])
-        for index, component in enumerate(components or [{}]):
-            data.append([
-                subject.get("subject_name", "") if index == 0 else "",
-                component.get("name", "-"), component.get("score") or "-", component.get("max_score", "-"),
-                subject.get("total", "-") if index == 0 else "", subject.get("percentage", "-") if index == 0 else "", subject.get("grade", "-") if index == 0 else "",
+    identity_cells = [[para(label, "MetaLabel"), para(value), para(label2, "MetaLabel"), para(value2)] for label, value, label2, value2 in identity]
+    identity_table = Table(identity_cells, colWidths=[23 * mm, 70 * mm, 24 * mm, 69 * mm], hAlign="LEFT")
+    identity_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, -1), pale), ("BACKGROUND", (2, 0), (2, -1), pale),
+        ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#ccd8ce")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    story.append(identity_table)
+
+    metrics = [
+        ("OVERALL TOTAL", f"{overall.get('total', '-')} / {overall.get('maximum', '-')}"),
+        ("AVERAGE", f"{overall.get('average_percentage', '-')}%" if overall else "-"),
+        ("CLASS POSITION", position_text),
+        ("SUBJECTS TAKEN", overall.get("subjects_taken", len(snapshot.get("subjects", [])))),
+    ]
+    metric_table = Table([[Table([[para(value, "MetricValue")], [para(label, "MetricLabel")]], colWidths=[46.5 * mm]) for label, value in metrics]], colWidths=[46.5 * mm] * 4, hAlign="LEFT")
+    metric_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), pale), ("BOX", (0, 0), (-1, -1), .4, colors.HexColor("#ccd8ce")),
+        ("INNERGRID", (0, 0), (-1, -1), .4, colors.white), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.extend([Spacer(1, 2 * mm), metric_table, Paragraph("ACADEMIC PERFORMANCE", styles["SectionTitle"])])
+    subject_rows = snapshot.get("subjects", [])
+    component_names = []
+    for subject in subject_rows:
+        for component in subject.get("components", []):
+            name = component.get("name") or "Assessment"
+            if name not in component_names:
+                component_names.append(name)
+    component_grid = len(component_names) <= 3
+    fixed_widths = [35, 19, 14, 12, 16, 16, 16, 20]
+    if component_grid:
+        displayed_components = component_names or ["Assessment"]
+        component_width = (186 - sum(fixed_widths)) / len(displayed_components)
+        column_widths = [fixed_widths[0], *([component_width] * len(displayed_components)), *fixed_widths[1:]]
+        headers = ["Subject / teacher", *displayed_components, "Total", "Average", "Grade", "Position", "Highest", "Lowest", "Remark"]
+        wrapped_data = [[Paragraph(escape(str(value)), styles["ResultHeader"]) for value in headers]]
+        for subject in subject_rows:
+            component_lookup = {item.get("name") or "Assessment": item for item in subject.get("components", [])}
+            subject_html = escape(str(subject.get("subject_name", "")))
+            teacher_parts = [subject.get("teacher_name"), subject.get("teacher_qualification")]
+            teacher_line = " · ".join(str(part) for part in teacher_parts if part)
+            if teacher_line:
+                subject_html += f"<br/><font size='5.6' color='#59675e'>{escape(teacher_line)}</font>"
+            cells = [Paragraph(subject_html, styles["ResultCell"])]
+            for name in displayed_components:
+                component = component_lookup.get(name)
+                value = "-" if component is None else component.get("score")
+                maximum = "-" if component is None else component.get("max_score")
+                cells.append(Paragraph(
+                    f"{escape(str(value if value is not None else '-'))} / {escape(str(maximum or '-'))}",
+                    styles["ResultCell"],
+                ))
+            position = f"{subject.get('class_position')} of {subject.get('class_size_with_result')}" if subject.get("class_position") else "-"
+            cells.extend(Paragraph(escape(str(value)), styles["ResultCell"]) for value in (
+                f"{subject.get('total', '-')} / {subject.get('maximum', '-')}",
+                f"{subject.get('percentage', '-')}%", subject.get("grade", "-"), position,
+                subject.get("highest_total") or "-", subject.get("lowest_total") or "-",
+                subject.get("grade_description", "-"),
+            ))
+            wrapped_data.append(cells)
+    else:
+        headers = ["Subject", "Assessment breakdown / subject teacher", "Total", "Average", "Grade", "Position", "Remark", "High / low"]
+        wrapped_data = [[Paragraph(escape(value), styles["ResultHeader"]) for value in headers]]
+        for subject in subject_rows:
+            components = subject.get("components", [])
+            component_lines = [
+                f"{escape(str(component.get('name') or 'Assessment'))}: "
+                f"{escape(str(component.get('score') if component.get('score') is not None else '-'))} / "
+                f"{escape(str(component.get('max_score') or '-'))}"
+                for component in components
+            ]
+            if subject.get("teacher_name"):
+                teacher_line = f"Teacher: {escape(str(subject['teacher_name']))}"
+                if subject.get("teacher_qualification"):
+                    teacher_line += f" ({escape(str(subject['teacher_qualification']))})"
+                component_lines.append(f"<font color='#59675e'>{teacher_line}</font>")
+            breakdown = "<br/>".join(component_lines) or "No component detail"
+            high_low = f"{subject.get('highest_total') or '-'} / {subject.get('lowest_total') or '-'}"
+            position = f"{subject.get('class_position')} of {subject.get('class_size_with_result')}" if subject.get("class_position") else "-"
+            wrapped_data.append([
+                Paragraph(escape(str(subject.get("subject_name", ""))), styles["ResultCell"]),
+                Paragraph(breakdown, styles["ResultCell"]),
+                *[Paragraph(escape(str(value)), styles["ResultCell"]) for value in (
+                    f"{subject.get('total', '-')} / {subject.get('maximum', '-')}",
+                    f"{subject.get('percentage', '-')}%", subject.get("grade", "-"),
+                    position, subject.get("grade_description", "-"), high_low,
+                )],
             ])
-    if len(data) == 1:
-        data.append(["No approved results", "", "", "", "", "", ""])
-    wrapped_data = [
-        [Paragraph(escape(str(value)), styles["ResultHeader"]) for value in row]
-        if row_index == 0
-        else [
-            Paragraph(escape(str(value)), styles["ResultCell"]) if column_index in (0, 1) else str(value)
-            for column_index, value in enumerate(row)
-        ]
-        for row_index, row in enumerate(data)
-    ]
-    result_table = Table(wrapped_data, repeatRows=1, colWidths=[31 * mm, 42 * mm, 19 * mm, 20 * mm, 23 * mm, 18 * mm, 18 * mm])
-    result_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(primary)), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 7.5), ("LEADING", (0, 0), (-1, -1), 9), ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#c8d6ca")), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f6f9f6")]), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (2, 1), (-1, -1), "CENTER"), ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
+        column_widths = [31 * mm, 48 * mm, 22 * mm, 17 * mm, 12 * mm, 17 * mm, 17 * mm, 22 * mm]
+    if not subject_rows:
+        wrapped_data.append([Paragraph("No approved results are available.", styles["ResultCell"])] + [""] * (len(headers) - 1))
+    result_table = Table(wrapped_data, repeatRows=1, colWidths=[width * mm for width in column_widths], hAlign="LEFT")
+    result_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(primary)),
+        ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#c8d6ca")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f6f9f6")]),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (2, 1), (-1, -1), "CENTER"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
     story.append(result_table)
-    story.append(Paragraph("Attendance (finalized registers only)", styles["SubheadingSmall"]))
+    story.append(Paragraph("ATTENDANCE", styles["SectionTitle"]))
     attendance = snapshot.get("attendance", {})
-    attendance_row = [["Present", "Absent", "Late", "Excused", "Recorded days", "Attendance %"], [attendance.get("present", 0), attendance.get("absent", 0), attendance.get("late", 0), attendance.get("excused", 0), attendance.get("register_days_with_record", 0), attendance.get("attendance_percentage") or "Not available"]]
-    story.append(Table(attendance_row, repeatRows=1, colWidths=[25 * mm, 25 * mm, 25 * mm, 25 * mm, 35 * mm, 41 * mm], style=TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef4ef")), ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#c8d6ca")), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 8), ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)])))
-    story.append(Paragraph("Missing attendance registers are excluded; they are not counted as absences.", styles["SmallBody"]))
+    attendance_row = [["Present", "Absent", "Late", "Excused", "Days recorded", "Attendance"], [attendance.get("present", 0), attendance.get("absent", 0), attendance.get("late", 0), attendance.get("excused", 0), attendance.get("register_days_with_record", 0), f"{attendance['attendance_percentage']}%" if attendance.get("attendance_percentage") is not None else "N/A"]]
+    attendance_table = Table(attendance_row, repeatRows=1, colWidths=[27 * mm, 27 * mm, 27 * mm, 27 * mm, 39 * mm, 39 * mm], hAlign="LEFT")
+    attendance_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), pale), ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#c8d6ca")), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 7), ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    story.extend([attendance_table, Paragraph("Based on finalized registers only; missing registers are not counted as absences.", styles["SchoolMeta"])])
+
     remarks = snapshot.get("remarks", {})
-    story.append(Paragraph("Remarks", styles["SubheadingSmall"]))
-    for label, key in (("Teacher", "teacher"), ("Head teacher", "head_teacher"), ("Conduct", "conduct"), ("Effort", "effort")):
-        story.append(Paragraph(f"<b>{label}:</b> {escape(remarks.get(key) or '-')}", styles["SmallBody"]))
+    story.append(Paragraph("TEACHER AND SCHOOL REMARKS", styles["SectionTitle"]))
+    remark_rows = [
+        [para("Class teacher", "MetaLabel"), para(remarks.get("teacher") or "No teacher remark recorded."), para("Principal / head teacher", "MetaLabel"), para(remarks.get("head_teacher") or "No principal remark recorded.")],
+        [para("Conduct", "MetaLabel"), para(remarks.get("conduct") or "Not recorded"), para("Effort", "MetaLabel"), para(remarks.get("effort") or "Not recorded")],
+    ]
+    remarks_table = Table(remark_rows, colWidths=[25 * mm, 67 * mm, 27 * mm, 68 * mm], hAlign="LEFT")
+    remarks_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (0, -1), pale), ("BACKGROUND", (2, 0), (2, -1), pale), ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#c8d6ca")), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
+    story.append(remarks_table)
+
     signatures = snapshot.get("signatures", {})
-    story.append(Spacer(1, 10 * mm))
+    story.append(Spacer(1, 4 * mm))
     principal_sign = ""
     signature_path = school.get("principal_signature_path")
     if revision.status == ReportCardRevision.Status.FINALIZED and signature_path:
         try:
             with default_storage.open(signature_path, "rb") as signature_file:
                 principal_sign = Image(BytesIO(signature_file.read()), width=42 * mm, height=14 * mm, kind="proportional")
-        except (OSError, ValueError):
+        except Exception:
             principal_sign = ""
     signature_table = Table([
-        [f"Class teacher: {signatures.get('class_teacher') or '________________'}", f"Principal: {signatures.get('head_teacher') or '________________'}"],
-        ["", principal_sign],
-    ], colWidths=[86 * mm, 86 * mm], style=TableStyle([("LINEBELOW", (0, 1), (0, 1), .6, colors.grey), ("LINEBELOW", (1, 1), (1, 1), .6, colors.grey), ("VALIGN", (0, 0), (-1, -1), "BOTTOM"), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5), ("FONTSIZE", (0, 0), (-1, -1), 8)]))
+        [para("CLASS TEACHER", "MetaLabel"), para("PRINCIPAL", "MetaLabel")],
+        [para(signatures.get("class_teacher") or ""), para(signatures.get("head_teacher") or "")],
+        ["____________________________", principal_sign or "____________________________"],
+        [para("Date: ____________________", "MetaLabel"), para("Date: ____________________", "MetaLabel")],
+    ], colWidths=[93 * mm, 93 * mm], hAlign="LEFT")
+    signature_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), pale), ("LINEBELOW", (0, 2), (-1, 2), .6, colors.grey), ("VALIGN", (0, 0), (-1, -1), "BOTTOM"), ("ALIGN", (0, 0), (-1, -1), "LEFT"), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3), ("FONTSIZE", (0, 0), (-1, -1), 7)]))
     story.append(signature_table)
     if revision.status != ReportCardRevision.Status.FINALIZED:
         story.append(Spacer(1, 5 * mm))
         story.append(Paragraph(f"{revision.status.upper()} - NOT AN OFFICIAL FINALIZED REPORT CARD", ParagraphStyle(name="DraftNotice", parent=styles["BodyText"], alignment=TA_CENTER, textColor=colors.HexColor("#9b3f2e"), fontName="Helvetica-Bold", fontSize=9)))
-    doc.build(story)
+
+    def branded_footer(canvas, document):
+        canvas.saveState()
+        canvas.setStrokeColor(colors.HexColor("#d5dfd7"))
+        canvas.setLineWidth(.5)
+        canvas.line(document.leftMargin, 13 * mm, A4[0] - document.rightMargin, 13 * mm)
+        canvas.setFillColor(muted)
+        canvas.setFont("Helvetica", 7)
+        canvas.drawCentredString(A4[0] / 2, 8.5 * mm, "Powered by EDUstacked  |  edustackedng@gmail.com")
+        canvas.drawRightString(A4[0] - document.rightMargin, 8.5 * mm, f"Page {document.page}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=branded_footer, onLaterPages=branded_footer)
     return output.getvalue()

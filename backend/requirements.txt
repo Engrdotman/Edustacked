@@ -8,3 +8,4 @@ Pillow>=11,<13
 reportlab>=4.2,<5
 gunicorn>=23.0,<24
 whitenoise>=6.8,<7
+sendgrid>=6.11,<7

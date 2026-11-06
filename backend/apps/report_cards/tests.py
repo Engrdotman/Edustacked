@@ -75,13 +75,20 @@ class ReportCardApiTests(TestCase):
         register = AttendanceRegister.objects.create(school=self.school, academic_session=self.session, term=self.term, class_level=self.level, class_arm=self.arm, attendance_date=date(2026, 10, 5), status=AttendanceRegister.Status.FINALIZED, created_by=self.admin, finalized_by=self.admin)
         AttendanceRecord.objects.create(school=self.school, register=register, student=self.student, enrollment=self.enrollment, status=AttendanceRecord.Status.LATE, recorded_by=self.admin, last_modified_by=self.admin)
         AttendanceRegister.objects.create(school=self.school, academic_session=self.session, term=self.term, class_level=self.level, class_arm=self.arm, attendance_date=date(2026, 10, 6), status=AttendanceRegister.Status.DRAFT, created_by=self.admin)
+        AssessmentPlan.objects.create(school=self.school, academic_session=self.session, term=self.term, class_level=self.level, class_arm=self.arm, subject=self.subject, grading_scale=self.scale, name="Unassessed alternate plan", grading_scale_snapshot=self.scale_snapshot, status=AssessmentPlan.Status.PUBLISHED, created_by=self.admin)
         card = self.generate()
         snapshot = card["current"]["snapshot"]
         self.assertEqual(snapshot["subjects"][0]["total"], "85.50")
         self.assertEqual(snapshot["subjects"][0]["grade"], "A")
         self.assertEqual(snapshot["attendance"]["late"], 1)
         self.assertEqual(snapshot["attendance"]["register_days_with_record"], 1)
-        self.assertIsNone(snapshot["overall"])
+        self.assertEqual(snapshot["subjects"][0]["class_position"], 1)
+        self.assertEqual(snapshot["subjects"][0]["highest_total"], "85.50")
+        self.assertEqual(snapshot["subjects"][0]["lowest_total"], "85.50")
+        self.assertEqual(snapshot["subjects"][0]["teacher_name"], "Tola Teacher")
+        self.assertEqual(snapshot["overall"]["subjects_taken"], 1)
+        self.assertEqual(snapshot["overall"]["average_percentage"], "85.50")
+        self.assertEqual(snapshot["overall"]["class_position"], 1)
 
     def test_unapproved_results_block_review_and_bulk_generation_reports_issues(self):
         AssessmentResult.objects.filter(pk=self.result.pk).update(status=AssessmentResult.Status.DRAFT)

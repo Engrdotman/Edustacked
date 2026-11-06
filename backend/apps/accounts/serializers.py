@@ -183,6 +183,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 class SchoolMembershipSerializer(serializers.ModelSerializer):
     school_id = serializers.IntegerField(source="school.pk", read_only=True)
+    account_id = serializers.IntegerField(source="user_id", read_only=True)
     school_name = serializers.CharField(source="school.name", read_only=True)
     school_slug = serializers.CharField(source="school.slug", read_only=True)
     school_verification_status = serializers.CharField(source="school.verification_status", read_only=True)
@@ -198,6 +199,7 @@ class SchoolMembershipSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "school_id",
+            "account_id",
             "school_name",
             "school_slug",
             "school_verification_status",
