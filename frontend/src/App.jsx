@@ -60,6 +60,9 @@ function AppRoutes() {
   if (pathname === '/reset-password') {
     return <PasswordResetPage navigate={navigate} />
   }
+  if ((pathname === '/app' || pathname.startsWith('/app/')) && !loading && !user) {
+    return <LoginPage navigate={navigate} sessionRequired />
+  }
   if (pathname === '/denied') {
     return <AccessDeniedPage navigate={navigate} signedIn={Boolean(user)} />
   }

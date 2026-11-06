@@ -1,4 +1,7 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+// Production uses the Vercel same-origin proxy so mobile browsers keep the
+// HttpOnly refresh cookie as a first-party cookie. Local development may still
+// point at a separately configured API.
+const API_BASE_URL = (import.meta.env.PROD ? '/api' : (import.meta.env.VITE_API_BASE_URL || '/api')).replace(/\/$/, '')
 const API_VERSION = 'v1'
 
 let accessToken = null

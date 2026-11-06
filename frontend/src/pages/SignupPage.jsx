@@ -20,7 +20,13 @@ export default function SignupPage({ navigate }) {
     } finally { setWorking(false) }
   }
 
-  return <main className="auth-page"><header className="auth-topbar"><BrandMark /><button className="text-button" type="button" onClick={() => navigate('/login')}>Sign in</button></header>
+  return <main className="auth-page auth-page-split auth-page-signup">
+    <section className="auth-visual" aria-label="EDUstacked school management">
+      <BrandMark />
+      <div className="auth-visual-copy"><p>YOUR SCHOOL, WELL ORGANIZED</p><h2>Make room for better learning.</h2><span>One thoughtful workspace for your school community, from admission through each term’s report.</span></div>
+      <small>EDUstacked · edustackedng@gmail.com</small>
+    </section>
+    <div className="auth-panel auth-panel-signup"><header className="auth-topbar"><BrandMark /><button className="text-button" type="button" onClick={() => navigate('/login')}>Sign in</button></header>
     <section className="auth-card signup-card" aria-labelledby="signup-title">
       <p className="eyebrow">EDUstacked · SCHOOL ONBOARDING</p><h1 id="signup-title">Set up your school.</h1>
       <p className="auth-intro">Create your school workspace. We’ll email you a verification link before you can sign in.</p>
@@ -44,6 +50,6 @@ export default function SignupPage({ navigate }) {
         <button className="primary-button" type="submit" disabled={working || values.password !== values.password_confirmation}>{working ? 'Creating workspace…' : 'Register your school'}</button>
       </form>
       <button className="text-button back-link" type="button" onClick={() => navigate('/')}>Back to home</button>
-    </section>
+    </section></div>
   </main>
 }

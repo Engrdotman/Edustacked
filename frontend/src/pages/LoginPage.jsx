@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { ApiError } from '../services/api.js'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { resendSchoolEmailVerification } from '../services/api.js'
+import BrandMark from '../components/BrandMark.jsx'
 import PasswordField from '../components/PasswordField.jsx'
 
-export default function LoginPage({ navigate }) {
+export default function LoginPage({ navigate, sessionRequired = false }) {
   const { signIn } = useAuth()
   const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get('email') || '')
   const [password, setPassword] = useState('')
@@ -35,11 +36,16 @@ export default function LoginPage({ navigate }) {
   }
 
   return (
-    <main className="auth-page">
-      <section className="auth-card" aria-labelledby="login-title">
-        <p className="eyebrow">EDUstacked</p>
+    <main className="auth-page auth-page-split auth-page-login">
+      <section className="auth-visual" aria-label="EDUstacked school management">
+        <BrandMark />
+        <div className="auth-visual-copy"><p>EDUstacked · SCHOOL MANAGEMENT</p><h2>More clarity for every school day.</h2><span>Bring student records, staff, attendance, academics, and reports into one calm, connected workspace.</span></div>
+        <small>Built for schools · edustackedng@gmail.com</small>
+      </section>
+      <div className="auth-panel"><section className="auth-card auth-card-login" aria-labelledby="login-title">
+        <p className="eyebrow">SECURE SCHOOL ACCESS</p>
         <h1 id="login-title">Welcome back.</h1>
-        <p className="auth-intro">Sign in with your EDUstacked administrator account.</p>
+        <p className="auth-intro">{sessionRequired ? 'Your session needs a fresh sign-in. Enter your account details to continue.' : 'Sign in to continue to your EDUstacked school workspace.'}</p>
         {new URLSearchParams(window.location.search).get('registered') === '1' && <p className="form-success" role="status">Your school account has been created. Check your email and verify it to continue.</p>}
         {new URLSearchParams(window.location.search).get('verify') === '1' && <p className="form-success" role="status">Enter your email address and request a fresh verification link.</p>}
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -59,7 +65,7 @@ export default function LoginPage({ navigate }) {
         </button>
         <button className="text-button auth-link" type="button" onClick={() => navigate('/signup')}>Register a school</button>
         <button className="text-button back-link" type="button" onClick={() => navigate('/')}>Back to home</button>
-      </section>
+      </section></div>
     </main>
   )
 }

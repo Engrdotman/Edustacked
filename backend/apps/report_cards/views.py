@@ -169,7 +169,7 @@ class ReportCardGenerateClassView(ReportCardViewMixin, APIView):
 
 
 class ReportCardDetailView(ReportCardViewMixin, APIView):
-    report_permissions = {"GET": "report_cards.view", "PATCH": "report_cards.review"}
+    report_permissions = {"GET": "report_cards.view", "PATCH": "report_cards.update"}
 
     def get(self, request, pk, **kwargs):
         return Response(self.serialized(self.get_card(pk)))
@@ -182,6 +182,12 @@ class ReportCardDetailView(ReportCardViewMixin, APIView):
             raise serializers.ValidationError({"status": "Return the report card for correction before changing remarks."})
         serializer = ReportCardRemarksSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        if self.role() == "teacher":
+            teacher_fields = {
+                "teacher", "conduct", "effort", "class_teacher_signature_name", "ratings",
+            }
+            if set(serializer.validated_data) - teacher_fields:
+                raise PermissionDenied("Teachers can update teacher remarks, student traits, and their own sign-off only.")
         revision = card.revisions.get(revision_number=card.current_revision)
         snapshot = dict(revision.snapshot)
         for key in ("teacher", "head_teacher", "conduct", "effort"):

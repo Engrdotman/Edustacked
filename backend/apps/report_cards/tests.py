@@ -164,6 +164,33 @@ class ReportCardApiTests(TestCase):
         denied_pdf = self.api("get", f"/api/v1/report-cards/{card['id']}/pdf/")
         self.assertEqual(denied_pdf.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_assigned_teacher_can_save_student_traits_but_not_principal_fields_or_review(self):
+        card = self.generate()
+        self.client.force_authenticate(self.teacher_user)
+
+        saved = self.api("patch", f"/api/v1/report-cards/{card['id']}/", {
+            "teacher": "Shows steady progress.",
+            "conduct": "Respectful",
+            "effort": "Consistent",
+            "class_teacher_signature_name": "Tola Teacher",
+            "ratings": {
+                "psychomotor": {"Handwriting": 5},
+                "behaviour": {"Punctuality": 4},
+                "affective": {"Co-operation": 5},
+            },
+        })
+        self.assertEqual(saved.status_code, status.HTTP_200_OK, saved.data)
+        snapshot = saved.data["current"]["snapshot"]
+        self.assertEqual(snapshot["ratings"]["psychomotor"]["Handwriting"], 5)
+        self.assertEqual(snapshot["ratings"]["behaviour"]["Punctuality"], 4)
+        self.assertEqual(snapshot["ratings"]["affective"]["Co-operation"], 5)
+        self.assertEqual(snapshot["remarks"]["teacher"], "Shows steady progress.")
+
+        denied_head_teacher = self.api("patch", f"/api/v1/report-cards/{card['id']}/", {"head_teacher": "Principal only."})
+        self.assertEqual(denied_head_teacher.status_code, status.HTTP_403_FORBIDDEN)
+        denied_review = self.api("post", f"/api/v1/report-cards/{card['id']}/review/", {})
+        self.assertEqual(denied_review.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_generation_prevents_duplicate_cards_and_source_changes_require_regeneration(self):
         card = self.generate()
         again = self.api("post", "/api/v1/report-cards/generate/", {"enrollment": self.enrollment.pk, "term": self.term.pk})
