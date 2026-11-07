@@ -86,7 +86,7 @@ async function send(path, { method = 'GET', body, headers = {}, signal, response
   const data = responseType === 'blob' && response.ok
     ? await response.blob()
     : await response.json().catch(() => null)
-  return { response, data }
+  return { response, data, contentType: response.headers.get('content-type') || '' }
 }
 
 export async function getCsrfToken() {
@@ -100,7 +100,7 @@ export async function getCsrfToken() {
     }
     await new Promise((resolve) => window.setTimeout(resolve, 900))
   }
-  const { response, data } = result
+  const { response, data, contentType } = result
   if (!response.ok) {
     const message = response.status >= 500
       ? 'Sign-in is temporarily unavailable. Please wait a moment and try again.'
@@ -110,7 +110,10 @@ export async function getCsrfToken() {
     throw new ApiError(message, response.status)
   }
   if (!data?.csrfToken) {
-    throw new ApiError('The sign-in service sent an unexpected response. Refresh this page and try again. If it continues, contact EDUstacked support (AUTH-RESPONSE).', response.status)
+    const isHtml = contentType.includes('text/html')
+    throw new ApiError(isHtml
+      ? 'The sign-in page could not reach the authentication service. Please try again later or contact EDUstacked support (AUTH-ROUTE).'
+      : 'The authentication service returned an unexpected response. Please try again later or contact EDUstacked support (AUTH-RESPONSE).', response.status)
   }
   csrfToken = data.csrfToken
   return csrfToken
