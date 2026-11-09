@@ -61,7 +61,6 @@ export default function AuthenticatedHome({ navigate }) {
   return (
     <main className="app-page">
       <header className="app-topbar"><BrandMark navigate={navigate} /><button className="text-button" type="button" onClick={handleSignOut} disabled={working}>Sign out</button></header>
-      </header>
       <section className="app-content">
         <p className="eyebrow"><span className="status-dot status-dot-online" /> AUTHENTICATED SESSION</p>
         <h1 className="app-heading">Good to have<br /><em>you here.</em></h1>
