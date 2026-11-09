@@ -210,32 +210,31 @@ AUTH_REFRESH_COOKIE_HTTPONLY = True
 AUTH_REFRESH_COOKIE_SAMESITE = os.getenv("AUTH_REFRESH_COOKIE_SAMESITE", "Lax")
 AUTH_REFRESH_COOKIE_MAX_AGE = int(os.getenv("JWT_REFRESH_TOKEN_DAYS", "7")) * 24 * 60 * 60
 
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "").strip()
+SENDGRID_SANDBOX_MODE = os.getenv("SENDGRID_SANDBOX_MODE", "false").lower() in {"1", "true", "yes"}
 EMAIL_BACKEND = os.getenv(
     "EMAIL_BACKEND",
     "django.core.mail.backends.locmem.EmailBackend"
     if DEBUG
-    else "django.core.mail.backends.smtp.EmailBackend",
-)
+    else "apps.core.sendgrid_backend.SendgridBackend",
+).strip()
+# Accept the earlier documented module path and map it to our in-project backend.
+if EMAIL_BACKEND == "sendgrid_backend.SendgridBackend":
+    EMAIL_BACKEND = "apps.core.sendgrid_backend.SendgridBackend"
 
-#sendgrid config
-EMAIL_BACKEND = "sendgrid_backend.SendgridBackend"
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
-SENDGRID_SANDBOX_MODE_IN_DEBUG = False
-
-# Validation
-if not DEBUG and not SENDGRID_API_KEY:
-    raise ImproperlyConfigured("SENDGRID_API_KEY must be configured in production.")
-
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "EDUstacked <noreply@edustackedng@gmail.com>")
-
-
+EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "25"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "EDUstacked <edustackedng@gmail.com>")
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "false").lower() in {"1", "true", "yes"}
 EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "false").lower() in {"1", "true", "yes"}
 if EMAIL_USE_TLS and EMAIL_USE_SSL:
     raise ImproperlyConfigured("Choose either EMAIL_USE_TLS or EMAIL_USE_SSL, not both.")
-if not DEBUG and not EMAIL_HOST_USER:
+if EMAIL_BACKEND == "apps.core.sendgrid_backend.SendgridBackend" and not SENDGRID_API_KEY:
+    raise ImproperlyConfigured("SENDGRID_API_KEY must be configured when using the SendGrid email backend.")
+if not DEBUG and EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend" and not EMAIL_HOST_USER:
     raise ImproperlyConfigured("EMAIL_HOST_USER must be configured in production (non-DEBUG) mode.")
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "EDUstacked <edustackedng@gmail.com>")
 PASSWORD_RESET_TIMEOUT = int(os.getenv("PASSWORD_RESET_TIMEOUT", "3600"))
 EMAIL_VERIFICATION_TIMEOUT = int(os.getenv("EMAIL_VERIFICATION_TIMEOUT", "86400"))
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173").rstrip("/")
