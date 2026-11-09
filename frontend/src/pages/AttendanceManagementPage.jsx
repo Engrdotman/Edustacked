@@ -181,7 +181,7 @@ export default function AttendanceManagementPage({ navigate }) {
   const editable = register && register.status !== 'finalized' && (register.status === 'draft' || canManage)
   const allMarked = roster.length > 0 && roster.every((item) => Boolean(item.status))
 
-  return <main className="app-page"><header className="app-topbar"><BrandMark /><button className="text-button" onClick={() => navigate('/app')}>Back to home</button></header>
+  return <main className="app-page"><header className="app-topbar"><BrandMark navigate={navigate} /><button className="text-button" onClick={() => navigate('/app')}>Back to home</button></header>
     <section className="app-content attendance-page"><p className="eyebrow">{selectedSchool?.school_name} · ATTENDANCE</p><h1 className="app-heading">Student <em>attendance</em></h1><p className="intro">Create a dated class register, record each eligible student, and keep corrections auditable.</p>
       {error && <p className="form-error" role="alert">{error}</p>}{message && <p className="form-success" role="status">{message}</p>}{loading && <p className="loading-message" role="status">Loading attendance…</p>}
       <section className="attendance-panel"><div className="attendance-panel-heading"><div><p className="panel-kicker">CLASS REGISTER</p><h2>Take attendance</h2></div>{register && <span className={`attendance-state attendance-state-${register.status}`}>{register.status} · version {register.version}</span>}</div>

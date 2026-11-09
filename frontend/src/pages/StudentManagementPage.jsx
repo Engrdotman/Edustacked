@@ -157,7 +157,7 @@ export default function StudentManagementPage({ navigate }) {
     } catch (e) { setError(e.message || 'Could not activate enrollment.') }
   }
 
-  return <main className="app-page"><header className="app-topbar"><BrandMark /><button className="text-button" onClick={() => navigate('/app')}>Back to home</button></header>
+  return <main className="app-page"><header className="app-topbar"><BrandMark navigate={navigate} /><button className="text-button" onClick={() => navigate('/app')}>Back to home</button></header>
     <section className="app-content student-page"><p className="eyebrow">{selectedSchool?.school_name} · STUDENTS</p><h1 className="app-heading">Student <em>management</em></h1>
       <p className="intro">Admissions, guardian contacts, and enrollment history for this school.</p>
       {error && <p className="form-error" role="alert">{error}</p>}{message && <p className="success-message" role="status">{message}</p>}

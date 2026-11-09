@@ -207,10 +207,7 @@ AUTH_REFRESH_COOKIE_PATH = "/api/v1/auth/"
 AUTH_REFRESH_COOKIE_DOMAIN = os.getenv("AUTH_REFRESH_COOKIE_DOMAIN") or None
 AUTH_REFRESH_COOKIE_SECURE = not DEBUG
 AUTH_REFRESH_COOKIE_HTTPONLY = True
-AUTH_REFRESH_COOKIE_SAMESITE = os.getenv(
-    "AUTH_REFRESH_COOKIE_SAMESITE", "Lax" if DEBUG else "None"
-)
-CSRF_COOKIE_SAMESITE = os.getenv("CSRF_COOKIE_SAMESITE", "Lax" if DEBUG else "None")
+AUTH_REFRESH_COOKIE_SAMESITE = os.getenv("AUTH_REFRESH_COOKIE_SAMESITE", "Lax")
 AUTH_REFRESH_COOKIE_MAX_AGE = int(os.getenv("JWT_REFRESH_TOKEN_DAYS", "7")) * 24 * 60 * 60
 
 EMAIL_BACKEND = os.getenv(
@@ -219,21 +216,24 @@ EMAIL_BACKEND = os.getenv(
     if DEBUG
     else "django.core.mail.backends.smtp.EmailBackend",
 )
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "").strip()
-SENDGRID_SANDBOX_MODE = os.getenv("SENDGRID_SANDBOX_MODE", "false").lower() in {"1", "true", "yes"}
-EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
-EMAIL_PORT = int(os.getenv("EMAIL_PORT", "25"))
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+
+#sendgrid config
+EMAIL_BACKEND = "sendgrid_backend.SendgridBackend"
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
+SENDGRID_SANDBOX_MODE_IN_DEBUG = False
+
+# Validation
+if not DEBUG and not SENDGRID_API_KEY:
+    raise ImproperlyConfigured("SENDGRID_API_KEY must be configured in production.")
+
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "EDUstacked <noreply@edustackedng@gmail.com>")
+
+
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "false").lower() in {"1", "true", "yes"}
 EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "false").lower() in {"1", "true", "yes"}
-IS_SENDGRID_BACKEND = EMAIL_BACKEND == "apps.core.sendgrid_backend.SendgridBackend"
-IS_SMTP_BACKEND = EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend"
-if IS_SMTP_BACKEND and EMAIL_USE_TLS and EMAIL_USE_SSL:
+if EMAIL_USE_TLS and EMAIL_USE_SSL:
     raise ImproperlyConfigured("Choose either EMAIL_USE_TLS or EMAIL_USE_SSL, not both.")
-if IS_SENDGRID_BACKEND and not SENDGRID_API_KEY:
-    raise ImproperlyConfigured("SENDGRID_API_KEY must be configured when using the SendGrid email backend.")
-if not DEBUG and IS_SMTP_BACKEND and not EMAIL_HOST_USER:
+if not DEBUG and not EMAIL_HOST_USER:
     raise ImproperlyConfigured("EMAIL_HOST_USER must be configured in production (non-DEBUG) mode.")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "EDUstacked <edustackedng@gmail.com>")
 PASSWORD_RESET_TIMEOUT = int(os.getenv("PASSWORD_RESET_TIMEOUT", "3600"))
@@ -258,15 +258,13 @@ LOGGING = {
 }
 
 if DEBUG:
-    local_dev_origins = ("http://localhost:5173", "http://127.0.0.1:5173")
-    CORS_ALLOWED_ORIGINS = list(dict.fromkeys(
-        [
-            origin.strip()
-            for origin in os.getenv("DJANGO_CORS_ALLOWED_ORIGINS", "").split(",")
-            if origin.strip()
-        ]
-        + list(local_dev_origins)
-    ))
+    CORS_ALLOWED_ORIGINS = [
+        origin.strip()
+        for origin in os.getenv(
+            "DJANGO_CORS_ALLOWED_ORIGINS", "http://localhost:5173"
+        ).split(",")
+        if origin.strip()
+    ]
     CORS_ALLOW_CREDENTIALS = True
     CORS_ALLOW_HEADERS = [
         "accept",
@@ -280,14 +278,13 @@ if DEBUG:
         "x-requested-with",
         "x-school-id",
     ]
-    CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(
-        [
-            origin.strip()
-            for origin in os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
-            if origin.strip()
-        ]
-        + list(local_dev_origins)
-    ))
+    CSRF_TRUSTED_ORIGINS = [
+        origin.strip()
+        for origin in os.getenv(
+            "DJANGO_CSRF_TRUSTED_ORIGINS", "http://localhost:5173"
+        ).split(",")
+        if origin.strip()
+    ]
 else:
     CORS_ALLOWED_ORIGINS = [
         origin.strip()

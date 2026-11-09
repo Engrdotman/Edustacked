@@ -142,7 +142,7 @@ export default function ReportCardsPage({ navigate }) {
   ))]
   const currentCardRow = cards.find((item) => String(item.id) === String(card?.id))
 
-  return <main className="app-page"><header className="app-topbar"><BrandMark /><button className="text-button" onClick={() => navigate('/app')}>Back to home</button></header>
+  return <main className="app-page"><header className="app-topbar"><BrandMark navigate={navigate} /><button className="text-button" onClick={() => navigate('/app')}>Back to home</button></header>
     <section className="app-content report-cards-page"><p className="eyebrow">{selectedSchool?.school_name} · REPORT CARDS</p><h1 className="app-heading">Report <em>cards</em></h1><p className="intro">Generate report-card drafts from approved results, review them, and publish a preserved official version.</p>
       {error && <p className="form-error" role="alert">{error}</p>}{success && <p className="form-success" role="status">{success}</p>}{loading && <p className="loading-message" role="status">Loading report cards…</p>}
       {canEditDraft && <div className="report-card-rating-help"><strong>Psychomotor, behaviour, and affective ratings</strong><span>{canGenerate ? 'Generate or select a draft report card, then use “Enter student traits” to add ratings and remarks before review.' : 'Select a draft report card assigned to your class to add ratings and teacher remarks. A school administrator handles review and publishing.'}</span></div>}

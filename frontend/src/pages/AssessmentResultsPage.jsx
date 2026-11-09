@@ -151,7 +151,7 @@ export default function AssessmentResultsPage({ navigate }) {
     }, `Result ${action === 'submit' ? 'submitted' : action === 'approve' ? 'approved' : 'reopened'}.`)
   }
 
-  return <main className="app-page"><header className="app-topbar"><BrandMark /><button className="text-button" onClick={() => navigate('/app')}>Back to home</button></header>
+  return <main className="app-page"><header className="app-topbar"><BrandMark navigate={navigate} /><button className="text-button" onClick={() => navigate('/app')}>Back to home</button></header>
     <section className="app-content assessment-page"><p className="eyebrow">{selectedSchool?.school_name} · ASSESSMENTS</p><h1 className="app-heading">Assessment <em>&amp; results</em></h1><p className="intro">Set a school-specific assessment plan, enter scores, then submit and approve each student's result. Name components “1st CA”, “2nd CA”, and “Examination” to show them as separate columns on report cards.</p>
       {error && <p className="form-error" role="alert">{error}</p>}{success && <p className="form-success" role="status">{success}</p>}{loading && <p className="loading-message" role="status">Loading assessments…</p>}
       <section className="assessment-panel"><div className="assessment-panel-heading"><div><p className="panel-kicker">RESULT WORKSPACE</p><h2>Choose an assessment plan</h2></div><button className="secondary-button" type="button" onClick={() => reloadSelected()} disabled={saving || !plan}>Refresh</button></div>

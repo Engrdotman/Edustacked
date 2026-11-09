@@ -101,7 +101,7 @@ export default function ParentPortalPage({ navigate }) {
   if (loading) return <main className="auth-page"><p className="loading-message" role="status">Loading your parent portal…</p></main>
 
   return <main className="app-page parent-portal-page">
-    <header className="app-topbar"><BrandMark /><div className="parent-header-actions"><span>{profile?.first_name || user?.first_name || profile?.email}</span><button className="text-button" onClick={logOut}>Sign out</button></div></header>
+    <header className="app-topbar"><BrandMark navigate={navigate} /><div className="parent-header-actions"><span>{profile?.first_name || user?.first_name || profile?.email}</span><button className="text-button" onClick={logOut}>Sign out</button></div></header>
     <section className="app-content parent-content">
       <p className="eyebrow">EDUstacked · PARENT / GUARDIAN PORTAL</p>
       <h1 className="app-heading">Your family’s<br /><em>school updates.</em></h1>

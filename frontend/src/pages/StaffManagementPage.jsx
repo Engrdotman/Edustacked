@@ -183,7 +183,7 @@ export default function StaffManagementPage({ navigate }) {
     } catch (e) { setError(e.message || `Could not ${action.toLowerCase()} assignment.`) }
   }
 
-  return <main className="app-page"><header className="app-topbar"><BrandMark /><button className="text-button" onClick={() => navigate('/app')}>Back to home</button></header>
+  return <main className="app-page"><header className="app-topbar"><BrandMark navigate={navigate} /><button className="text-button" onClick={() => navigate('/app')}>Back to home</button></header>
     <section className="app-content student-page"><p className="eyebrow">{selectedSchool?.school_name} · STAFF</p><h1 className="app-heading">Staff &amp; <em>teachers</em></h1><p className="intro">Employment profiles are separate from account access. Teaching responsibilities are recorded by session, class, arm, and subject.</p>
       {error && <p className="form-error" role="alert">{error}</p>}{message && <p className="success-message" role="status">{message}</p>}
       {!isTeacher && <div className="student-toolbar"><input aria-label="Search staff" placeholder="Search name, staff number, or job title" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && reload()} /><select aria-label="Filter staff by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="">All staff</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="suspended">Suspended</option><option value="former">Former</option></select>{canManage && <button className="primary-button" onClick={() => { setStaffForm(blankStaff); setEditingId(null); setShowStaffForm(!showStaffForm) }}>Add staff</button>}</div>}

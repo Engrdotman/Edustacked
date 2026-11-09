@@ -67,7 +67,7 @@ export default function BillingPage({ navigate }) {
   }
 
   return <main className="app-page">
-    <header className="app-topbar"><BrandMark /><button className="text-button" type="button" onClick={() => navigate('/app')}>Back to dashboard</button></header>
+    <header className="app-topbar"><BrandMark navigate={navigate} /><button className="text-button" type="button" onClick={() => navigate('/app')}>Back to dashboard</button></header>
     <section className="app-content billing-content">
       <p className="eyebrow">SCHOOL BILLING</p>
       <h1 className="app-heading">Report-card<br /><em>credits.</em></h1>

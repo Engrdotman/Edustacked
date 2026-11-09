@@ -235,7 +235,7 @@ export default function AcademicSetupPage({ navigate }) {
 
   return (
     <main className="app-page academic-page">
-      <header className="app-topbar"><BrandMark /><button className="text-button" type="button" onClick={() => navigate('/app')}>Back to workspace</button></header>
+      <header className="app-topbar"><BrandMark navigate={navigate} /><button className="text-button" type="button" onClick={() => navigate('/app')}>Back to workspace</button></header>
       <section className="app-content academic-content">
         <p className="eyebrow">{selectedSchool?.school_name || 'SELECTED SCHOOL'} · ACADEMIC SETUP</p>
         <h1 className="app-heading">Academic<br /><em>structure.</em></h1>

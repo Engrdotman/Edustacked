@@ -229,7 +229,7 @@ export default function SchoolProfilePage({ navigate }) {
   return (
     <main className="app-page profile-page">
       <header className="app-topbar">
-        <BrandMark />
+        <BrandMark navigate={navigate} />
         <button className="text-button" type="button" onClick={back}>Back to workspace</button>
       </header>
       <section className="app-content profile-content">

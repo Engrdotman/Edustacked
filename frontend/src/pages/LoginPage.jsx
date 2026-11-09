@@ -38,7 +38,7 @@ export default function LoginPage({ navigate, sessionRequired = false }) {
   return (
     <main className="auth-page auth-page-split auth-page-login">
       <section className="auth-visual" aria-label="EDUstacked school management">
-        <BrandMark />
+        <BrandMark navigate={navigate} />
         <div className="auth-visual-copy"><p>EDUstacked · SCHOOL MANAGEMENT</p><h2>More clarity for every school day.</h2><span>Bring student records, staff, attendance, academics, and reports into one calm, connected workspace.</span></div>
         <small>Built for schools · edustackedng@gmail.com</small>
       </section>
@@ -59,10 +59,14 @@ export default function LoginPage({ navigate, sessionRequired = false }) {
         </form>
         {notice && <p className="form-success" role="status">{notice}</p>}
         {(new URLSearchParams(window.location.search).get('registered') === '1' || new URLSearchParams(window.location.search).get('verify') === '1' || error.toLowerCase().includes('verify your email')) && <button className="text-button auth-link" type="button" onClick={resendVerification}>Resend verification email</button>}
-        <button className="text-button auth-link" type="button" onClick={() => navigate('/forgot-password')}>
+        <div className='auth-link-flex-spaceinbtw'>
+          
+        <button className="text-button auth-link" type="button" onClick={() => navigate('/signup')}>Register a school</button>
+   <button className="text-button auth-link" type="button" onClick={() => navigate('/forgot-password')}>
           Forgot your password?
         </button>
-        <button className="text-button auth-link" type="button" onClick={() => navigate('/signup')}>Register a school</button>
+        </div>
+   
         <button className="text-button back-link" type="button" onClick={() => navigate('/')}>Back to home</button>
       </section></div>
     </main>

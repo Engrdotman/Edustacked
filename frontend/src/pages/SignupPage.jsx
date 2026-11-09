@@ -24,7 +24,7 @@ export default function SignupPage({ navigate }) {
 
     <section className="auth-visual" aria-label="EDUstacked school management">
       <div className="sign-up-page-header">
-        <BrandMark />
+        <BrandMark navigate={navigate} />
         <button className="signin-text-button" type="button" onClick={() => navigate('/login')}>Sign in</button>
       </div>
       <div className="auth-visual-copy"><p>YOUR SCHOOL, WELL ORGANIZED</p><h2>Make room for better learning.</h2><span>One thoughtful workspace for your school community, from admission through each term’s report.</span></div>

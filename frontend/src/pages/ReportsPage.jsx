@@ -143,7 +143,7 @@ export default function ReportsPage({ navigate }) {
 
   return (
     <main className="app-page reports-page">
-      <header className="app-topbar"><BrandMark /><div className="reports-header-actions"><span>{selectedSchool?.school_name}</span><button className="text-button" type="button" onClick={handleSignOut}>Sign out</button></div></header>
+      <header className="app-topbar"><BrandMark navigate={navigate} /><div className="reports-header-actions"><span>{selectedSchool?.school_name}</span><button className="text-button" type="button" onClick={handleSignOut}>Sign out</button></div></header>
       <section className="reports-content">
         <p className="eyebrow"><span className="status-dot status-dot-online" /> SCHOOL REPORTS</p>
         <h1 className="reports-heading">Decisions with<br /><em>clear numbers.</em></h1>

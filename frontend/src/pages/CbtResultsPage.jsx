@@ -91,7 +91,7 @@ export default function CbtResultsPage({ navigate, resultId = '' }) {
   async function handleSignOut() { await signOut(); navigate('/') }
 
   return <main className="app-page">
-    <header className="app-topbar"><BrandMark /><nav className="page-actions" aria-label="Page actions"><button className="text-button" onClick={() => navigate('/app')}>Dashboard</button><button className="text-button" onClick={() => navigate('/app/cbt')}>CBT setup</button><button className="text-button" onClick={handleSignOut}>Sign out</button></nav></header>
+    <header className="app-topbar"><BrandMark navigate={navigate} /><nav className="page-actions" aria-label="Page actions"><button className="text-button" onClick={() => navigate('/app')}>Dashboard</button><button className="text-button" onClick={() => navigate('/app/cbt')}>CBT setup</button><button className="text-button" onClick={handleSignOut}>Sign out</button></nav></header>
     <section className="app-content cbt-results-content">
       <p className="eyebrow">{selectedSchool?.school_name} · OFFLINE CBT</p>
       <h1 className="app-heading">Examination <em>results</em></h1>

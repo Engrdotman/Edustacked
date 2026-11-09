@@ -299,7 +299,7 @@ export default function CbtManagementPage({ navigate }) {
   return (
     <main className="app-page">
       <header className="app-topbar">
-        <BrandMark />
+        <BrandMark navigate={navigate} />
         <nav className="page-actions" aria-label="Page actions">
           <button className="text-button" type="button" onClick={() => navigate('/app')}>Dashboard</button>
           <button className="text-button" type="button" onClick={handleSignOut}>Sign out</button>

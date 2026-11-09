@@ -1,6 +1,23 @@
-export default function BrandMark() {
+export default function BrandMark({ navigate, ...props }) {
+  const handleClick = (e) => {
+    if (navigate) {
+      e.preventDefault()
+      navigate('/')
+    }
+  }
+
+  const className = navigate ? 'brand brand-clickable' : 'brand'
+
   return (
-    <div className="brand" aria-label="EDUstacked">
+    <div 
+      className={className} 
+      aria-label="EDUstacked"
+      onClick={handleClick}
+      role={navigate ? 'button' : undefined}
+      tabIndex={navigate ? 0 : undefined}
+      onKeyDown={navigate ? (e) => e.key === 'Enter' && handleClick(e) : undefined}
+      {...props}
+    >
       <span className="brand-mark" aria-hidden="true">
         <span className="brand-letter-e">E</span>
         <span className="brand-letter-s">S</span>
