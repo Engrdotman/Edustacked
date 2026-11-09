@@ -1225,6 +1225,18 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
   .cbt-answer-review article { flex-direction:column; gap:8px; }
   .cbt-results-toolbar>* { flex:1; }
 }
+
+/* Keep school navigation reachable while the dashboard scrolls on phones. */
+@media(max-width:760px) {
+  .school-dashboard { min-width:0; }
+  .dashboard-sidebar { position:sticky; top:0; z-index:30; width:100%; gap:9px; padding:10px 12px 8px; border-bottom:1px solid rgba(255,255,255,.14); box-shadow:0 5px 16px rgba(21,47,32,.14); }
+  .dashboard-sidebar > .brand { flex:0 0 auto; }
+  .dashboard-sidebar nav { margin:0 -3px; padding:2px 3px 6px; }
+  .dashboard-nav { min-height:40px; padding:9px 12px; border-radius:9px; }
+  .dashboard-main { min-width:0; }
+  .dashboard-topbar { min-height:58px; }
+}
+
 @media print {
   .app-topbar,.cbt-results-toolbar,.cbt-results-filters,.cbt-correction-form,.cbt-results-table-panel>.cbt-actions { display:none !important; }
   .app-page,.cbt-results-content { background:#fff; max-width:none; padding:0; }
