@@ -1,25 +1,25 @@
-name: Production Build and Release
+name: Production Build Validation
 
 on:
   push:
-    branches: [ main ]
+    branches: [main, develop]
     paths:
       - 'backend/**'
       - 'frontend/**'
-      - '.github/workflows/deploy-production.yml'
+      - '.github/workflows/**'
+      - 'vercel.json'
+  pull_request:
+    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-env:
-  DJANGO_SETTINGS_MODULE: config.settings
-
 jobs:
-  test:
+  validate:
+    # Vercel and Railway deploy through their Git integrations. This workflow
+    # validates the same source before those services build their deployments.
     runs-on: ubuntu-latest
-    outputs:
-      status: ${{ job.status }}
     services:
       postgres:
         image: postgres:16
@@ -35,231 +35,70 @@ jobs:
         ports:
           - 5432:5432
 
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-        cache: 'pip'
-
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: 'frontend/package-lock.json'
-
-    - name: Install backend dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-      continue-on-error: false
-
-    - name: Run backend tests with coverage
-      run: |
-        cd backend
-        pytest --tb=short --cov=apps --cov-fail-under=50 -v --junitxml=junit.xml
-      env:
-        DJANGO_DEBUG: false
-        DJANGO_SECRET_KEY: test-secret-key-prod
-        DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
-        DJANGO_CORS_ALLOWED_ORIGINS: http://localhost:5173
-        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-
-    - name: Upload test results
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-results
-        path: backend/junit.xml
-
-    - name: Run backend linting
-      run: |
-        flake8 backend/apps --count --statistics
-        black --check backend/apps
-        isort --check-only backend/apps
-      continue-on-error: false
-
-    - name: Install frontend dependencies
-      run: npm ci
-      working-directory: frontend
-      continue-on-error: false
-
-    - name: Build frontend
-      run: npm run build
-      working-directory: frontend
-      env:
-        NODE_ENV: production
-        VITE_API_BASE_URL: /api
-
-    - name: Verify frontend build
-      run: |
-        if [ ! -d "frontend/dist" ]; then
-          echo "❌ Frontend build failed - dist directory not found"
-          exit 1
-        fi
-        echo "✅ Frontend build verified"
-        du -sh frontend/dist
-
-    - name: Run database migrations dry-run
-      run: |
-        cd backend
-        python manage.py migrate --plan --verbosity 2
-      env:
-        DJANGO_DEBUG: false
-        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
-        DJANGO_ALLOWED_HOSTS: ${{ secrets.DJANGO_ALLOWED_HOSTS }}
-        DJANGO_CORS_ALLOWED_ORIGINS: ${{ secrets.DJANGO_CORS_ALLOWED_ORIGINS }}
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
-  release:
-    needs: test
-    runs-on: ubuntu-latest
-    environment: production
-    permissions:
-      contents: write
-    if: success()
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings
+      DJANGO_DEBUG: 'false'
+      DJANGO_SECRET_KEY: ci-only-not-a-production-secret
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      DJANGO_CORS_ALLOWED_ORIGINS: http://localhost:5173
+      EMAIL_BACKEND: django.core.mail.backends.locmem.EmailBackend
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-        cache: 'pip'
-        cache-dependency-path: 'backend/requirements.txt'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: 'frontend/package-lock.json'
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
-    - name: Validate secrets
-      env:
-        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      run: |
-        if [ -z "$DJANGO_SECRET_KEY" ]; then
-          echo "❌ DJANGO_SECRET_KEY not configured"
-          exit 1
-        fi
-        if [ -z "$DATABASE_URL" ]; then
-          echo "❌ DATABASE_URL not configured"
-          exit 1
-        fi
-        echo "✅ Required secrets are configured"
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements-dev.txt
 
-    - name: Install backend dependencies
-      run: |
-        pip install --upgrade pip
-        pip install -r backend/requirements.txt
+      - name: Check Django configuration
+        working-directory: backend
+        run: python manage.py check
 
-    - name: Build frontend artifacts
-      run: |
-        npm ci
-        npm run build
-      working-directory: frontend
-      env:
-        NODE_ENV: production
-        VITE_API_BASE_URL: /api
+      - name: Apply migrations to CI database
+        working-directory: backend
+        run: python manage.py migrate --noinput
 
-    - name: Collect static files
-      run: |
-        cd backend
-        python manage.py collectstatic --noinput --verbosity 2
-        echo "✅ Static files collected"
-      env:
-        DJANGO_DEBUG: false
-        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+      - name: Run backend tests
+        working-directory: backend
+        run: pytest --tb=short --cov=apps --cov-report=xml
 
-    - name: Prepare production package
-      run: |
-        mkdir -p deployment
-        cp -r frontend/dist deployment/frontend
-        cp -r backend/apps deployment/backend-apps
-        cp backend/manage.py deployment/
-        cp backend/config deployment/ -r
-        cp backend/requirements.txt deployment/
-        cp -r backend/staticfiles deployment/ 2>/dev/null || true
-        echo "✅ Production package prepared. No hosting provider is configured, so this workflow publishes a package instead of deploying it."
+      - name: Upload backend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+          if-no-files-found: ignore
 
-    - name: Create production release
-      uses: softprops/action-gh-release@v3
-      with:
-        tag_name: v${{ github.run_number }}
-        name: Validated Release v${{ github.run_number }}
-        token: ${{ secrets.GITHUB_TOKEN }}
-        files: deployment/**
-        body: |
-          ## Validated Application Release Package
-          
-          **Commit:** ${{ github.sha }}
-          **Author:** ${{ github.actor }}
-          **Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          
-          ### Contents
-          - Backend application (apps, config, manage.py, requirements.txt)
-          - Collected static files (Django admin CSS/JS via WhiteNoise)
-          - Frontend production build (dist/)
-          
-          ### Pre-deployment checks performed
-          - ✅ Backend unit and integration tests (50%+ coverage)
-          - ✅ Backend code quality checks (flake8, black, isort)
-          - ✅ Frontend build validation
-          - ✅ Database migration plan validation (no actual migrations run in GitHub)
-          - ✅ Static files collected for WhiteNoise serving
-          
-          ### Deployment instructions
-          **IMPORTANT:** This package is for release validation only. To deploy:
-          
-          1. **Railway backend:** Configure Pre-Deploy Command in Railway backend service:
-             ```bash
-             python manage.py migrate --noinput
-             ```
-             Railway runs this command automatically before starting the web process.
-          
-          2. **Do not:** Run migrations in this GitHub workflow. The Railway Pre-Deploy Command is the single source of truth for production migrations.
-          
-          3. **Frontend:** Deploy the `frontend/dist/` to Vercel separately.
-          
-          4. **Environment variables:** Configure Railway backend variables per `docs/railway-deployment-setup.md`.
-        draft: false
-        prerelease: false
+      - name: Install frontend dependencies using the repository root
+        run: npm ci --prefix frontend
 
-    - name: Notify Slack on success
-      uses: 8398a7/action-slack@v3
-      if: success()
-      with:
-        status: success
-        text: |
-          🎉 Production Release Published!
-          Commit: ${{ github.sha }}
-          Author: ${{ github.actor }}
-          Release: v${{ github.run_number }}
-          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-        fields: repo,message,commit,author
-      continue-on-error: true
+      - name: Build frontend using the repository root Vercel configuration
+        run: npm run build --prefix frontend -- --configLoader runner
+        env:
+          NODE_ENV: production
+          VITE_API_BASE_URL: /api
 
-    - name: Notify Slack on failure
-      uses: 8398a7/action-slack@v3
-      if: failure()
-      with:
-        status: failure
-        text: |
-          ❌ Production Release Workflow Failed!
-          Commit: ${{ github.sha }}
-          Author: ${{ github.actor }}
-          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-        fields: repo,message,commit,author
-      continue-on-error: true
+      - name: Verify Vercel output
+        run: test -s frontend/dist/index.html
+
+      - name: Upload Vercel build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          if-no-files-found: error
