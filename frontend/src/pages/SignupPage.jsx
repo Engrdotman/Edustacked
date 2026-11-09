@@ -21,14 +21,18 @@ export default function SignupPage({ navigate }) {
   }
 
   return <main className="auth-page auth-page-split auth-page-signup">
+
     <section className="auth-visual" aria-label="EDUstacked school management">
-      <BrandMark />
+      <div className="sign-up-page-header">
+        <BrandMark />
+        <button className="signin-text-button" type="button" onClick={() => navigate('/login')}>Sign in</button>
+      </div>
       <div className="auth-visual-copy"><p>YOUR SCHOOL, WELL ORGANIZED</p><h2>Make room for better learning.</h2><span>One thoughtful workspace for your school community, from admission through each term’s report.</span></div>
       <small>EDUstacked · edustackedng@gmail.com</small>
     </section>
-    <div className="auth-panel auth-panel-signup"><header className="auth-topbar"><BrandMark /><button className="text-button" type="button" onClick={() => navigate('/login')}>Sign in</button></header>
+    <div className="auth-panel auth-panel-signup">
     <section className="auth-card signup-card" aria-labelledby="signup-title">
-      <p className="eyebrow">EDUstacked · SCHOOL ONBOARDING</p><h1 id="signup-title">Set up your school.</h1>
+      <p className="eyebrow">EDUstacked . SCHOOL ONBOARDING</p><h1 id="signup-title" >Set up your school.</h1>
       <p className="auth-intro">Create your school workspace. We’ll email you a verification link before you can sign in.</p>
       <form className="auth-form" onSubmit={submit}>
         <label htmlFor="school_name">School name</label><input id="school_name" name="school_name" autoComplete="organization" required maxLength="200" value={values.school_name} onChange={update} />
@@ -37,13 +41,13 @@ export default function SignupPage({ navigate }) {
         <label htmlFor="signup_phone">Administrator phone</label><input id="signup_phone" name="phone_number" type="tel" autoComplete="tel" placeholder="+234 801 234 5678" required value={values.phone_number} onChange={update} />
         <div className="signup-section-title">School details</div>
         <label htmlFor="school_email">School email <span>(optional)</span></label><input id="school_email" name="school_email" type="email" autoComplete="organization" value={values.school_email} onChange={update} />
-        <label htmlFor="school_phone">School phone</label><input id="school_phone" name="school_phone" type="tel" required value={values.school_phone} onChange={update} />
+        <label htmlFor="school_phone">School phone number</label><input id="school_phone" name="school_phone" type="tel" required value={values.school_phone} onChange={update} />
         <label htmlFor="school_type">School type</label><select id="school_type" name="school_type" required value={values.school_type} onChange={update}><option value="primary">Primary</option><option value="secondary">Secondary</option><option value="both">Primary and secondary</option></select>
         <label htmlFor="country">Country</label><input id="country" name="country" required value={values.country} onChange={update} />
         <label htmlFor="state">State</label><input id="state" name="state" autoComplete="address-level1" required value={values.state} onChange={update} />
         <label htmlFor="local_government_area">Local Government Area</label><input id="local_government_area" name="local_government_area" required value={values.local_government_area} onChange={update} />
         <label htmlFor="address">School address</label><textarea id="address" name="address" autoComplete="street-address" rows="3" required value={values.address} onChange={update} />
-        <div className="signup-section-title">Secure your account</div>
+        <div className="signup-section-title">Set up your account password</div>
         <label htmlFor="signup_password">Password</label><PasswordField id="signup_password" name="password" autoComplete="new-password" minLength="8" required value={values.password} onChange={update} />
         <label htmlFor="signup_password_confirmation">Confirm password</label><PasswordField id="signup_password_confirmation" name="password_confirmation" autoComplete="new-password" minLength="8" required value={values.password_confirmation} onChange={update} />
         {error && <p className="form-error" role="alert">{error}</p>}

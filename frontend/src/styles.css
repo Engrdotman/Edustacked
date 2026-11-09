@@ -1061,7 +1061,7 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .auth-page-signup { grid-template-columns:minmax(270px,.78fr) minmax(450px,1.22fr); align-items:start; }
 .auth-panel-signup { width:min(100%,720px); padding:4px 0; }
 .auth-panel-signup .auth-topbar { position:static; padding:0; margin:0 0 18px; }
-.auth-panel-signup .signup-card { width:100%; max-width:none; margin:0; padding:clamp(24px,3.5vw,42px); }
+.auth-panel-signup .signup-card { width:100%; max-width:none; margin:clamp(12px,2vw,20px) 0 0; padding:clamp(24px,3.5vw,42px); }
 .auth-page-signup .auth-visual { min-height:calc(100vh - 28px); min-height:calc(100dvh - 28px); }
 .report-card-rating-help { display:grid; gap:5px; margin:18px 0; padding:15px 17px; border:1px solid #cfe0d1; border-radius:10px; color:#254a33; background:#eef6ef; line-height:1.5; }
 .report-card-rating-help strong { font-size:14px; }
@@ -1229,3 +1229,7 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
   .app-page,.cbt-results-content { background:#fff; max-width:none; padding:0; }
   .cbt-panel,.cbt-result-kpis article { break-inside:avoid; box-shadow:none; }
 }
+
+.auth-page-signup .sign-up-page-header { width:100%; display:flex; align-items:center; justify-content:space-between; gap:24px; }
+.auth-page-signup .sign-up-page-header .signin-text-button { display:inline-flex; align-items:center; justify-content:center; padding:8px 14px; border:1px solid rgba(255,255,255,.42); border-radius:8px; color:#fff; background:rgba(255,255,255,.12); font:700 13px 'Segoe UI',sans-serif; text-decoration:none; cursor:pointer; transition:background .2s ease,border-color .2s ease; }
+.auth-page-signup .sign-up-page-header .signin-text-button:hover { border-color:rgba(255,255,255,.72); background:rgba(255,255,255,.2); }
