@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext.jsx'
 import AccessDeniedPage from './pages/AccessDeniedPage.jsx'
 import AuthenticatedHome from './pages/AuthenticatedHome.jsx'
@@ -40,8 +41,20 @@ function AppRoutes() {
   }, [])
 
   const navigate = useCallback((path) => {
-    window.history.pushState({}, '', path)
-    setLocation(path)
+    const from = window.location.pathname
+    const to = new URL(path, window.location.origin).pathname
+    const isAuthFlip = from !== to && ['/login', '/signup'].includes(from) && ['/login', '/signup'].includes(to)
+    const updateRoute = () => {
+      window.history.pushState({}, '', path)
+      flushSync(() => setLocation(path))
+    }
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+    if (isAuthFlip && !reduceMotion && typeof document.startViewTransition === 'function') {
+      document.startViewTransition(updateRoute)
+      return
+    }
+    updateRoute()
   }, [])
 
   const pathname = location.split('?')[0]

@@ -1062,10 +1062,19 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .auth-visual > small { color:rgba(255,255,255,.82); font-size:12px; }
 .auth-panel { width:min(100%,520px); align-self:center; justify-self:center; }
 .auth-panel .auth-card { width:100%; padding:clamp(28px,4vw,48px); border-color:#e1e9e1; border-radius:18px; box-shadow:0 18px 55px rgba(31,58,40,.09); }
-.auth-page-login .auth-panel .auth-card,.auth-page-signup .auth-panel-signup .signup-card { animation:auth-card-arrive .52s cubic-bezier(.2,.75,.25,1) both; }
+.auth-page-login .auth-card-login,.auth-page-signup .signup-card { view-transition-name:auth-form-card; }
 .auth-page-login .auth-visual,.auth-page-signup .auth-visual { animation:auth-visual-arrive .62s cubic-bezier(.2,.75,.25,1) both; }
-@keyframes auth-card-arrive { from { opacity:0; transform:translate3d(0,18px,0) scale(.985); } to { opacity:1; transform:translate3d(0,0,0) scale(1); } }
 @keyframes auth-visual-arrive { from { opacity:.5; transform:translate3d(-12px,0,0); } to { opacity:1; transform:translate3d(0,0,0); } }
+@keyframes auth-card-flip-out { from { transform:rotateY(0); opacity:1; } to { transform:rotateY(-180deg); opacity:.8; } }
+@keyframes auth-card-flip-in { from { transform:rotateY(180deg); opacity:.8; } to { transform:rotateY(0); opacity:1; } }
+::view-transition-old(root),::view-transition-new(root) { animation:none; }
+::view-transition-group(auth-form-card) { perspective:1400px; transform-style:preserve-3d; }
+::view-transition-image-pair(auth-form-card) { perspective:1400px; transform-style:preserve-3d; }
+::view-transition-old(auth-form-card) { animation:auth-card-flip-out .7s cubic-bezier(.2,.72,.25,1) both; backface-visibility:hidden; }
+::view-transition-new(auth-form-card) { animation:auth-card-flip-in .7s cubic-bezier(.2,.72,.25,1) both; backface-visibility:hidden; }
+@supports not (view-transition-name:auth-form-card) {
+  .auth-page-login .auth-card-login,.auth-page-signup .signup-card { animation:auth-card-flip-in .7s cubic-bezier(.2,.72,.25,1) both; transform-origin:center; }
+}
 .auth-panel .auth-card h1 { margin-top:16px; font-size:clamp(36px,5vw,48px); }
 .auth-card-login h1,.auth-card-login > .auth-intro { text-align:center; }
 .signup-card > .eyebrow,.signup-card > h1,.signup-card > .auth-intro { justify-content:center; text-align:center; }
@@ -1105,7 +1114,7 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .company-section.is-visible .company-feature-card:nth-child(3),.company-section.is-visible .company-step-card:nth-child(3) { animation-delay:140ms; }
 .company-section.is-visible .company-feature-card:nth-child(4),.company-section.is-visible .company-step-card:nth-child(4) { animation-delay:210ms; }
 @keyframes card-enter { from { opacity:.45; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
-@media(prefers-reduced-motion:reduce) { .scroll-reveal,.scroll-reveal.is-visible { opacity:1; transform:none; transition:none; } .company-section.is-visible .company-feature-card,.company-section.is-visible .company-step-card { animation:none; } .company-menu-toggle .menu-icon i,.hero-slide-grid,.hero-slide-controls>button { transition:none; } .auth-page-login .auth-panel .auth-card,.auth-page-signup .auth-panel-signup .signup-card,.auth-page-login .auth-visual,.auth-page-signup .auth-visual { animation:none; } }
+@media(prefers-reduced-motion:reduce) { .scroll-reveal,.scroll-reveal.is-visible { opacity:1; transform:none; transition:none; } .company-section.is-visible .company-feature-card,.company-section.is-visible .company-step-card { animation:none; } .company-menu-toggle .menu-icon i,.hero-slide-grid,.hero-slide-controls>button { transition:none; } .auth-page-login .auth-card-login,.auth-page-signup .signup-card,.auth-page-login .auth-visual,.auth-page-signup .auth-visual,::view-transition-old(auth-form-card),::view-transition-new(auth-form-card) { animation:none; } }
 @media(max-width:480px) { .whatsapp-float { right:14px; bottom:14px; min-height:54px; gap:8px; padding:8px 13px 8px 9px; } .whatsapp-float svg { flex-basis:36px; width:36px; height:36px; } .whatsapp-float strong { font-size:12px; } .whatsapp-float small { font-size:9px; } }
 
 
