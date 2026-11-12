@@ -24,7 +24,7 @@ from .services import (
     apply_provider_result, current_balance, initialize_purchase,
     paystack_signature_is_valid, platform_adjustment,
 )
-from .providers import PaystackProvider
+from .providers import FlutterwaveProvider, PaystackProvider
 
 
 class BillingPagination(PageNumberPagination):
@@ -65,7 +65,7 @@ class PurchaseInitializeView(SchoolBillingView):
         if package is None:
             raise serializers.ValidationError({"package": "Select an active credit package."})
         try:
-            payment = initialize_purchase(school, request.user, package)
+            payment = initialize_purchase(school, request.user, package, serializer.validated_data["provider"])
         except (DjangoValidationError, ImproperlyConfigured) as exc:
             raise serializers.ValidationError(getattr(exc, "message_dict", None) or getattr(exc, "messages", [str(exc)])) from exc
         return Response(CreditPaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
@@ -116,7 +116,13 @@ class PaymentDetailView(SchoolBillingView):
             return Response({"detail": "Payment was not found."}, status=status.HTTP_404_NOT_FOUND)
         if payment.status == CreditPayment.Status.PENDING:
             try:
-                data = PaystackProvider().verify(payment.reference)
+                if payment.provider == "flutterwave":
+                    transaction_id = request.data.get("transaction_id") or payment.provider_transaction_id
+                    if not transaction_id:
+                        raise serializers.ValidationError({"payment": "Flutterwave transaction ID is required to verify this checkout."})
+                    data = FlutterwaveProvider().verify(transaction_id)
+                else:
+                    data = PaystackProvider().verify(payment.reference)
                 payment = apply_provider_result(payment, data)
             except (DjangoValidationError, ImproperlyConfigured) as exc:
                 raise serializers.ValidationError(getattr(exc, "message_dict", None) or getattr(exc, "messages", [str(exc)])) from exc

@@ -15,7 +15,9 @@ export default function BillingPage({ navigate }) {
   const [payment, setPayment] = useState(null)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState('')
+  const [provider, setProvider] = useState('flutterwave')
   const reference = new URLSearchParams(window.location.search).get('reference')
+  const transactionId = new URLSearchParams(window.location.search).get('transaction_id')
   const mayPurchase = canManage(selectedSchool?.role)
 
   const refresh = useCallback(async () => {
@@ -36,17 +38,17 @@ export default function BillingPage({ navigate }) {
   useEffect(() => {
     if (!reference) return
     setWorking(true)
-    apiRequest(`billing/payments/${encodeURIComponent(reference)}/`, { method: 'POST', body: {} })
+    apiRequest(`billing/payments/${encodeURIComponent(reference)}/`, { method: 'POST', body: transactionId ? { transaction_id: transactionId } : {} })
       .then(async (result) => { setPayment(result); setBalance(result.balance); await refresh() })
       .catch((requestError) => setError(requestError.message))
       .finally(() => setWorking(false))
-  }, [reference])
+  }, [reference, transactionId])
 
   async function beginPurchase(packageId) {
     setError('')
     setWorking(true)
     try {
-      const checkout = await apiRequest('billing/purchases/', { method: 'POST', body: { package: packageId } })
+      const checkout = await apiRequest('billing/purchases/', { method: 'POST', body: { package: packageId, provider } })
       window.location.assign(checkout.authorization_url)
     } catch (requestError) {
       setError(requestError.message)
@@ -59,7 +61,7 @@ export default function BillingPage({ navigate }) {
     setWorking(true)
     setError('')
     try {
-      const result = await apiRequest(`billing/payments/${encodeURIComponent(reference)}/`, { method: 'POST', body: {} })
+      const result = await apiRequest(`billing/payments/${encodeURIComponent(reference)}/`, { method: 'POST', body: transactionId ? { transaction_id: transactionId } : {} })
       setPayment(result)
       await refresh()
     } catch (requestError) { setError(requestError.message) }
@@ -75,7 +77,7 @@ export default function BillingPage({ navigate }) {
       {error && <p className="form-error" role="alert">{error}</p>}
       {reference && <section className="billing-panel" aria-live="polite">
         <h2>Payment status: {payment?.status || (working ? 'checking' : 'pending')}</h2>
-        <p>{payment?.status === 'success' ? `${payment.credits} credits were verified and added.` : payment?.status === 'failed' ? 'This payment was not completed. No credits were added.' : 'Checkout redirects do not confirm payment. We verify with Paystack before adding any credits.'}</p>
+        <p>{payment?.status === 'success' ? `${payment.credits} credits were verified and added.` : payment?.status === 'failed' ? 'This payment was not completed. No credits were added.' : 'Checkout redirects do not confirm payment. EDUstacked verifies every transaction with the selected provider before adding credits.'}</p>
         {payment?.status !== 'success' && <button className="secondary-button" type="button" onClick={checkPayment} disabled={working}>Verify payment</button>}
       </section>}
       <section className="billing-overview">
@@ -83,11 +85,12 @@ export default function BillingPage({ navigate }) {
         <p>One credit is used for a student's first finalized report card in a school, academic session, and term. Drafts, previews, downloads, reprints, and correction revisions do not use another credit.</p>
       </section>
       <section className="billing-panel"><h2>Credit packages</h2>
-        {packages.length ? <div className="billing-packages">{packages.map((item) => <article key={item.id} className="billing-package"><h3>{item.name}</h3><strong>{item.credits} credits</strong><p className="billing-package-total">{naira(item.price_minor)} total</p><p className="billing-package-unit">{naira(Math.round(item.price_minor / item.credits))} per credit · about {item.credits} finalized report cards</p>{item.description && <p>{item.description}</p>}{mayPurchase && <button className="primary-button" type="button" disabled={working} onClick={() => beginPurchase(item.id)}>Purchase</button>}</article>)}</div> : <p>No active packages are available yet. A platform administrator can configure packages.</p>}
+        {mayPurchase && <fieldset className="payment-provider-choice"><legend>Choose payment provider</legend><label><input type="radio" name="provider" value="flutterwave" checked={provider === 'flutterwave'} onChange={() => setProvider('flutterwave')} /> Flutterwave <span>Recommended</span></label><label><input type="radio" name="provider" value="paystack" checked={provider === 'paystack'} onChange={() => setProvider('paystack')} /> Paystack</label></fieldset>}
+        {packages.length ? <div className="billing-packages">{packages.map((item) => <article key={item.id} className="billing-package"><h3>{item.name}</h3><strong>{item.credits} credits</strong><p className="billing-package-total">{naira(item.price_minor)} total</p><p className="billing-package-unit">{naira(Math.round(item.price_minor / item.credits))} per credit · about {item.credits} finalized report cards</p>{item.description && <p>{item.description}</p>}{mayPurchase && <button className="primary-button" type="button" disabled={working} onClick={() => beginPurchase(item.id)}>Continue with {provider === 'flutterwave' ? 'Flutterwave' : 'Paystack'}</button>}</article>)}</div> : <p>No active packages are available yet. A platform administrator can configure packages.</p>}
       </section>
       <section className="billing-panel"><h2>Recent payments</h2>{payments.length ? <div className="billing-history">{payments.slice(0, 8).map((item) => <div key={item.reference}><strong>{item.package_name} · {item.credits} credits</strong><span>{naira(item.amount_minor)} · {item.status} · {new Date(item.created_at).toLocaleDateString()}</span></div>)}</div> : <p>No purchases yet.</p>}</section>
       <section className="billing-panel"><h2>Credit activity</h2>{transactions.length ? <div className="billing-history">{transactions.slice(0, 10).map((item) => <div key={item.id}><strong>{item.description}</strong><span>{item.amount > 0 ? '+' : ''}{item.amount} credits · {new Date(item.created_at).toLocaleDateString()}</span></div>)}</div> : <p>No credit activity yet.</p>}</section>
-      <p className="billing-note">Payment status and credit balance are confirmed by the server. Paystack checkout requires the school account email and a configured server-side integration.</p>
+      <p className="billing-note">Payment status and credit balance are confirmed by the server. The selected provider must be configured with its server-side secret key.</p>
     </section>
   </main>
 }

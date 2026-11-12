@@ -30,6 +30,7 @@ export default function ServicesPage({ navigate }) {
   }, [])
 
   const activeCbt = licenses.find((license) => license.service_code === 'offline_cbt' && license.is_current)
+  const featuredPlanId = plans.reduce((featured, plan) => !featured || plan.student_capacity > featured.student_capacity ? plan : featured, null)?.id
 
   async function downloadLicense(license) {
     setDownloading(true)
@@ -70,20 +71,16 @@ export default function ServicesPage({ navigate }) {
         {error && <p className="form-error" role="alert">{error}</p>}
         {loading ? <p className="loading-message" role="status">Loading service licenses…</p> : (
           <>
-            <section className="access-panel" aria-labelledby="cbt-title">
-              <div>
-                <p className="panel-kicker">OFFLINE EXAMINATIONS</p>
-                <h2 id="cbt-title">Offline CBT</h2>
+            <section className={activeCbt ? 'cbt-license-card is-active' : 'cbt-license-card'} aria-labelledby="cbt-title">
+              <div className="cbt-license-heading">
+                <span className="cbt-license-icon" aria-hidden="true">CBT</span>
+                <span className={activeCbt ? 'license-status is-active' : 'license-status'} role="status">{activeCbt ? 'License active' : 'Optional add-on'}</span>
               </div>
-              <p role="status"><strong>{activeCbt ? 'Active' : 'Not licensed'}</strong></p>
+              <p className="panel-kicker">OFFLINE EXAMINATIONS</p>
+              <h2 id="cbt-title">Offline CBT</h2>
               {activeCbt ? (
-                <dl className="session-details">
-                  <div><dt>Package</dt><dd>{activeCbt.plan_name || activeCbt.package_type}</dd></div>
-                  <div><dt>Student capacity</dt><dd>{activeCbt.student_capacity}</dd></div>
-                  <div><dt>Valid through</dt><dd>{activeCbt.expires_on}</dd></div>
-                  {canDownloadLicense && <div><button className="secondary-button" type="button" disabled={downloading} onClick={() => downloadLicense(activeCbt)}>{downloading ? 'Preparing license…' : 'Download signed license update'}</button></div>}
-                </dl>
-              ) : <p className="selection-note">This school can use the core EDUstacked system without CBT. To enable offline examinations, an administrator must activate a separate CBT license.</p>}
+                <><p className="cbt-license-description">Run assessments on your school network, then sync results into EDUstacked.</p><div className="cbt-license-stats"><div><span>Plan</span><strong>{activeCbt.plan_name || activeCbt.package_type}</strong></div><div><span>Capacity</span><strong>{activeCbt.student_capacity} students</strong></div><div><span>Valid through</span><strong>{activeCbt.expires_on}</strong></div></div><div className="cbt-license-actions"><button className="cbt-cta cbt-cta-light" type="button" onClick={() => navigate('/app/cbt')}>Open CBT workspace <span aria-hidden="true">→</span></button>{canDownloadLicense && <button className="text-button" type="button" disabled={downloading} onClick={() => downloadLicense(activeCbt)}>{downloading ? 'Preparing license…' : 'Download signed license'}</button>}</div></>
+              ) : <><p className="cbt-license-description">Prepare question banks and exams, run them on a local network, and sync results when internet access returns.</p><div className="cbt-benefit-row"><span>Local exam delivery</span><span>Central result review</span><span>Separate license</span></div><a className="cbt-cta" href={`mailto:edustackedng@gmail.com?subject=${encodeURIComponent('Offline CBT license request')}&body=${encodeURIComponent(`Hello EDUstacked,\n\nPlease share Offline CBT license options for ${selectedSchool?.school_name || 'our school'}.`)}`}>Request a CBT license <span aria-hidden="true">↗</span></a></>}
             </section>
 
             <section className="access-panel" aria-labelledby="plans-title">
@@ -92,9 +89,15 @@ export default function ServicesPage({ navigate }) {
                 <h2 id="plans-title">Available service plans</h2>
               </div>
               {plans.length ? <div className="service-plan-list">{plans.map((plan) => (
-                <article className="service-plan" key={plan.id}>
-                  <div><h3>{plan.name}</h3><p>{plan.description || `${plan.student_capacity} students · ${plan.duration_days} days`}</p></div>
-                  <strong>{money(plan.price_minor, plan.currency)}</strong>
+                <article className={plan.id === featuredPlanId ? 'service-plan service-plan-card is-featured' : 'service-plan service-plan-card'} key={plan.id}>
+                  {plan.id === featuredPlanId && <span className="service-plan-badge">MOST CAPACITY</span>}
+                  <p className="service-plan-category">OFFLINE CBT · {plan.package_type.replaceAll('_', ' ')}</p>
+                  <h3>{plan.name}</h3>
+                  <p className="service-plan-description">{plan.description || 'Everything your school needs to run secure exams on its local network.'}</p>
+                  <strong className="service-plan-price">{money(plan.price_minor, plan.currency)}</strong>
+                  <span className="service-plan-price-caption">per {plan.duration_days}-day license period</span>
+                  <div className="service-plan-specs"><span><b>{plan.student_capacity}</b> student capacity</span><span><b>{plan.duration_days}</b> days of access</span></div>
+                  <a className="service-plan-cta" href={`mailto:edustackedng@gmail.com?subject=${encodeURIComponent(`CBT license request: ${plan.name}`)}&body=${encodeURIComponent(`Hello EDUstacked,\n\nWe are interested in the ${plan.name} Offline CBT license (${plan.student_capacity} students for ${plan.duration_days} days) for ${selectedSchool?.school_name || 'our school'}. Please contact us with the next steps.`)}`}>Ask about this plan <span aria-hidden="true">↗</span></a>
                 </article>
               ))}</div> : <p className="selection-note">No service plans are currently published. Contact EDUstacked to request CBT licensing.</p>}
               <p className="selection-note">Plan pricing is shown separately from report-card credits. Online purchase and renewal checkout will be added in a later phase; no payment or license activation is simulated here.</p>

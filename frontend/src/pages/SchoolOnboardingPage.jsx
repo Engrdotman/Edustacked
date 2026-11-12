@@ -15,7 +15,7 @@ export default function SchoolOnboardingPage({ navigate }) {
     else navigate('/app')
   }
   const statusText = {
-    pending_verification: 'Your school is awaiting verification. You can continue setting it up while verification is pending.Check your email inbox or spam folder',
+    pending_verification: 'Your school is awaiting verification. You can continue setting it up while verification is pending.',
     under_review: 'Your school is under review. You can continue setting it up in the meantime.',
     verified: 'Your school has been successfully verified.',
     rejected: `Your school registration needs attention. ${summary?.verification_reason || 'Review the feedback and contact support if you need help.'}`,

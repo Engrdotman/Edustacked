@@ -45,7 +45,7 @@ export default function LoginPage({ navigate, sessionRequired = false }) {
       <div className="auth-panel"><section className="auth-card auth-card-login" aria-labelledby="login-title">
         <h1 id="login-title">Welcome back.</h1>
         <p className="auth-intro">{sessionRequired ? 'Your session needs a fresh sign-in. Enter your account details to continue.' : 'Sign in to continue to your EDUstacked school workspace.'}</p>
-        {new URLSearchParams(window.location.search).get('registered') === '1' && <p className="form-success" role="status">Your school account has been created. Check your email and verify it to continue.</p>}
+        {new URLSearchParams(window.location.search).get('registered') === '1' && <p className="form-success" role="status">Your school account has been created. Check your email inbox or spam folder and verify it to continue.</p>}
         {new URLSearchParams(window.location.search).get('verify') === '1' && <p className="form-success" role="status">Enter your email address and request a fresh verification link.</p>}
         <form className="auth-form" onSubmit={handleSubmit}>
           <label htmlFor="email">Email address</label>

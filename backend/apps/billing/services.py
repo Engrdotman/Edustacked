@@ -15,7 +15,7 @@ from .models import (
     CreditAccount, CreditPayment, CreditTransaction, ReconciliationIssue,
     ReportCardBilling,
 )
-from .providers import PaystackProvider
+from .providers import FlutterwaveProvider, PaystackProvider
 
 
 def paystack_signature_is_valid(raw_body, signature):
@@ -41,15 +41,20 @@ def current_balance(school):
 
 
 @transaction.atomic
-def initialize_purchase(school, user, package, provider=None):
-    provider = provider or PaystackProvider()
+def initialize_purchase(school, user, package, provider_name="paystack", provider=None):
+    provider_name = (provider_name or "flutterwave").lower()
+    providers = {"flutterwave": FlutterwaveProvider, "paystack": PaystackProvider}
+    provider_class = providers.get(provider_name)
+    if provider_class is None:
+        raise ValidationError({"provider": "Choose Flutterwave or Paystack."})
+    provider = provider or provider_class()
     email = (user.email or "").strip()
     if not email:
         raise ValidationError({"email": "A valid account email is required to purchase credits."})
     reference = f"EDU{secrets.token_hex(14)}"
     payment = CreditPayment.objects.create(
         school=school, package=package, package_name=package.name,
-        credits=package.credits, amount_minor=package.price_minor,
+        credits=package.credits, amount_minor=package.price_minor, provider=provider_name,
         reference=reference, customer_email=email, created_by=user,
     )
     callback_url = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/app/billing?reference={reference}"

@@ -51,7 +51,14 @@ class SendgridBackend(BaseEmailBackend):
         for recipient in message.bcc or []:
             personalization.add_bcc(Bcc(recipient))
         if message.to or message.cc or message.bcc:
+            template_data = getattr(message, "dynamic_template_data", None)
+            if template_data:
+                personalization.dynamic_template_data = template_data
             mail.add_personalization(personalization)
+
+        template_id = getattr(message, "dynamic_template_id", "")
+        if template_id:
+            mail.template_id = template_id
 
         for content, mimetype in getattr(message, "alternatives", []):
             if mimetype == "text/html":

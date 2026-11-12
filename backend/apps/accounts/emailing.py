@@ -2,7 +2,7 @@
 
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage, send_mail
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -50,17 +50,19 @@ def send_email_verification(user, selector, secret, *, fail_silently=True):
     verification_url = (
         f"{settings.FRONTEND_BASE_URL}/verify-email?selector={selector}&token={secret}"
     )
-    return send_mail(
-        subject="Verify your EDUstacked email address",
-        message=(
-            "Verify your email address to activate access to your school workspace. "
-            f"This one-time link expires after {getattr(settings, 'EMAIL_VERIFICATION_TIMEOUT', 86400) // 3600} hours:\n\n"
-            f"{verification_url}\n"
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        fail_silently=fail_silently,
+    subject = "Verify your EDUstacked email address"
+    body = (
+        "Verify your email address to activate access to your school workspace. "
+        f"This one-time link expires after {getattr(settings, 'EMAIL_VERIFICATION_TIMEOUT', 86400) // 3600} hours:\n\n"
+        f"{verification_url}\n"
     )
+    template_id = getattr(settings, "SENDGRID_VERIFICATION_TEMPLATE_ID", "")
+    if template_id and settings.EMAIL_BACKEND.endswith("SendgridBackend"):
+        message = EmailMessage(subject, body, settings.DEFAULT_FROM_EMAIL, [user.email])
+        message.dynamic_template_id = template_id
+        message.dynamic_template_data = {"verification_url": verification_url}
+        return message.send(fail_silently=fail_silently)
+    return send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=fail_silently)
 
 
 def send_staff_invitation_emails(user, verification=None):
