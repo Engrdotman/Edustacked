@@ -57,7 +57,7 @@ export const faqs = [
   ['Can a school update its information?', 'Authorized school administrators can manage the school profile and configuration.'],
   ['How is school data separated?', 'School API access is scoped on the backend to an authenticated user’s active membership and selected school.'],
   ['Is there a monthly subscription?', 'Subscription billing is not currently available. The planned approach is free access to core features within reasonable limits.'],
-  ['How do report-card credits work?', 'Schools can buy one-time packages: 100 credits for ₦30,000, 300 for ₦45,000, or 500 for ₦50,000. One credit is charged the first time a student’s approved report card is finalized for a school, session, and term. A successful Paystack payment must be verified by the server before credits are added.'],
+  ['How do report-card credits work?', 'Schools can buy one-time packages: 100 credits for ₦30,000, 300 for ₦45,000, or 500 for ₦50,000. One credit is charged the first time a student’s approved report card is finalized for a school, session, and term. The selected payment provider must confirm a successful payment before credits are added.'],
   ['Can a school preview report cards for free?', 'Yes. Drafts, review, approval, preview, download, reprint, and later corrections do not use another credit. One credit is charged only for the first finalization in that student’s school, session, and term.'],
   ['How can a school contact support?', 'Use Request a Demo to leave contact details. Official support email and phone details will be published when confirmed.'],
 ]

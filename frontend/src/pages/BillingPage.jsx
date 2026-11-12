@@ -18,6 +18,7 @@ export default function BillingPage({ navigate }) {
   const [provider, setProvider] = useState('flutterwave')
   const reference = new URLSearchParams(window.location.search).get('reference')
   const transactionId = new URLSearchParams(window.location.search).get('transaction_id')
+  const checkoutId = new URLSearchParams(window.location.search).get('checkout_id')
   const mayPurchase = canManage(selectedSchool?.role)
 
   const refresh = useCallback(async () => {
@@ -38,11 +39,11 @@ export default function BillingPage({ navigate }) {
   useEffect(() => {
     if (!reference) return
     setWorking(true)
-    apiRequest(`billing/payments/${encodeURIComponent(reference)}/`, { method: 'POST', body: transactionId ? { transaction_id: transactionId } : {} })
+    apiRequest(`billing/payments/${encodeURIComponent(reference)}/`, { method: 'POST', body: transactionId ? { transaction_id: transactionId } : checkoutId ? { checkout_id: checkoutId } : {} })
       .then(async (result) => { setPayment(result); setBalance(result.balance); await refresh() })
       .catch((requestError) => setError(requestError.message))
       .finally(() => setWorking(false))
-  }, [reference, transactionId])
+  }, [reference, transactionId, checkoutId])
 
   async function beginPurchase(packageId) {
     setError('')
@@ -61,7 +62,7 @@ export default function BillingPage({ navigate }) {
     setWorking(true)
     setError('')
     try {
-      const result = await apiRequest(`billing/payments/${encodeURIComponent(reference)}/`, { method: 'POST', body: transactionId ? { transaction_id: transactionId } : {} })
+      const result = await apiRequest(`billing/payments/${encodeURIComponent(reference)}/`, { method: 'POST', body: transactionId ? { transaction_id: transactionId } : checkoutId ? { checkout_id: checkoutId } : {} })
       setPayment(result)
       await refresh()
     } catch (requestError) { setError(requestError.message) }
@@ -85,8 +86,8 @@ export default function BillingPage({ navigate }) {
         <p>One credit is used for a student's first finalized report card in a school, academic session, and term. Drafts, previews, downloads, reprints, and correction revisions do not use another credit.</p>
       </section>
       <section className="billing-panel"><h2>Credit packages</h2>
-        {mayPurchase && <fieldset className="payment-provider-choice"><legend>Choose payment provider</legend><label><input type="radio" name="provider" value="flutterwave" checked={provider === 'flutterwave'} onChange={() => setProvider('flutterwave')} /> Flutterwave <span>Recommended</span></label><label><input type="radio" name="provider" value="paystack" checked={provider === 'paystack'} onChange={() => setProvider('paystack')} /> Paystack</label></fieldset>}
-        {packages.length ? <div className="billing-packages">{packages.map((item) => <article key={item.id} className="billing-package"><h3>{item.name}</h3><strong>{item.credits} credits</strong><p className="billing-package-total">{naira(item.price_minor)} total</p><p className="billing-package-unit">{naira(Math.round(item.price_minor / item.credits))} per credit · about {item.credits} finalized report cards</p>{item.description && <p>{item.description}</p>}{mayPurchase && <button className="primary-button" type="button" disabled={working} onClick={() => beginPurchase(item.id)}>Continue with {provider === 'flutterwave' ? 'Flutterwave' : 'Paystack'}</button>}</article>)}</div> : <p>No active packages are available yet. A platform administrator can configure packages.</p>}
+        {mayPurchase && <fieldset className="payment-provider-choice"><legend>Choose payment provider</legend><label><input type="radio" name="provider" value="flutterwave" checked={provider === 'flutterwave'} onChange={() => setProvider('flutterwave')} /> Flutterwave <span>Recommended</span></label><label><input type="radio" name="provider" value="bachs" checked={provider === 'bachs'} onChange={() => setProvider('bachs')} /> Bachs</label><label><input type="radio" name="provider" value="paystack" checked={provider === 'paystack'} onChange={() => setProvider('paystack')} /> Paystack</label></fieldset>}
+        {packages.length ? <div className="billing-packages">{packages.map((item) => <article key={item.id} className="billing-package"><h3>{item.name}</h3><strong>{item.credits} credits</strong><p className="billing-package-total">{naira(item.price_minor)} total</p><p className="billing-package-unit">{naira(Math.round(item.price_minor / item.credits))} per credit · about {item.credits} finalized report cards</p>{item.description && <p>{item.description}</p>}{mayPurchase && <button className="primary-button" type="button" disabled={working} onClick={() => beginPurchase(item.id)}>Continue with {provider === 'flutterwave' ? 'Flutterwave' : provider === 'bachs' ? 'Bachs' : 'Paystack'}</button>}</article>)}</div> : <p>No active packages are available yet. A platform administrator can configure packages.</p>}
       </section>
       <section className="billing-panel"><h2>Recent payments</h2>{payments.length ? <div className="billing-history">{payments.slice(0, 8).map((item) => <div key={item.reference}><strong>{item.package_name} · {item.credits} credits</strong><span>{naira(item.amount_minor)} · {item.status} · {new Date(item.created_at).toLocaleDateString()}</span></div>)}</div> : <p>No purchases yet.</p>}</section>
       <section className="billing-panel"><h2>Credit activity</h2>{transactions.length ? <div className="billing-history">{transactions.slice(0, 10).map((item) => <div key={item.id}><strong>{item.description}</strong><span>{item.amount > 0 ? '+' : ''}{item.amount} credits · {new Date(item.created_at).toLocaleDateString()}</span></div>)}</div> : <p>No credit activity yet.</p>}</section>

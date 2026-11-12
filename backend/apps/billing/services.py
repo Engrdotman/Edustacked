@@ -15,7 +15,7 @@ from .models import (
     CreditAccount, CreditPayment, CreditTransaction, ReconciliationIssue,
     ReportCardBilling,
 )
-from .providers import FlutterwaveProvider, PaystackProvider
+from .providers import BachsProvider, FlutterwaveProvider, PaystackProvider
 
 
 def paystack_signature_is_valid(raw_body, signature):
@@ -24,6 +24,37 @@ def paystack_signature_is_valid(raw_body, signature):
         return False
     expected = hmac.new(secret.encode(), raw_body, hashlib.sha512).hexdigest()
     return hmac.compare_digest(expected, signature)
+
+
+def bachs_signature_is_valid(raw_body, headers):
+    secret = getattr(settings, "BACHS_WEBHOOK_SECRET", "")
+    if not secret:
+        return False
+    v2 = headers.get("x-bachs-signature-v2", "")
+    timestamp_header = headers.get("x-bachs-timestamp", "")
+    signatures = []
+    timestamp = ""
+    if v2:
+        for part in v2.split(","):
+            key, separator, value = part.strip().partition("=")
+            if separator and key == "t":
+                timestamp = value
+            elif separator and key == "v1":
+                signatures.append(value)
+    else:
+        timestamp = timestamp_header
+        signature = headers.get("x-bachs-signature", "")
+        if signature:
+            signatures.append(signature)
+    try:
+        sent_at = int(timestamp)
+    except (TypeError, ValueError):
+        return False
+    if not signatures or abs(timezone.now().timestamp() - sent_at) > 300:
+        return False
+    signed_payload = f"{sent_at}.".encode("ascii") + raw_body
+    expected = hmac.new(secret.encode(), signed_payload, hashlib.sha256).hexdigest()
+    return any(hmac.compare_digest(expected, signature) for signature in signatures)
 
 
 @transaction.atomic
@@ -43,10 +74,10 @@ def current_balance(school):
 @transaction.atomic
 def initialize_purchase(school, user, package, provider_name="paystack", provider=None):
     provider_name = (provider_name or "flutterwave").lower()
-    providers = {"flutterwave": FlutterwaveProvider, "paystack": PaystackProvider}
+    providers = {"flutterwave": FlutterwaveProvider, "bachs": BachsProvider, "paystack": PaystackProvider}
     provider_class = providers.get(provider_name)
     if provider_class is None:
-        raise ValidationError({"provider": "Choose Flutterwave or Paystack."})
+        raise ValidationError({"provider": "Choose Flutterwave, Bachs, or Paystack."})
     provider = provider or provider_class()
     email = (user.email or "").strip()
     if not email:
@@ -64,8 +95,13 @@ def initialize_purchase(school, user, package, provider_name="paystack", provide
     if not checkout.get("authorization_url", "").startswith("https://"):
         raise ValidationError({"payment": "The provider returned an invalid checkout URL."})
     payment.authorization_url = checkout["authorization_url"]
-    payment.provider_metadata = {"access_code": checkout.get("access_code", "")}
-    payment.save(update_fields=("authorization_url", "provider_metadata", "updated_at"))
+    payment.provider_metadata = {
+        "access_code": checkout.get("access_code", ""),
+        "checkout_id": checkout.get("checkout_id", ""),
+    }
+    if checkout.get("checkout_id"):
+        payment.provider_transaction_id = str(checkout["checkout_id"])
+    payment.save(update_fields=("authorization_url", "provider_metadata", "provider_transaction_id", "updated_at"))
     return payment
 
 

@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ImproperlyConfigured, ValidationError as DjangoValidationError
 from django.db import transaction
@@ -21,10 +22,10 @@ from .serializers import (
     ReconciliationIssueSerializer, ReportCardBillingSerializer,
 )
 from .services import (
-    apply_provider_result, current_balance, initialize_purchase,
-    paystack_signature_is_valid, platform_adjustment,
+    apply_provider_result, bachs_signature_is_valid, current_balance,
+    initialize_purchase, paystack_signature_is_valid, platform_adjustment,
 )
-from .providers import FlutterwaveProvider, PaystackProvider
+from .providers import BachsProvider, FlutterwaveProvider, PaystackProvider
 
 
 class BillingPagination(PageNumberPagination):
@@ -121,6 +122,9 @@ class PaymentDetailView(SchoolBillingView):
                     if not transaction_id:
                         raise serializers.ValidationError({"payment": "Flutterwave transaction ID is required to verify this checkout."})
                     data = FlutterwaveProvider().verify(transaction_id)
+                elif payment.provider == "bachs":
+                    checkout_id = request.data.get("checkout_id") or payment.provider_transaction_id
+                    data = BachsProvider().verify(checkout_id)
                 else:
                     data = PaystackProvider().verify(payment.reference)
                 payment = apply_provider_result(payment, data)
@@ -168,6 +172,62 @@ class PaystackWebhookView(APIView):
                 defaults={"school": payment.school, "payment": payment,
                           "description": f"Paystack reported {event['event']}. Review the transaction and approved refund policy."},
             )
+        return Response({"received": True})
+
+
+class BachsWebhookView(APIView):
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
+
+    def post(self, request, **kwargs):
+        if not bachs_signature_is_valid(request.body, request.headers):
+            return Response({"detail": "Invalid webhook signature."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            event = json.loads(request.body)
+        except (TypeError, ValueError):
+            return Response({"detail": "Invalid event body."}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(event, dict) or not isinstance(event.get("data"), dict):
+            return Response({"detail": "Invalid event body."}, status=status.HTTP_400_BAD_REQUEST)
+        event_data = event["data"]
+        reference = event_data.get("reference")
+        payment = CreditPayment.objects.filter(provider="bachs", reference=reference).first()
+        if payment is None:
+            return Response({"received": True})
+        event_type = event.get("type")
+        if event_type == "collection.succeeded":
+            customer = event_data.get("customer") or {}
+            amount_minor = None
+            try:
+                amount_value = Decimal(str(event_data.get("amount"))) * 100
+                amount_minor = int(amount_value) if amount_value.is_finite() and amount_value == amount_value.to_integral_value() else None
+            except (InvalidOperation, TypeError, ValueError):
+                pass
+            provider_status = event_data.get("status")
+            normalized = {
+                "id": event_data.get("charge_id") or event.get("id", ""),
+                "reference": reference,
+                "status": "success" if provider_status == "SUCCEEDED" else "pending",
+                "amount": amount_minor,
+                "currency": event_data.get("currency"),
+                "customer": customer,
+            }
+            if provider_status != "SUCCEEDED":
+                ReconciliationIssue.objects.get_or_create(
+                    kind="payment_mismatch", provider_reference=str(reference or ""),
+                    defaults={"school": payment.school, "payment": payment,
+                              "description": "Bachs reported a collected amount that needs review before credits can be granted. Manual reconciliation is required."},
+                )
+            else:
+                try:
+                    apply_provider_result(payment, normalized)
+                except DjangoValidationError:
+                    ReconciliationIssue.objects.get_or_create(
+                        kind="payment_mismatch", provider_reference=str(reference or ""),
+                        defaults={"school": payment.school, "payment": payment,
+                                  "description": "Signed Bachs success did not match the internal payment amount, currency, email, or reference. Manual reconciliation is required."},
+                    )
+        elif event_type in {"collection.failed", "checkout.expired"}:
+            apply_provider_result(payment, {"status": "failed", "reference": reference})
         return Response({"received": True})
 
 

@@ -241,6 +241,13 @@ EMAIL_VERIFICATION_TIMEOUT = int(os.getenv("EMAIL_VERIFICATION_TIMEOUT", "86400"
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173").rstrip("/")
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY", "")
 FLUTTERWAVE_SECRET_KEY = os.getenv("FLUTTERWAVE_SECRET_KEY", "")
+BACHS_API_KEY = os.getenv("BACHS_API_KEY", "")
+BACHS_API_BASE_URL = (
+    os.getenv("BACHS_API_BASE_URL", "").strip()
+    or ("https://sandbox-api.bachs.io/v1" if DEBUG else "https://api.bachs.io/v1")
+).rstrip("/")
+BACHS_WEBHOOK_SECRET = os.getenv("BACHS_WEBHOOK_SECRET", "")
+BACHS_RETURN_URL = os.getenv("BACHS_RETURN_URL", "").strip()
 
 LOG_LEVEL = os.getenv("DJANGO_LOG_LEVEL", "INFO").upper()
 LOGGING = {

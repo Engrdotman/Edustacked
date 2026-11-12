@@ -51,7 +51,7 @@ class ReportCardBillingSerializer(serializers.ModelSerializer):
 
 class PurchaseSerializer(serializers.Serializer):
     package = serializers.IntegerField(min_value=1)
-    provider = serializers.ChoiceField(choices=("flutterwave", "paystack"), default="paystack")
+    provider = serializers.ChoiceField(choices=("flutterwave", "bachs", "paystack"), default="paystack")
 
 
 class AdjustmentSerializer(serializers.Serializer):
