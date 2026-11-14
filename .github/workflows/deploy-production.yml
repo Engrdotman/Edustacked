@@ -38,6 +38,7 @@ jobs:
     env:
       DJANGO_SETTINGS_MODULE: config.settings
       DJANGO_DEBUG: 'false'
+      DJANGO_SECURE_SSL_REDIRECT: 'false'
       DJANGO_SECRET_KEY: ci-only-not-a-production-secret
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
       DJANGO_CORS_ALLOWED_ORIGINS: http://localhost:5173

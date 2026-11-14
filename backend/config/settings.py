@@ -326,7 +326,11 @@ else:
         for origin in os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
         if origin.strip()
     ]
-    SECURE_SSL_REDIRECT = True
+    # Keep HTTPS redirects enabled in production by default, while allowing CI
+    # API tests to use Django's default HTTP test client without receiving 301s.
+    SECURE_SSL_REDIRECT = os.getenv("DJANGO_SECURE_SSL_REDIRECT", "true").strip().lower() in {
+        "1", "true", "yes"
+    }
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     CSRF_COOKIE_SAMESITE = os.getenv("CSRF_COOKIE_SAMESITE", "Lax")

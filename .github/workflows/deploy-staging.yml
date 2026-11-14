@@ -192,6 +192,7 @@ jobs:
         pytest --tb=short --cov=apps --cov-fail-under=50 -v
       env:
         DJANGO_DEBUG: false
+        DJANGO_SECURE_SSL_REDIRECT: false
         DJANGO_SECRET_KEY: ci-staging-only-secret-not-for-deployment
         DJANGO_ALLOWED_HOSTS: staging.example.com,localhost
         DJANGO_CORS_ALLOWED_ORIGINS: https://staging.example.com,http://localhost:5173
