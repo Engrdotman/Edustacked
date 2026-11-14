@@ -207,7 +207,9 @@ AUTH_REFRESH_COOKIE_PATH = "/api/v1/auth/"
 AUTH_REFRESH_COOKIE_DOMAIN = os.getenv("AUTH_REFRESH_COOKIE_DOMAIN") or None
 AUTH_REFRESH_COOKIE_SECURE = not DEBUG
 AUTH_REFRESH_COOKIE_HTTPONLY = True
-AUTH_REFRESH_COOKIE_SAMESITE = os.getenv("AUTH_REFRESH_COOKIE_SAMESITE", "Lax")
+AUTH_REFRESH_COOKIE_SAMESITE = os.getenv("AUTH_REFRESH_COOKIE_SAMESITE", "Lax").strip().capitalize()
+CSRF_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SAMESITE = os.getenv("CSRF_COOKIE_SAMESITE", "Lax").strip().capitalize()
 AUTH_REFRESH_COOKIE_MAX_AGE = int(os.getenv("JWT_REFRESH_TOKEN_DAYS", "7")) * 24 * 60 * 60
 
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "").strip()
@@ -238,7 +240,14 @@ if not DEBUG and EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend" 
     raise ImproperlyConfigured("EMAIL_HOST_USER must be configured in production (non-DEBUG) mode.")
 PASSWORD_RESET_TIMEOUT = int(os.getenv("PASSWORD_RESET_TIMEOUT", "3600"))
 EMAIL_VERIFICATION_TIMEOUT = int(os.getenv("EMAIL_VERIFICATION_TIMEOUT", "86400"))
-FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173").rstrip("/")
+FRONTEND_BASE_URL = os.getenv(
+    "FRONTEND_BASE_URL",
+    "http://localhost:5173" if DEBUG else "https://edustacked.vercel.app",
+).rstrip("/")
+if not DEBUG and urlparse(FRONTEND_BASE_URL).hostname in {"localhost", "127.0.0.1"}:
+    # A copied local .env value must not make production verification links
+    # point back to a developer's computer.
+    FRONTEND_BASE_URL = "https://edustacked.vercel.app"
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY", "")
 FLUTTERWAVE_SECRET_KEY = os.getenv("FLUTTERWAVE_SECRET_KEY", "")
 BACHS_API_KEY = os.getenv("BACHS_API_KEY", "")
@@ -333,3 +342,20 @@ else:
         os.getenv("DJANGO_SECURE_HSTS_PRELOAD", "false").lower()
         in {"1", "true", "yes"}
     )
+
+# The frontend and API are served through the same Vercel origin in production.
+# Django still sees the browser's original Origin on unsafe proxied requests.
+# Keep the known production site trusted even if Railway has a copied local
+# FRONTEND_BASE_URL; the explicit environment list remains available for other clients.
+frontend_parts = urlparse(FRONTEND_BASE_URL)
+frontend_origin = ""
+if frontend_parts.scheme in ({"http", "https"} if DEBUG else {"https"}) and frontend_parts.netloc:
+    frontend_origin = f"{frontend_parts.scheme}://{frontend_parts.netloc}"
+frontend_origins = {frontend_origin} if frontend_origin else set()
+if not DEBUG:
+    frontend_origins.add("https://edustacked.vercel.app")
+for allowed_frontend_origin in frontend_origins:
+    if allowed_frontend_origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(allowed_frontend_origin)
+    if allowed_frontend_origin not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(allowed_frontend_origin)

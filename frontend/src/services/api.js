@@ -144,8 +144,15 @@ export async function refreshSession() {
 }
 
 export async function apiRequest(path, options = {}, canRefresh = true) {
-  const { response, data } = await send(path, options)
+  const { response, data, contentType } = await send(path, options)
   const isAuthEndpoint = path.startsWith('auth/login') || path.startsWith('auth/refresh')
+
+  if (path.startsWith('auth/') && contentType.includes('text/html')) {
+    throw new ApiError(
+      'The sign-in service returned a web page instead of an account response. The live connection needs attention. Please try again shortly or contact EDUstacked support (AUTH-ROUTE).',
+      response.status,
+    )
+  }
 
   if (response.status === 401 && canRefresh && accessToken && !isAuthEndpoint) {
     try {

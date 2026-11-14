@@ -50,6 +50,7 @@ export default function SignupPage({ navigate }) {
         <div className="signup-section-title">Set up your account password</div>
         <label htmlFor="signup_password">Password</label><PasswordField id="signup_password" name="password" autoComplete="new-password" minLength="8" required value={values.password} onChange={update} />
         <label htmlFor="signup_password_confirmation">Confirm password</label><PasswordField id="signup_password_confirmation" name="password_confirmation" autoComplete="new-password" minLength="8" required value={values.password_confirmation} onChange={update} />
+        {values.password_confirmation && values.password !== values.password_confirmation && <p className="form-error" role="status">The passwords do not match yet.</p>}
         {error && <p className="form-error" role="alert">{error}</p>}
         <button className="primary-button" type="submit" disabled={working || values.password !== values.password_confirmation}>{working ? 'Creating workspace…' : 'Register your school'}</button>
       </form>
