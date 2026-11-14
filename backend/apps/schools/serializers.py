@@ -193,7 +193,7 @@ class MembershipProvisionSerializer(serializers.Serializer):
                 lambda user=user, verification=verification, membership=membership: setattr(
                     membership,
                     "invitation_email_delivery",
-                    send_staff_invitation_emails(user, verification),
+                    send_staff_invitation_emails(user, verification, school_name=school.name),
                 )
             )
         else:

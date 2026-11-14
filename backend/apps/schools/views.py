@@ -181,7 +181,7 @@ class SchoolMembershipResendInvitationView(SchoolScopedQuerySetMixin, APIView):
                 verification = (token.selector, secret)
 
             def send_invitation():
-                delivery.update(send_staff_invitation_emails(user, verification))
+                delivery.update(send_staff_invitation_emails(user, verification, school_name=school.name))
 
             transaction.on_commit(send_invitation)
         return Response({"account_id": user.pk, "invitation_email_delivery": delivery})

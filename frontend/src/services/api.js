@@ -44,11 +44,12 @@ function readableError(body, fallback) {
 }
 
 function userFacingHttpFallback(status) {
-  if (status === 401) return 'Please sign in again to continue.'
+  if (status === 401) return 'Your sign-in session may have expired. Please sign in again to continue.'
   if (status === 403) return 'Your account does not have permission to do this. Contact your school administrator if you need access.'
-  if (status === 404) return 'We could not find that information. Refresh the page and try again.'
+  if (status === 404) return 'That information is not available. Refresh the page and try again.'
   if (status === 429) return 'You have tried this too many times. Wait a moment and try again.'
-  if (status >= 500) return 'Something went wrong on our side. Please try again shortly.'
+  if ([502, 503, 504].includes(status)) return 'The school service is temporarily unavailable. Please wait a moment and try again.'
+  if (status >= 500) return 'We could not complete that request. Check whether your change was saved, then try again. Contact EDUstacked support if the problem continues.'
   return 'We could not complete that request. Check the information and try again.'
 }
 

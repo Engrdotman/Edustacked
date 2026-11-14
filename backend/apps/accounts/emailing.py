@@ -15,12 +15,24 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def send_password_setup_email(user, *, fail_silently=True):
+def send_password_setup_email(user, *, school_name="", fail_silently=True):
     uid = urlsafe_base64_encode(force_bytes(user.pk))
     token = default_token_generator.make_token(user)
     reset_url = f"{settings.FRONTEND_BASE_URL}/reset-password?uid={uid}&token={token}"
+    subject = "Set up your EDUstacked account"
+    template_id = getattr(settings, "SENDGRID_PASSWORD_SETUP_TEMPLATE_ID", "")
+    if template_id and settings.EMAIL_BACKEND.endswith("SendgridBackend"):
+        message = EmailMessage(subject, "Use the secure link to set up your account.", settings.DEFAULT_FROM_EMAIL, [user.email])
+        message.dynamic_template_id = template_id
+        message.dynamic_template_data = {
+            "password_setup_url": reset_url,
+            "first_name": user.first_name,
+            "full_name": user.get_full_name().strip() or user.email,
+            "school_name": school_name,
+        }
+        return message.send(fail_silently=fail_silently)
     return send_mail(
-        subject="Set up your School Management account",
+        subject=subject,
         message=(
             "Use this secure link to set or reset your password. "
             f"The link expires after {settings.PASSWORD_RESET_TIMEOUT // 60} minutes:\n\n"
@@ -46,7 +58,7 @@ def issue_email_verification(user):
     return token, secret
 
 
-def send_email_verification(user, selector, secret, *, fail_silently=True):
+def send_email_verification(user, selector, secret, *, school_name="", fail_silently=True):
     verification_url = (
         f"{settings.FRONTEND_BASE_URL}/verify-email?selector={selector}&token={secret}"
     )
@@ -60,20 +72,25 @@ def send_email_verification(user, selector, secret, *, fail_silently=True):
     if template_id and settings.EMAIL_BACKEND.endswith("SendgridBackend"):
         message = EmailMessage(subject, body, settings.DEFAULT_FROM_EMAIL, [user.email])
         message.dynamic_template_id = template_id
-        message.dynamic_template_data = {"verification_url": verification_url}
+        message.dynamic_template_data = {
+            "verification_url": verification_url,
+            "first_name": user.first_name,
+            "full_name": user.get_full_name().strip() or user.email,
+            "school_name": school_name,
+        }
         return message.send(fail_silently=fail_silently)
     return send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=fail_silently)
 
 
-def send_staff_invitation_emails(user, verification=None):
+def send_staff_invitation_emails(user, verification=None, *, school_name=""):
     """Send needed staff access emails and report delivery without losing the membership."""
     statuses = {}
     jobs = []
     if not user.has_usable_password():
-        jobs.append(("password_setup", lambda: send_password_setup_email(user, fail_silently=False)))
+        jobs.append(("password_setup", lambda: send_password_setup_email(user, school_name=school_name, fail_silently=False)))
     if user.email_verified_at is None and verification:
         selector, secret = verification
-        jobs.append(("email_verification", lambda: send_email_verification(user, selector, secret, fail_silently=False)))
+        jobs.append(("email_verification", lambda: send_email_verification(user, selector, secret, school_name=school_name, fail_silently=False)))
 
     if not jobs:
         return {"password_setup": "not_needed", "email_verification": "not_needed"}

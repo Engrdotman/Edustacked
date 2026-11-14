@@ -965,6 +965,20 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .membership-invite input,.membership-invite select { width:100%; min-height:42px; padding:8px 10px; border:1px solid #d0ddd1; border-radius:7px; color:#203c29; background:#fff; font:inherit; font-size:14px; }
 .membership-invite .primary-button { min-height:42px; margin:0; }
 .membership-invite .invite-retry-button { min-height:42px; margin:0; }
+.membership-directory { min-width:0; margin:18px 0; padding:20px; border:1px solid #dce6dc; border-radius:14px; background:#fff; }
+.membership-directory-heading { display:flex; align-items:center; justify-content:space-between; gap:14px; }
+.membership-directory-heading h2 { margin:0; color:#254530; font-size:20px; }
+.membership-directory-heading > span { flex:0 0 auto; padding:5px 10px; border-radius:999px; color:#315b3d; background:#e6f7f3; font-size:12px; font-weight:700; }
+.membership-directory-note { margin:8px 0 14px; color:#5c6d64; font-size:13px; line-height:1.6; }
+.membership-account-list { display:grid; gap:8px; }
+.membership-account-row { display:flex; align-items:center; justify-content:space-between; gap:16px; min-width:0; padding:12px 0; border-top:1px solid #edf1ed; }
+.membership-account-row > div:first-child { display:grid; gap:3px; min-width:0; }
+.membership-account-row strong,.membership-account-row span { overflow-wrap:anywhere; }
+.membership-account-row > div:first-child strong { color:#254530; font-size:14px; }
+.membership-account-row > div:first-child span { color:#68776e; font-size:12px; }
+.membership-account-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px 14px; flex:0 0 auto; }
+.membership-account-status { color:#80531e; font-size:12px; font-weight:700; }
+.membership-account-status.is-active { color:#245437; }
 .ownership-transfer { grid-template-columns:minmax(190px,1fr) minmax(0,2fr); }
 .ownership-transfer .auth-intro { margin:8px 0 0; font-size:13px; }
 .ownership-transfer-form { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); align-items:end; gap:11px; }
@@ -1179,6 +1193,9 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .cbt-results-content { max-width: 1180px; }
 .cbt-results-toolbar { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:10px; margin:18px 0; }
 .cbt-results-filters { margin:18px 0; }
+.cbt-form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr)); align-items:end; gap:14px; min-width:0; }
+.cbt-form-grid > label { display:grid; gap:7px; min-width:0; color:#294b34; font-size:14px; font-weight:650; }
+.cbt-form-grid input,.cbt-form-grid select,.cbt-form-grid textarea { width:100%; min-width:0; max-width:100%; min-height:43px; padding:9px 11px; border:1px solid #b9cabb; border-radius:9px; color:#1d3827; background:#fff; font:inherit; font-size:14px; }
 .cbt-results-subtitle { color:#65766b; margin-top:-6px; }
 .cbt-result-meta { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; padding:18px 0; border-bottom:1px solid #d9d9e0; }
 .cbt-result-meta span { display:grid; gap:5px; font-size:14px; }
@@ -1320,4 +1337,38 @@ img,.school-logo-preview img,.principal-signature-preview img,.cbt-question-imag
 .report-card-list-row:hover,.platform-school-card:hover { border-color:#7bd4c4; }
 @media(prefers-reduced-motion:reduce) {
   *,*::before,*::after { scroll-behavior:auto !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+}
+
+/* Mobile width guards and form layouts */
+@media (max-width:760px) {
+  html,body,#root { min-width:320px; max-width:100%; overflow-x:clip; }
+  #root,.app-page,.app-content,.reports-page,.reports-content,.attendance-page,.school-dashboard,.dashboard-main,.dashboard-content { width:100%; min-width:0; max-width:100%; }
+  .app-topbar > *, .dashboard-content > *, .dashboard-kpis > *, .dashboard-columns > *, .attendance-panel > *, .reports-panel > * { min-width:0; }
+  .page-actions { min-width:0; flex:1 1 auto; justify-content:flex-end; flex-wrap:wrap; gap:4px clamp(6px,2vw,14px); }
+  .page-actions > .text-button,.app-topbar > .text-button { flex:0 0 auto; white-space:nowrap; }
+  .school-dashboard { grid-template-columns:minmax(0,1fr); overflow-x:clip; }
+  .dashboard-main,.dashboard-content { overflow-x:clip; }
+  .dashboard-sidebar nav { width:100%; min-width:0; max-width:100%; }
+  .dashboard-content { padding-inline:clamp(14px,4vw,22px); }
+  .dashboard-kpis,.dashboard-columns,.dashboard-quick-actions { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .dashboard-columns { grid-template-columns:minmax(0,1fr); }
+  .dashboard-kpi strong { overflow-wrap:anywhere; }
+  .attendance-panel,.reports-panel,.reports-filter-panel,.cbt-panel,.membership-invite,.membership-directory,.student-form,.student-list,.student-profile { width:100%; min-width:0; max-width:100%; }
+  .attendance-selectors,.reports-filter-panel,.report-card-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .attendance-selectors > .attendance-date-filter,.reports-filter-panel > .reports-date-filter,.report-card-filters > .report-card-date-filter { grid-column:1/-1; }
+  .attendance-selectors input,.attendance-selectors select,.reports-filter-panel input,.reports-filter-panel select,.report-card-filters input,.report-card-filters select,.cbt-form-grid input,.cbt-form-grid select { box-sizing:border-box; width:100%; min-width:0; max-width:100%; }
+  .reports-filter-panel > button { grid-column:1/-1; width:100%; margin-top:0; }
+  .cbt-form-grid { grid-template-columns:minmax(0,1fr); }
+  .cbt-form-grid label { min-width:0; }
+  .cbt-results-toolbar > * { flex:1 1 auto; }
+}
+@media (max-width:560px) {
+  .membership-directory { padding:15px; }
+  .membership-account-row,.membership-account-actions { align-items:flex-start; flex-direction:column; }
+  .membership-account-actions { gap:6px; }
+  .membership-directory-heading { align-items:flex-start; }
+  .reports-filter-panel,.attendance-panel { padding:15px; }
+  .reports-filter-panel { gap:10px; }
+  .dashboard-kpis,.dashboard-quick-actions { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .dashboard-panel-heading { flex-wrap:wrap; }
 }

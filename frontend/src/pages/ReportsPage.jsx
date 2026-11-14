@@ -155,8 +155,8 @@ export default function ReportsPage({ navigate }) {
             <label>Class<select value={filters.class_level} onChange={(event) => setFilters((old) => ({ ...old, class_level: event.target.value, arm: '' }))}><option value="">All classes</option>{dashboard?.filters?.classes?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             <label>Arm<select value={filters.arm} onChange={(event) => setFilters((old) => ({ ...old, arm: event.target.value }))}><option value="">All arms</option>{arms.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           </>}
-          <label>From<input type="date" value={filters.start_date} onChange={(event) => setFilters((old) => ({ ...old, start_date: event.target.value }))} /></label>
-          <label>To<input type="date" value={filters.end_date} onChange={(event) => setFilters((old) => ({ ...old, end_date: event.target.value }))} /></label>
+          <label className="reports-date-filter">From<input type="date" value={filters.start_date} onChange={(event) => setFilters((old) => ({ ...old, start_date: event.target.value }))} /></label>
+          <label className="reports-date-filter">To<input type="date" value={filters.end_date} onChange={(event) => setFilters((old) => ({ ...old, end_date: event.target.value }))} /></label>
           <button className="primary-button" type="submit" disabled={loading}>Apply filters</button>
         </form>
         <nav className="reports-tabs" aria-label="Report sections">

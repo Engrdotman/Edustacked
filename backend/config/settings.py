@@ -215,6 +215,7 @@ AUTH_REFRESH_COOKIE_MAX_AGE = int(os.getenv("JWT_REFRESH_TOKEN_DAYS", "7")) * 24
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "").strip()
 SENDGRID_SANDBOX_MODE = os.getenv("SENDGRID_SANDBOX_MODE", "false").lower() in {"1", "true", "yes"}
 SENDGRID_VERIFICATION_TEMPLATE_ID = os.getenv("SENDGRID_VERIFICATION_TEMPLATE_ID", "").strip()
+SENDGRID_PASSWORD_SETUP_TEMPLATE_ID = os.getenv("SENDGRID_PASSWORD_SETUP_TEMPLATE_ID", "").strip()
 EMAIL_BACKEND = os.getenv(
     "EMAIL_BACKEND",
     "django.core.mail.backends.console.EmailBackend"
