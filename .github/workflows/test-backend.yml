@@ -75,7 +75,7 @@ jobs:
         EMAIL_BACKEND: django.core.mail.backends.locmem.EmailBackend
 
     - name: Upload coverage reports
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v7
       if: always()
       with:
         file: ./backend/coverage.xml
