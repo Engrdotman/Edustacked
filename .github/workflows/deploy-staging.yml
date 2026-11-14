@@ -146,6 +146,8 @@ env:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     services:
       postgres:
         image: postgres:16
@@ -208,7 +210,7 @@ jobs:
 
     - name: Staging validation notification
       uses: 8398a7/action-slack@v3
-      if: always() && secrets.SLACK_WEBHOOK_URL != ''
+      if: always() && env.SLACK_WEBHOOK_URL != ''
       with:
         status: ${{ job.status }}
         text: |
@@ -217,6 +219,6 @@ jobs:
           Commit: ${{ github.sha }}
           Author: ${{ github.actor }}
           Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        webhook_url: ${{ env.SLACK_WEBHOOK_URL }}
         fields: repo,message,commit,author
       continue-on-error: true
