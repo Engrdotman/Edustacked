@@ -508,7 +508,9 @@ class SchoolProfileApiTests(TestCase):
         self.assertEqual(logo.status_code, status.HTTP_200_OK)
         self.assertEqual(logo["Cache-Control"], "private, no-store")
         self.assertEqual(logo["X-Content-Type-Options"], "nosniff")
-        logo.close()
+        # Closing the response emits request_finished, which closes database
+        # connections during TestCase transactions. Close only the file handle.
+        logo.file_to_stream.close()
 
         other_admin = User.objects.create_user(username="other-school-admin", password="test")
         SchoolMembership.objects.create(
