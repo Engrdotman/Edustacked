@@ -276,7 +276,7 @@ LOGGING = {
 
 if DEBUG:
     CORS_ALLOWED_ORIGINS = [
-        origin.strip()
+        origin.strip().rstrip("/")
         for origin in os.getenv(
             "DJANGO_CORS_ALLOWED_ORIGINS", "http://localhost:5173"
         ).split(",")
@@ -296,7 +296,7 @@ if DEBUG:
         "x-school-id",
     ]
     CSRF_TRUSTED_ORIGINS = [
-        origin.strip()
+        origin.strip().rstrip("/")
         for origin in os.getenv(
             "DJANGO_CSRF_TRUSTED_ORIGINS", "http://localhost:5173"
         ).split(",")
@@ -304,7 +304,7 @@ if DEBUG:
     ]
 else:
     CORS_ALLOWED_ORIGINS = [
-        origin.strip()
+        origin.strip().rstrip("/")
         for origin in os.getenv("DJANGO_CORS_ALLOWED_ORIGINS", "").split(",")
         if origin.strip()
     ]
@@ -322,7 +322,7 @@ else:
         "x-school-id",
     ]
     CSRF_TRUSTED_ORIGINS = [
-        origin.strip()
+        origin.strip().rstrip("/")
         for origin in os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
         if origin.strip()
     ]
