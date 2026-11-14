@@ -16,7 +16,7 @@ jobs:
     name: Security Scanning
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         fetch-depth: 0
 
@@ -41,7 +41,7 @@ jobs:
     name: Dependency Security Check
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Set up Python
       uses: actions/setup-python@v4
