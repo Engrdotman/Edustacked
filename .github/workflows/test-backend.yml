@@ -73,7 +73,6 @@ jobs:
         DJANGO_CORS_ALLOWED_ORIGINS: http://localhost:5173
         DJANGO_SETTINGS_MODULE: config.settings
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-        DJANGO_SETTINGS_MODULE: config.settings
         EMAIL_BACKEND: django.core.mail.backends.locmem.EmailBackend
 
     - name: Upload coverage reports
