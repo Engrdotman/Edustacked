@@ -84,7 +84,7 @@ class SchoolReportsApiTests(TestCase):
         enrollment.status = StudentEnrollment.Status.WITHDRAWN
         enrollment.withdrawal_date = date(2026, 10, 5)
         enrollment.save()
-        response = self.api("get", "/api/v1/reports/enrollment/?session=1&start_date=2026-10-01&end_date=2026-10-31")
+        response = self.api("get", f"/api/v1/reports/enrollment/?session={self.session.pk}&start_date=2026-10-01&end_date=2026-10-31")
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["outcomes"]["withdrawn"], 1)
         students = self.api("get", "/api/v1/reports/enrollment/?view=students&page_size=1")
