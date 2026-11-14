@@ -1,4 +1,4 @@
-// Production uses the Vercel same-origin proxy so mobile browsers keep the
+// Production uses the hosting platform's same-origin /api proxy so browsers keep the
 // HttpOnly refresh cookie as a first-party cookie. Local development may still
 // point at a separately configured API.
 const API_BASE_URL = (import.meta.env.PROD ? '/api' : (import.meta.env.VITE_API_BASE_URL || '/api')).replace(/\/$/, '')
