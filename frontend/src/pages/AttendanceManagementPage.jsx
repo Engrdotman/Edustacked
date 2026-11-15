@@ -13,6 +13,7 @@ const shiftDate = (value, days) => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 const statusLabels = { present: 'Present', absent: 'Absent', late: 'Late', excused: 'Excused absence' }
+const displayDate = (value) => value ? new Date(`${value}T12:00:00`).toLocaleDateString() : ''
 
 export default function AttendanceManagementPage({ navigate }) {
   const { selectedSchool } = useAuth()
@@ -37,6 +38,8 @@ export default function AttendanceManagementPage({ navigate }) {
   const [message, setMessage] = useState('')
 
   const arms = useMemo(() => options.classes.find((item) => String(item.id) === String(selection.class_level))?.arms || [], [options.classes, selection.class_level])
+  const selectedSession = useMemo(() => options.sessions.find((item) => String(item.id) === String(selection.academic_session)), [options.sessions, selection.academic_session])
+  const sessionTerms = useMemo(() => options.terms.filter((item) => String(item.academic_session_id) === String(selection.academic_session)), [options.terms, selection.academic_session])
   const term = useMemo(() => options.terms.find((item) => String(item.academic_session_id) === String(selection.academic_session) && item.start_date <= date && item.end_date >= date), [options.terms, selection.academic_session, date])
   const filteredRoster = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -47,10 +50,20 @@ export default function AttendanceManagementPage({ navigate }) {
   const loadOptions = useCallback(async (selectedDate = date) => {
     const data = await apiRequest(`attendance/options/?date=${selectedDate}`)
     setOptions(data)
-    if (selection.class_level && !data.classes.some((item) => String(item.id) === String(selection.class_level))) {
-      setSelection((current) => ({ ...current, class_level: '', class_arm: '' }))
-    }
-  }, [date, selection.class_level])
+    setSelection((current) => {
+      const matchingSession = data.sessions.find((item) => item.start_date <= selectedDate && item.end_date >= selectedDate)
+      const existingSession = data.sessions.find((item) => String(item.id) === String(current.academic_session))
+      const nextSession = matchingSession || (existingSession && existingSession.start_date <= selectedDate && existingSession.end_date >= selectedDate ? existingSession : data.sessions[0])
+      const currentClass = data.classes.find((item) => String(item.id) === String(current.class_level))
+      const currentArm = currentClass?.arms.find((item) => String(item.id) === String(current.class_arm))
+      return {
+        ...current,
+        academic_session: nextSession ? String(nextSession.id) : '',
+        class_level: currentClass ? current.class_level : '',
+        class_arm: currentArm ? current.class_arm : '',
+      }
+    })
+  }, [date])
 
   const loadRegisters = useCallback(async (filters = registerFilters) => {
     const params = new URLSearchParams({ date_from: from, date_to: to })
@@ -66,7 +79,8 @@ export default function AttendanceManagementPage({ navigate }) {
         if (!live) return
         setOptions(optionData)
         setRegisters(registerData.results || [])
-        if (optionData.sessions.length) setSelection((current) => ({ ...current, academic_session: current.academic_session || String(optionData.sessions[0].id) }))
+        const dateSession = optionData.sessions.find((item) => item.start_date <= date && item.end_date >= date) || optionData.sessions[0]
+        if (dateSession) setSelection((current) => ({ ...current, academic_session: String(dateSession.id) }))
       })
       .catch((e) => live && setError(e.message || 'Could not load attendance setup.'))
       .finally(() => live && setLoading(false))
@@ -83,7 +97,13 @@ export default function AttendanceManagementPage({ navigate }) {
     if (!selection.academic_session || !selection.class_level || !selection.class_arm) {
       setError('Choose a session, class, and arm first.'); return
     }
-    if (!term) { setError('The selected date must fall within a term in this session.'); return }
+    if (!term) {
+      const ranges = sessionTerms.map((item) => `${item.name}: ${displayDate(item.start_date)}–${displayDate(item.end_date)}`).join(' · ')
+      setError(sessionTerms.length
+        ? `Choose a date within a term in ${selectedSession?.name || 'the selected session'}. Valid dates: ${ranges}.`
+        : `No terms are set up for ${selectedSession?.name || 'this session'}. Ask a school administrator to add term dates in Classes & subjects, then try attendance again.`)
+      return
+    }
     setWorking(true)
     try {
       const params = new URLSearchParams({ academic_session: selection.academic_session, class_level: selection.class_level, class_arm: selection.class_arm, date })
@@ -186,7 +206,8 @@ export default function AttendanceManagementPage({ navigate }) {
       {error && <p className="form-error" role="alert">{error}</p>}{message && <p className="form-success" role="status">{message}</p>}{loading && <p className="loading-message" role="status">Loading attendance…</p>}
       {!loading && role === 'teacher' && options.sessions.length === 0 && <aside className="attendance-assignment-notice" role="status"><div><p className="panel-kicker">TEACHER ACCESS</p><h2>No attendance class is assigned for this date</h2><p>The attendance list only shows active teaching assignments linked to your login and covering {date}. Ask your school owner or administrator to check your staff-profile link, active teacher designation, assignment dates, session, class, and arm.</p></div><button className="secondary-button" type="button" onClick={() => navigate('/app/staff')}>View my assignments</button></aside>}
       <section className="attendance-panel"><div className="attendance-panel-heading"><div><p className="panel-kicker">CLASS REGISTER</p><h2>Take attendance</h2></div>{register && <span className={`attendance-state attendance-state-${register.status}`}>{register.status} · version {register.version}</span>}</div>
-        <div className="attendance-selectors"><label>Session<select value={selection.academic_session} onChange={(e) => setSelection({ ...selection, academic_session: e.target.value })}><option value="">Select session</option>{options.sessions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="attendance-date-filter">Date<input type="date" value={date} max={todayText()} onChange={(e) => chooseDate(e.target.value)} /></label><label>Class<select value={selection.class_level} onChange={(e) => setSelection({ ...selection, class_level: e.target.value, class_arm: '' })}><option value="">Select class</option>{options.classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Arm<select value={selection.class_arm} onChange={(e) => setSelection({ ...selection, class_arm: e.target.value })}><option value="">Select arm</option>{arms.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="attendance-term">Term<strong>{term?.name || 'No term for selected date'}</strong></div></div>
+        <div className="attendance-selectors"><label>Session<select value={selection.academic_session} onChange={(e) => setSelection({ ...selection, academic_session: e.target.value })}><option value="">Select session</option>{options.sessions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="attendance-date-filter">Date<input type="date" value={date} max={todayText()} onChange={(e) => chooseDate(e.target.value)} /></label><label>Class<select value={selection.class_level} onChange={(e) => setSelection({ ...selection, class_level: e.target.value, class_arm: '' })}><option value="">Select class</option>{options.classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Arm<select value={selection.class_arm} onChange={(e) => setSelection({ ...selection, class_arm: e.target.value })}><option value="">Select arm</option>{arms.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="attendance-term">Term<strong>{term ? `${term.name} · ${displayDate(term.start_date)}–${displayDate(term.end_date)}` : 'No term for selected date'}</strong></div></div>
+        {selectedSession && <p className={term ? 'attendance-term-guidance' : 'attendance-term-guidance attendance-term-guidance-warning'} role="status">{term ? `This date is within ${term.name} (${displayDate(term.start_date)}–${displayDate(term.end_date)}).` : sessionTerms.length ? `The selected date must be within one of the terms for ${selectedSession.name}: ${sessionTerms.map((item) => `${item.name}, ${displayDate(item.start_date)}–${displayDate(item.end_date)}`).join(' · ')}.` : `No terms have been configured for ${selectedSession.name}. A school administrator can add them under Classes & subjects → Academic terms.`}</p>}
         <div className="attendance-actions"><button className="secondary-button" type="button" onClick={loadEligible} disabled={working}>{working ? 'Loading…' : 'Load eligible students'}</button>{!register && roster.length > 0 && <button className="primary-button" type="button" onClick={createRegister} disabled={working}>Create draft register</button>}</div>
         {register && <><div className="attendance-register-tools"><input aria-label="Search register" placeholder="Search name or admission number" value={search} onChange={(e) => setSearch(e.target.value)} /><strong>{roster.filter((item) => item.status).length} / {roster.length} marked</strong></div>
           <div className="attendance-roster">{filteredRoster.map((item) => <div className="attendance-student" key={item.student_id}><div className="attendance-student-name"><strong>{item.last_name}, {item.first_name} {item.middle_name}</strong><span>{item.admission_number}</span></div><label>Status<select value={item.status || ''} disabled={!editable || working} onChange={(e) => updateRoster(item.student_id, { status: e.target.value, reason: '' })}><option value="">Not marked</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Note<input value={item.note || ''} disabled={!editable || working} maxLength={300} onChange={(e) => updateRoster(item.student_id, { note: e.target.value })} /></label></div>)}{!filteredRoster.length && <p className="academic-empty">No eligible students match this search.</p>}</div>

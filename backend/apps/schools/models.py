@@ -218,3 +218,27 @@ class SchoolVerificationEvent(models.Model):
     class Meta:
         ordering = ("-created_at", "-pk")
         indexes = [models.Index(fields=("school", "created_at"), name="school_verify_event_idx")]
+
+
+class PlatformUserAccessEvent(models.Model):
+    class Action(models.TextChoices):
+        SUSPEND = "suspend", "Account suspended"
+        REACTIVATE = "reactivate", "Account reactivated"
+
+    target_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="platform_access_events",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="platform_user_access_actions",
+    )
+    action = models.CharField(max_length=12, choices=Action.choices)
+    reason = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at", "-pk")
+        indexes = [models.Index(fields=("target_user", "created_at"), name="platform_user_access_idx")]

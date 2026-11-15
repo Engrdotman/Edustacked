@@ -153,6 +153,8 @@ class AssignmentSerializer(SafeStaffSerializer):
     teacher_name = serializers.SerializerMethodField()
     staff_number = serializers.CharField(source="teacher.staff.staff_number", read_only=True)
     academic_session_name = serializers.CharField(source="academic_session.name", read_only=True)
+    academic_session_start_date = serializers.DateField(source="academic_session.start_date", read_only=True)
+    academic_session_end_date = serializers.DateField(source="academic_session.end_date", read_only=True)
     class_name = serializers.CharField(source="class_level.name", read_only=True)
     class_arm_name = serializers.CharField(source="class_arm.name", read_only=True)
     subject_name = serializers.CharField(source="subject.name", read_only=True)
@@ -166,11 +168,11 @@ class AssignmentSerializer(SafeStaffSerializer):
     class Meta:
         model = TeacherAssignment
         fields = (
-            "id", "school", "teacher", "teacher_name", "staff_number", "academic_session", "academic_session_name",
+            "id", "school", "teacher", "teacher_name", "staff_number", "academic_session", "academic_session_name", "academic_session_start_date", "academic_session_end_date",
             "class_level", "class_name", "class_arm", "class_arm_name", "subject", "subject_name", "start_date",
             "end_date", "status", "previous_assignment", "previous_assignment_id", "change_reason", "reason", "created_at", "updated_at",
         )
-        read_only_fields = ("id", "school", "teacher_name", "staff_number", "academic_session_name", "class_name", "class_arm_name", "subject_name", "previous_assignment", "previous_assignment_id", "change_reason", "created_at", "updated_at")
+        read_only_fields = ("id", "school", "teacher_name", "staff_number", "academic_session_name", "academic_session_start_date", "academic_session_end_date", "class_name", "class_arm_name", "subject_name", "previous_assignment", "previous_assignment_id", "change_reason", "created_at", "updated_at")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

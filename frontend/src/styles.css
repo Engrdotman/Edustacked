@@ -253,6 +253,7 @@ h1 em { color: #1486a8; font-weight: 500; }.intro { max-width: 440px; color: #76
 .student-form { margin-bottom:22px; }
 .student-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
 .student-fields label { display:grid; gap:6px; font-size:.88rem; }
+.student-fields label small { color:#68776e; font-size:12px; font-weight:400; line-height:1.45; }
 .student-fields input,.student-fields select,.student-toolbar input { border:1px solid #bdc9c1; border-radius:9px; padding:11px; font:inherit; background:#fff; }
 .student-actions { display:flex; align-items:center; gap:16px; margin-top:18px; }
 .student-layout { display:grid; grid-template-columns:minmax(240px,.8fr) minmax(0,1.5fr); gap:18px; align-items:start; }
@@ -982,6 +983,48 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .platform-audit-list article strong { color:#294b34; text-transform:capitalize; }
 .platform-audit-list article span,.platform-audit-list article small { display:block; margin-top:5px; color:#708074; font-size:12px; }
 .platform-audit-list article p { margin:8px 0 0; color:#52675a; font-size:13px; }
+.platform-admin-content { width:min(100%,1160px); }
+.platform-dashboard-actions { display:flex; flex-wrap:wrap; gap:10px; margin:18px 0 20px; }
+.platform-dashboard-actions .primary-button,.platform-dashboard-actions .secondary-button { margin:0; }
+.platform-metric-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:18px 0; }
+.platform-metric,.platform-revenue-panel,.platform-user-card { min-width:0; border:1px solid #dfe7df; border-radius:12px; background:#fff; }
+.platform-metric { display:grid; gap:9px; padding:17px; }
+.platform-metric span,.platform-revenue-values article span { color:#65766a; font-size:13px; font-weight:700; }
+.platform-metric strong { color:#203c29; font-size:30px; line-height:1.15; }
+.platform-metric small { color:#718075; font-size:12px; }
+.platform-revenue-panel { display:grid; grid-template-columns:minmax(0,1fr) minmax(240px,.8fr); gap:18px 26px; margin:16px 0 26px; padding:20px; }
+.platform-revenue-panel h2,.platform-user-heading h2 { margin:4px 0 8px; color:#203c29; font-size:22px; }
+.platform-revenue-panel > div:first-child > p:last-child { max-width:650px; margin:0; color:#65766a; font-size:14px; line-height:1.65; }
+.platform-revenue-values { display:grid; gap:9px; align-content:start; }
+.platform-revenue-values article { display:grid; gap:5px; padding:12px 14px; border:1px solid #e3eae3; border-radius:9px; background:#f8faf7; }
+.platform-revenue-values article strong { color:#203c29; font-size:23px; }
+.platform-revenue-values article small { color:#718075; font-size:12px; }
+.platform-purchaser-list { grid-column:1 / -1; padding-top:14px; border-top:1px solid #e5ebe5; }
+.platform-purchaser-list h3 { margin:0 0 9px; color:#294b34; font-size:16px; }
+.platform-purchaser-list button { display:flex; width:100%; justify-content:space-between; align-items:center; gap:14px; padding:11px 4px; border:0; border-bottom:1px solid #edf0ed; color:#294b34; background:transparent; text-align:left; cursor:pointer; }
+.platform-purchaser-list button span { display:grid; gap:3px; font-weight:700; }
+.platform-purchaser-list button small { color:#718075; font-size:12px; font-weight:400; }
+.platform-purchaser-list button strong { white-space:nowrap; }
+.platform-user-section { margin-top:26px; }
+.platform-user-heading { display:flex; justify-content:space-between; align-items:end; gap:16px; margin:0 0 14px; }
+.platform-user-heading > span { color:#65766a; font-size:13px; }
+.platform-user-list { display:grid; gap:11px; }
+.platform-user-card { padding:16px 18px; }
+.platform-user-main { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; }
+.platform-user-main h3 { margin:0; color:#203c29; font-size:17px; overflow-wrap:anywhere; }
+.platform-user-main p { margin:5px 0 0; color:#68766b; font-size:13px; overflow-wrap:anywhere; }
+.platform-user-status { flex:none; padding:5px 9px; border-radius:99px; font-size:12px; font-weight:750; }
+.platform-user-status.is-active { color:#285a3a; background:#edf7ef; }
+.platform-user-status.is-inactive { color:#80463d; background:#fff1ee; }
+.platform-user-meta { display:flex; flex-wrap:wrap; gap:8px 18px; margin:12px 0; color:#758077; font-size:12px; }
+.platform-memberships { display:flex; flex-wrap:wrap; gap:7px; }
+.platform-memberships span { max-width:100%; padding:6px 9px; border-radius:7px; color:#405c48; background:#f2f6f1; font-size:12px; overflow-wrap:anywhere; }
+.platform-last-action { margin:11px 0; color:#65766a; font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+.platform-user-action-form { display:grid; gap:8px; margin-top:12px; padding:13px; border-radius:9px; background:#f6f8f5; }
+.platform-user-action-form label { color:#355c43; font-size:13px; font-weight:700; }
+.platform-user-action-form textarea { width:100%; min-height:72px; padding:10px 12px; border:1px solid #d2ded3; border-radius:8px; color:#263b2c; background:#fff; font:inherit; resize:vertical; }
+.attendance-term-guidance { margin:12px 0 0; padding:11px 13px; border-radius:8px; color:#315b42; background:#eff7f0; font-size:13px; line-height:1.5; }
+.attendance-term-guidance-warning { color:#75463d; background:#fff3ef; }
 .membership-invite { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); align-items:end; gap:12px; margin:18px 0; padding:20px; border:1px solid #dce6dc; border-radius:12px; background:#fff; }
 .membership-invite h2 { margin:0; color:#254530; font-size:19px; }
 .membership-invite label,.ownership-transfer-form label { display:grid; gap:6px; color:#355743; font-size:13px; font-weight:700; }
@@ -1012,6 +1055,10 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 @media (max-width:760px) {
   .platform-filters { grid-template-columns:1fr; }
   .platform-detail-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .platform-metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .platform-revenue-panel { grid-template-columns:1fr; padding:15px; }
+  .platform-user-heading { align-items:flex-start; flex-direction:column; gap:4px; }
+  .platform-user-card { padding:14px; }
   .ownership-transfer { grid-template-columns:1fr; }
   .onboarding-step { grid-template-columns:36px minmax(0,1fr); }
   .onboarding-step button { grid-column:2; justify-self:start; }

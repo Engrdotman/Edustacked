@@ -66,7 +66,7 @@ export default function AuthenticatedHome({ navigate }) {
         <h1 className="app-heading">Good to have<br /><em>you here.</em></h1>
         <p className="intro">You’re signed in as <strong>{user?.first_name || user?.email}</strong>.</p>
 
-        {user?.is_superuser && <button className="primary-button profile-link" type="button" onClick={() => navigate('/platform/schools')}>Platform administration</button>}
+        {user?.is_superuser && <button className="primary-button profile-link" type="button" onClick={() => navigate('/platform')}>Platform administration</button>}
         {selectedSchool && ['school_owner', 'school_admin', 'school_manager', 'principal'].includes(currentRole) && <button className="secondary-button profile-link" type="button" onClick={() => navigate('/app/onboarding')}>School onboarding</button>}
 
         <section className="access-panel" aria-labelledby="school-title">

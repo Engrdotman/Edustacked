@@ -12,9 +12,17 @@ from .views import (
     SchoolOwnershipTransferView,
 )
 from .onboarding import SchoolOnboardingView
-from .platform_views import PlatformSchoolsView, PlatformSchoolDetailView, PlatformSchoolActionView
+from .platform_views import (
+    PlatformSchoolActionView,
+    PlatformSchoolDetailView,
+    PlatformSchoolsView,
+    PlatformUserActionView,
+    PlatformUsersView,
+)
 
 urlpatterns = [
+    path("platform/users/", PlatformUsersView.as_view(), name="platform-users"),
+    path("platform/users/<int:pk>/<str:action>/", PlatformUserActionView.as_view(), name="platform-user-action"),
     path("platform/schools/", PlatformSchoolsView.as_view(), name="platform-schools"),
     path("platform/schools/<int:pk>/", PlatformSchoolDetailView.as_view(), name="platform-school-detail"),
     path("platform/schools/<int:pk>/<str:action>/", PlatformSchoolActionView.as_view(), name="platform-school-action"),

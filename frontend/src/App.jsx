@@ -25,6 +25,7 @@ import DemoRequestPage from './pages/DemoRequestPage.jsx'
 import SchoolOnboardingPage from './pages/SchoolOnboardingPage.jsx'
 import PlatformSchoolsPage from './pages/PlatformSchoolsPage.jsx'
 import PlatformSchoolDetailPage from './pages/PlatformSchoolDetailPage.jsx'
+import PlatformAdminDashboardPage from './pages/PlatformAdminDashboardPage.jsx'
 import LegalDraftPage from './pages/LegalDraftPage.jsx'
 import CbtManagementPage from './pages/CbtManagementPage.jsx'
 import CbtResultsPage from './pages/CbtResultsPage.jsx'
@@ -79,12 +80,14 @@ function AppRoutes() {
   if (pathname === '/denied') {
     return <AccessDeniedPage navigate={navigate} signedIn={Boolean(user)} />
   }
-  if (pathname === '/platform/schools' || /^\/platform\/schools\/\d+$/.test(pathname)) {
+  if (pathname === '/platform' || pathname === '/platform/schools' || /^\/platform\/schools\/\d+$/.test(pathname)) {
     if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!user.is_superuser) return <AccessDeniedPage navigate={navigate} signedIn />
     const detail = pathname.match(/^\/platform\/schools\/(\d+)$/)
-    return detail ? <PlatformSchoolDetailPage schoolId={detail[1]} navigate={navigate} /> : <PlatformSchoolsPage navigate={navigate} />
+    if (detail) return <PlatformSchoolDetailPage schoolId={detail[1]} navigate={navigate} />
+    if (pathname === '/platform/schools') return <PlatformSchoolsPage navigate={navigate} />
+    return <PlatformAdminDashboardPage navigate={navigate} />
   }
   if (pathname === '/app') {
     if (loading) {
