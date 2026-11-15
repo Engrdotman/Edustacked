@@ -73,12 +73,13 @@ class StaffDirectorySerializer(serializers.ModelSerializer):
 class StaffProfileSerializer(SafeStaffSerializer):
     school = serializers.IntegerField(source="school_id", read_only=True)
     user = serializers.PrimaryKeyRelatedField(queryset=User.objects.none(), required=False, allow_null=True)
+    user_email = serializers.EmailField(source="user.email", read_only=True, allow_null=True)
     has_login = serializers.SerializerMethodField()
 
     class Meta:
         model = StaffProfile
         fields = (
-            "id", "school", "user", "has_login", "staff_number", "first_name", "middle_name", "last_name",
+            "id", "school", "user", "user_email", "has_login", "staff_number", "first_name", "middle_name", "last_name",
             "work_email", "phone", "job_title", "department", "employment_type", "employment_start_date",
             "employment_end_date", "status", "photo", "created_at", "updated_at",
         )

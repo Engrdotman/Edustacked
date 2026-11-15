@@ -63,7 +63,7 @@ class StaffListCreateView(StaffViewMixin, ListCreateAPIView):
         return qs
 
     def get_serializer_class(self):
-        if self.request.method == "POST" or self.role() in ("school_admin", "school_manager"):
+        if self.request.method == "POST" or self.role() in ("school_owner", "school_admin", "school_manager", "principal"):
             return StaffProfileSerializer
         return StaffDirectorySerializer
 
@@ -77,14 +77,25 @@ class StaffDetailView(StaffViewMixin, RetrieveUpdateAPIView):
     http_method_names = ("get", "patch", "head", "options")
 
     def get_serializer_class(self):
-        return StaffProfileSerializer if self.role() in ("school_admin", "school_manager") else StaffDirectorySerializer
+        return StaffProfileSerializer if self.role() in ("school_owner", "school_admin", "school_manager", "principal") else StaffDirectorySerializer
 
 
 class StaffMeView(StaffViewMixin, APIView):
     staff_permissions = {"GET": "teacher.profile.view"}
 
     def get(self, request, **kwargs):
-        profile = get_object_or_404(StaffProfile.objects.filter(school=self.get_school(), user=request.user))
+        profile = StaffProfile.objects.filter(school=self.get_school(), user=request.user).first()
+        if profile is None:
+            return Response(
+                {
+                    "detail": (
+                        "This school login is not linked to a staff profile. Ask the school owner or administrator "
+                        "to edit the staff profile and select this login account. Then confirm the teacher "
+                        "designation is active and assign the teacher's classes and subjects."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
         teacher = getattr(profile, "teacher_profile", None)
         return Response({
             "staff": StaffDirectorySerializer(profile).data,

@@ -24,6 +24,8 @@ async function listAllStudents(path) {
 
 export default function StudentManagementPage({ navigate }) {
   const { selectedSchool } = useAuth()
+  const isTeacher = selectedSchool?.role === 'teacher'
+  const canAdmitStudents = ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'receptionist'].includes(selectedSchool?.role)
   const [students, setStudents] = useState([])
   const [sessions, setSessions] = useState([])
   const [classes, setClasses] = useState([])
@@ -55,15 +57,21 @@ export default function StudentManagementPage({ navigate }) {
 
   useEffect(() => {
     let live = true
-    Promise.all([reload(), academicList('academic-sessions/'), academicList('classes/')])
-      .then(([_, sessionRows, classRows]) => { if (live) { setSessions(sessionRows.filter((row) => row.status !== 'completed')); setClasses(classRows.filter((row) => row.is_active)) } })
+    const academicSetup = isTeacher ? Promise.resolve([[], []]) : Promise.all([academicList('academic-sessions/'), academicList('classes/')])
+    Promise.all([reload(), academicSetup])
+      .then(([_, [sessionRows, classRows]]) => { if (live) { setSessions(sessionRows.filter((row) => row.status !== 'completed')); setClasses(classRows.filter((row) => row.is_active)) } })
       .catch((e) => live && setError(e.message || 'Could not load students.'))
     return () => { live = false }
-  }, [reload])
+  }, [reload, isTeacher])
 
   async function openProfile(row) {
     setError(''); setMessage(''); setSelected(row)
     try {
+      if (isTeacher) {
+        const detail = await apiRequest(`students/${row.id}/`)
+        setSelected(detail); setGuardians([]); setHistory([])
+        return
+      }
       const [detail, links, enrollments] = await Promise.all([
         apiRequest(`students/${row.id}/`), apiRequest(`students/${row.id}/guardians/`), apiRequest(`students/${row.id}/enrollments/`),
       ])
@@ -158,11 +166,11 @@ export default function StudentManagementPage({ navigate }) {
   }
 
   return <main className="app-page"><header className="app-topbar"><BrandMark navigate={navigate} /><button className="text-button" onClick={() => navigate('/app')}>Back to home</button></header>
-    <section className="app-content student-page"><p className="eyebrow">{selectedSchool?.school_name} · STUDENTS</p><h1 className="app-heading">Student <em>management</em></h1>
-      <p className="intro">Admissions, guardian contacts, and enrollment history for this school.</p>
+    <section className="app-content student-page"><p className="eyebrow">{selectedSchool?.school_name} · STUDENTS</p><h1 className="app-heading">Student <em>{isTeacher ? 'roster' : 'management'}</em></h1>
+      <p className="intro">{isTeacher ? 'View students in classes assigned to you. Use Attendance to take a class register.' : 'Admissions, guardian contacts, and enrollment history for this school.'}</p>
       {error && <p className="form-error" role="alert">{error}</p>}{message && <p className="success-message" role="status">{message}</p>}
-      <div className="student-toolbar"><input aria-label="Search students" placeholder="Search name or admission number" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && reload()} /><select aria-label="Filter students by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="">All students</option><option value="active">Active</option><option value="inactive">Inactive</option></select><button className="primary-button" onClick={() => { setError(''); setShowForm(!showForm) }}>Admit student</button></div>
-      {showForm && <form className="student-form" onSubmit={admit}><h2>New admission</h2><div className="student-fields">
+      <div className="student-toolbar"><input aria-label="Search students" placeholder="Search name or admission number" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && reload()} /><select aria-label="Filter students by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="">All students</option><option value="active">Active</option><option value="inactive">Inactive</option></select>{canAdmitStudents && <button className="primary-button" onClick={() => { setError(''); setShowForm(!showForm) }}>Admit student</button>}</div>
+      {showForm && canAdmitStudents && <form className="student-form" onSubmit={admit}><h2>New admission</h2><div className="student-fields">
         {Object.entries({ admission_number: 'Admission number', first_name: 'First name', middle_name: 'Middle name', last_name: 'Last name', date_of_birth: 'Date of birth', email: 'Email', phone: 'Phone', address: 'Address' }).map(([key, label]) => <label key={key}>{label}<input required={['admission_number', 'first_name', 'last_name'].includes(key)} type={key === 'date_of_birth' ? 'date' : key === 'email' ? 'email' : 'text'} value={student[key]} onChange={(e) => setStudent({ ...student, [key]: e.target.value })} /></label>)}
         <label>Gender<select value={student.gender} onChange={(e) => setStudent({ ...student, gender: e.target.value })}><option value="">Not specified</option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option><option value="prefer_not_to_say">Prefer not to say</option></select></label>
         <label>Guardian name<input value={guardian.full_name} onChange={(e) => setGuardian({ ...guardian, full_name: e.target.value })} /></label><label>Guardian phone<input value={guardian.phone} onChange={(e) => setGuardian({ ...guardian, phone: e.target.value })} /></label><label>Relationship<input value={guardian.relationship_type} onChange={(e) => setGuardian({ ...guardian, relationship_type: e.target.value })} placeholder="Parent, aunt, etc." /></label>
