@@ -6,6 +6,7 @@ import { apiRequest } from '../services/api.js'
 const actions = [
   ['Students', '/app/students', ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher', 'receptionist']],
   ['Staff', '/app/staff', ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal']],
+  ['My assignments', '/app/staff', ['teacher']],
   ['Classes & subjects', '/app/academics', ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal']],
   ['Attendance', '/app/attendance', ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher']],
   ['Assessments & results', '/app/assessments', ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher']],

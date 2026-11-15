@@ -8,6 +8,8 @@ EDUstacked is a modular school management platform with a Django REST API backen
 
 See [Hybrid School Onboarding](docs/hybrid-school-onboarding.md) for the registration lifecycle, verification model, ownership, platform review, tenant isolation, and local testing walkthrough.
 
+For the everyday school workflow—from registration, staff access and teacher assignments through attendance, grading, assessments, and report cards—see the [EDUstacked school user guide](docs/school-user-guide.md).
+
 ## Project Structure
 
 ```
