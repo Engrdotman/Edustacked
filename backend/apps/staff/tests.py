@@ -117,6 +117,19 @@ class StaffManagementApiTests(TestCase):
         self.assertEqual(next_assignment.data["change_reason"], "Reassignment")
         self.assertEqual(TeacherAssignment.objects.get(pk=active.data["id"]).status, TeacherAssignment.Status.ENDED)
 
+    def test_one_teacher_can_receive_multiple_subject_assignments(self):
+        teacher = self.make_teacher(user=self.teacher_user)
+        mathematics = self.api("post", "/api/v1/assignments/", self.assignment_payload(teacher, self.math))
+        english = self.api("post", "/api/v1/assignments/", self.assignment_payload(teacher, self.english))
+
+        self.assertEqual(mathematics.status_code, status.HTTP_201_CREATED, mathematics.data)
+        self.assertEqual(english.status_code, status.HTTP_201_CREATED, english.data)
+        self.assertEqual(TeacherAssignment.objects.filter(teacher=teacher, status=TeacherAssignment.Status.ACTIVE).count(), 2)
+
+        duplicate = self.api("post", "/api/v1/assignments/", self.assignment_payload(teacher, self.english))
+        self.assertEqual(duplicate.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("already has this subject", str(duplicate.data))
+
     def test_role_boundaries_own_assignments_and_tenant_isolation(self):
         teacher = self.make_teacher(user=self.teacher_user)
         assignment = self.api("post", "/api/v1/assignments/", self.assignment_payload(teacher))

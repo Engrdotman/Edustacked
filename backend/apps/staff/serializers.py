@@ -167,6 +167,7 @@ class AssignmentSerializer(SafeStaffSerializer):
 
     class Meta:
         model = TeacherAssignment
+        validators = []
         fields = (
             "id", "school", "teacher", "teacher_name", "staff_number", "academic_session", "academic_session_name", "academic_session_start_date", "academic_session_end_date",
             "class_level", "class_name", "class_arm", "class_arm_name", "subject", "subject_name", "start_date",
@@ -188,9 +189,24 @@ class AssignmentSerializer(SafeStaffSerializer):
         return f"{obj.teacher.staff.first_name} {obj.teacher.staff.last_name}"
 
     def validate(self, attrs):
+        teacher = attrs.get("teacher")
+        session = attrs.get("academic_session")
         class_level = attrs.get("class_level", getattr(self.instance, "class_level", None))
         class_arm = attrs.get("class_arm", getattr(self.instance, "class_arm", None))
         subject = attrs.get("subject", getattr(self.instance, "subject", None))
+        if teacher and session and class_level and class_arm and subject and not self.instance:
+            duplicate = TeacherAssignment.objects.filter(
+                teacher=teacher,
+                academic_session=session,
+                class_level=class_level,
+                class_arm=class_arm,
+                subject=subject,
+                status=TeacherAssignment.Status.ACTIVE,
+            ).exists()
+            if duplicate:
+                raise serializers.ValidationError({
+                    "subject": "This teacher already has this subject for the selected session, class, and arm. End or replace that assignment, or choose another subject."
+                })
         if class_level and class_arm and class_arm.class_level_id != class_level.pk:
             raise serializers.ValidationError({"class_arm": "The selected arm does not belong to the selected class."})
         if class_level and subject and ClassSubject.objects.filter(class_level=class_level, is_active=True).exists() and not ClassSubject.objects.filter(class_level=class_level, subject=subject, is_active=True).exists():
