@@ -27,7 +27,9 @@ export function AuthProvider({ children }) {
     setGuardianProfile(portalProfile)
     setSelectedSchoolId(null)
     setSelectedSchool(null)
-    if (memberships.length === 1 && memberships[0].school_accessible !== false) {
+    // Platform superadmins receive platform-wide school access from the API.
+    // Keep them in the platform workspace until they explicitly choose a school.
+    if (!profile.is_superuser && memberships.length === 1 && memberships[0].school_accessible !== false) {
       const selection = await apiRequest('auth/schools/select/', {
         method: 'POST',
         body: { school_id: memberships[0].school_id },
@@ -71,7 +73,7 @@ export function AuthProvider({ children }) {
     setGuardianProfile(portalProfile)
     setSelectedSchool(null)
     setSelectedSchoolId(null)
-    if (memberships.length === 1 && memberships[0].school_accessible !== false) {
+    if (!profile.is_superuser && memberships.length === 1 && memberships[0].school_accessible !== false) {
       const selection = await apiRequest('auth/schools/select/', {
         method: 'POST',
         body: { school_id: memberships[0].school_id },

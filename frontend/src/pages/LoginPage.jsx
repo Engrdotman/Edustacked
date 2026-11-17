@@ -19,7 +19,7 @@ export default function LoginPage({ navigate, sessionRequired = false }) {
     setSubmitting(true)
     try {
       const profile = await signIn(email, password)
-      navigate(profile.guardian_portal ? '/parent' : '/app')
+      navigate(profile.guardian_portal ? '/parent' : profile.is_superuser ? '/platform' : '/app')
     } catch (requestError) {
       setError(requestError instanceof ApiError
         ? requestError.message

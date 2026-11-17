@@ -71,12 +71,12 @@ export default function AuthenticatedHome({ navigate }) {
 
         <section className="access-panel" aria-labelledby="school-title">
           <div>
-            <p className="panel-kicker">YOUR ACCESS</p>
-            <h2 id="school-title">School membership</h2>
+            <p className="panel-kicker">{user?.is_superuser ? 'PLATFORM ACCESS' : 'YOUR ACCESS'}</p>
+            <h2 id="school-title">{user?.is_superuser ? 'School workspace access' : 'School membership'}</h2>
           </div>
-          {schools.length > 1 ? (
+          {schools.length > 1 || (user?.is_superuser && schools.length > 0) ? (
             <label className="school-picker">
-              <span>Select an authorized school</span>
+              <span>{user?.is_superuser ? 'Choose a school to open its workspace' : 'Select an authorized school'}</span>
               <select value={schoolId} onChange={handleSchoolChange} disabled={working}>
                 <option value="">Choose a school…</option>
                 {schools.map((school) => (
@@ -98,8 +98,8 @@ export default function AuthenticatedHome({ navigate }) {
             <p className="auth-intro">No active school membership is assigned to this account.</p>
           )}
           {error && <p className="form-error" role="alert">{error}</p>}
-          {!selectedSchool && schools.length === 1 && schools[0].school_verification_status === 'suspended' && <p className="form-error" role="alert">Your school account is currently suspended. Please contact support.</p>}
-          {!selectedSchool && schools.length === 1 && schools[0].school_verification_status === 'rejected' && <p className="school-status school-status-rejected" role="status">Your school is awaiting further information. {schools[0].school_verification_reason}</p>}
+          {!user?.is_superuser && !selectedSchool && schools.length === 1 && schools[0].school_verification_status === 'suspended' && <p className="form-error" role="alert">Your school account is currently suspended. Please contact support.</p>}
+          {!user?.is_superuser && !selectedSchool && schools.length === 1 && schools[0].school_verification_status === 'rejected' && <p className="school-status school-status-rejected" role="status">Your school is awaiting further information. {schools[0].school_verification_reason}</p>}
           {selectedSchool && <p className="selection-note" role="status">Selected: {selectedSchool.school_name}. School access is verified by the API on every request.</p>}
           {!selectedSchool && guardianProfile && <p className="selection-note" role="status">Your parent portal access is active for the students linked to your account.</p>}
         </section>
