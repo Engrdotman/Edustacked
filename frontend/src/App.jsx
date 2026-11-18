@@ -1,36 +1,37 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext.jsx'
-import AccessDeniedPage from './pages/AccessDeniedPage.jsx'
-import AuthenticatedHome from './pages/AuthenticatedHome.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-import PlatformLoginPage from './pages/PlatformLoginPage.jsx'
-import PasswordResetPage from './pages/PasswordResetPage.jsx'
-import SchoolProfilePage from './pages/SchoolProfilePage.jsx'
-import AcademicSetupPage from './pages/AcademicSetupPage.jsx'
-import WelcomePage from './pages/WelcomePage.jsx'
-import StudentManagementPage from './pages/StudentManagementPage.jsx'
-import StaffManagementPage from './pages/StaffManagementPage.jsx'
-import AttendanceManagementPage from './pages/AttendanceManagementPage.jsx'
-import AssessmentResultsPage from './pages/AssessmentResultsPage.jsx'
-import ReportCardsPage from './pages/ReportCardsPage.jsx'
-import BillingPage from './pages/BillingPage.jsx'
-import ParentPortalPage from './pages/ParentPortalPage.jsx'
-import GuardianActivationPage from './pages/GuardianActivationPage.jsx'
-import AnnouncementsManagementPage from './pages/AnnouncementsManagementPage.jsx'
-import ReportsPage from './pages/ReportsPage.jsx'
-import SignupPage from './pages/SignupPage.jsx'
-import SchoolDashboardPage from './pages/SchoolDashboardPage.jsx'
-import VerifyEmailPage from './pages/VerifyEmailPage.jsx'
-import DemoRequestPage from './pages/DemoRequestPage.jsx'
-import SchoolOnboardingPage from './pages/SchoolOnboardingPage.jsx'
-import PlatformSchoolsPage from './pages/PlatformSchoolsPage.jsx'
-import PlatformSchoolDetailPage from './pages/PlatformSchoolDetailPage.jsx'
-import PlatformAdminDashboardPage from './pages/PlatformAdminDashboardPage.jsx'
-import LegalDraftPage from './pages/LegalDraftPage.jsx'
-import CbtManagementPage from './pages/CbtManagementPage.jsx'
-import CbtResultsPage from './pages/CbtResultsPage.jsx'
-import ServicesPage from './pages/ServicesPage.jsx'
+
+const AccessDeniedPage = lazy(() => import('./pages/AccessDeniedPage.jsx'))
+const AuthenticatedHome = lazy(() => import('./pages/AuthenticatedHome.jsx'))
+const LoginPage = lazy(() => import('./pages/LoginPage.jsx'))
+const PlatformLoginPage = lazy(() => import('./pages/PlatformLoginPage.jsx'))
+const PasswordResetPage = lazy(() => import('./pages/PasswordResetPage.jsx'))
+const SchoolProfilePage = lazy(() => import('./pages/SchoolProfilePage.jsx'))
+const AcademicSetupPage = lazy(() => import('./pages/AcademicSetupPage.jsx'))
+const WelcomePage = lazy(() => import('./pages/WelcomePage.jsx'))
+const StudentManagementPage = lazy(() => import('./pages/StudentManagementPage.jsx'))
+const StaffManagementPage = lazy(() => import('./pages/StaffManagementPage.jsx'))
+const AttendanceManagementPage = lazy(() => import('./pages/AttendanceManagementPage.jsx'))
+const AssessmentResultsPage = lazy(() => import('./pages/AssessmentResultsPage.jsx'))
+const ReportCardsPage = lazy(() => import('./pages/ReportCardsPage.jsx'))
+const BillingPage = lazy(() => import('./pages/BillingPage.jsx'))
+const ParentPortalPage = lazy(() => import('./pages/ParentPortalPage.jsx'))
+const GuardianActivationPage = lazy(() => import('./pages/GuardianActivationPage.jsx'))
+const AnnouncementsManagementPage = lazy(() => import('./pages/AnnouncementsManagementPage.jsx'))
+const ReportsPage = lazy(() => import('./pages/ReportsPage.jsx'))
+const SignupPage = lazy(() => import('./pages/SignupPage.jsx'))
+const SchoolDashboardPage = lazy(() => import('./pages/SchoolDashboardPage.jsx'))
+const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage.jsx'))
+const DemoRequestPage = lazy(() => import('./pages/DemoRequestPage.jsx'))
+const SchoolOnboardingPage = lazy(() => import('./pages/SchoolOnboardingPage.jsx'))
+const PlatformSchoolsPage = lazy(() => import('./pages/PlatformSchoolsPage.jsx'))
+const PlatformSchoolDetailPage = lazy(() => import('./pages/PlatformSchoolDetailPage.jsx'))
+const PlatformAdminDashboardPage = lazy(() => import('./pages/PlatformAdminDashboardPage.jsx'))
+const LegalDraftPage = lazy(() => import('./pages/LegalDraftPage.jsx'))
+const CbtManagementPage = lazy(() => import('./pages/CbtManagementPage.jsx'))
+const CbtResultsPage = lazy(() => import('./pages/CbtResultsPage.jsx'))
+const ServicesPage = lazy(() => import('./pages/ServicesPage.jsx'))
 
 function AppRoutes() {
   const [location, setLocation] = useState(() => `${window.location.pathname}${window.location.search}`)
@@ -210,5 +211,5 @@ function AppRoutes() {
 }
 
 export default function App() {
-  return <AuthProvider><AppRoutes /></AuthProvider>
+  return <AuthProvider><Suspense fallback={<main className="auth-page"><p className="loading-message" role="status">Loading EDUstacked…</p></main>}><AppRoutes /></Suspense></AuthProvider>
 }
