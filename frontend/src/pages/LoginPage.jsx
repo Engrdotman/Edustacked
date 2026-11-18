@@ -18,12 +18,12 @@ export default function LoginPage({ navigate, sessionRequired = false }) {
     setError('')
     setSubmitting(true)
     try {
-      const profile = await signIn(email, password)
-      navigate(profile.guardian_portal ? '/parent' : profile.is_superuser ? '/platform' : '/app')
+      const profile = await signIn(email, password, { portal: 'school' })
+      navigate(profile.guardian_portal ? '/parent' : '/app')
     } catch (requestError) {
       setError(requestError instanceof ApiError
         ? requestError.message
-        : 'Sign in could not be completed. Try again.')
+        : requestError?.message || 'Sign in could not be completed. Try again.')
     } finally {
       setSubmitting(false)
     }
@@ -68,6 +68,7 @@ export default function LoginPage({ navigate, sessionRequired = false }) {
         </div>
    
         <button className="text-button back-link" type="button" onClick={() => navigate('/')}>Back to home</button>
+        <button className="text-button platform-login-entry" type="button" onClick={() => navigate('/platform/login')}>Platform administrator sign in</button>
       </section></div>
     </main>
   )

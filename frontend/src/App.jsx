@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext.jsx'
 import AccessDeniedPage from './pages/AccessDeniedPage.jsx'
 import AuthenticatedHome from './pages/AuthenticatedHome.jsx'
 import LoginPage from './pages/LoginPage.jsx'
+import PlatformLoginPage from './pages/PlatformLoginPage.jsx'
 import PasswordResetPage from './pages/PasswordResetPage.jsx'
 import SchoolProfilePage from './pages/SchoolProfilePage.jsx'
 import AcademicSetupPage from './pages/AcademicSetupPage.jsx'
@@ -59,13 +60,25 @@ function AppRoutes() {
   }, [])
 
   const pathname = location.split('?')[0]
+  useEffect(() => {
+    if (!loading && user?.is_superuser && ['/platform/login', '/login', '/signup'].includes(pathname)) navigate('/platform')
+  }, [loading, pathname, user, navigate])
+
   if (pathname === '/privacy') return <LegalDraftPage type="privacy" navigate={navigate} />
   if (pathname === '/terms') return <LegalDraftPage type="terms" navigate={navigate} />
   if (pathname === '/guardian/activate') return <GuardianActivationPage navigate={navigate} />
   if (pathname === '/verify-email') return <VerifyEmailPage navigate={navigate} />
   if (pathname === '/demo') return <DemoRequestPage navigate={navigate} />
-  if (pathname === '/signup') return user ? <AuthenticatedHome navigate={navigate} /> : <SignupPage navigate={navigate} />
+  if (pathname === '/platform/login') {
+    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Checking platform session…</p></main>
+    return <PlatformLoginPage navigate={navigate} />
+  }
+  if (pathname === '/signup') {
+    if (user?.is_superuser) return <main className="auth-page"><p className="loading-message" role="status">Opening platform administration…</p></main>
+    return user ? <AuthenticatedHome navigate={navigate} /> : <SignupPage navigate={navigate} />
+  }
   if (pathname === '/login') {
+    if (user?.is_superuser) return <main className="auth-page"><p className="loading-message" role="status">Opening platform administration…</p></main>
     return user ? <AuthenticatedHome navigate={navigate} /> : <LoginPage navigate={navigate} />
   }
   if (pathname === '/forgot-password') {
@@ -82,7 +95,7 @@ function AppRoutes() {
   }
   if (pathname === '/platform' || pathname === '/platform/schools' || /^\/platform\/schools\/\d+$/.test(pathname)) {
     if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
-    if (!user) return <AccessDeniedPage navigate={navigate} />
+    if (!user) return <PlatformLoginPage navigate={navigate} />
     if (!user.is_superuser) return <AccessDeniedPage navigate={navigate} signedIn />
     const detail = pathname.match(/^\/platform\/schools\/(\d+)$/)
     if (detail) return <PlatformSchoolDetailPage schoolId={detail[1]} navigate={navigate} />

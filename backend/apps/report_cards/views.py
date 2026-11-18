@@ -408,6 +408,7 @@ def render_report_pdf(card, revision, snapshot):
     muted = colors.HexColor("#59675e")
     pale = colors.HexColor("#edf3ee")
     styles.add(ParagraphStyle(name="SchoolTitle", parent=styles["Title"], alignment=TA_CENTER, textColor=ink, fontName="Helvetica-Bold", fontSize=18, leading=21, spaceAfter=2))
+    styles.add(ParagraphStyle(name="SchoolContact", parent=styles["BodyText"], alignment=TA_CENTER, textColor=muted, fontSize=9.2, leading=12, spaceAfter=1))
     styles.add(ParagraphStyle(name="SchoolMeta", parent=styles["BodyText"], alignment=TA_CENTER, textColor=muted, fontSize=7.2, leading=9))
     styles.add(ParagraphStyle(name="ReportTitle", parent=styles["Heading2"], alignment=TA_CENTER, textColor=colors.white, fontName="Helvetica-Bold", fontSize=10, leading=13))
     styles.add(ParagraphStyle(name="SectionTitle", parent=styles["Heading2"], textColor=colors.HexColor(primary), fontName="Helvetica-Bold", fontSize=9, leading=11, spaceBefore=5, spaceAfter=3))
@@ -430,12 +431,14 @@ def render_report_pdf(card, revision, snapshot):
                 logo = Image(BytesIO(logo_file.read()), width=22 * mm, height=22 * mm, kind="proportional")
         except Exception:
             logo = ""
-    contacts = "  |  ".join(value for value in (
-        school.get("address"), school.get("contact_phone"), school.get("contact_email"), school.get("website"),
-    ) if value)
     school_identity = [para(school.get("name") or "School", "SchoolTitle")]
-    if contacts:
-        school_identity.append(Paragraph(escape(contacts), styles["SchoolMeta"]))
+    if school.get("address"):
+        school_identity.append(Paragraph(escape(school["address"]), styles["SchoolContact"]))
+    contact_details = "  |  ".join(value for value in (
+        school.get("contact_phone"), school.get("contact_email"), school.get("website"),
+    ) if value)
+    if contact_details:
+        school_identity.append(Paragraph(escape(contact_details), styles["SchoolContact"]))
     if school.get("motto"):
         school_identity.append(Paragraph(f"<i>{escape(school['motto'])}</i>", styles["SchoolMeta"]))
     header = Table([[logo, school_identity]], colWidths=[25 * mm, 161 * mm], hAlign="LEFT")

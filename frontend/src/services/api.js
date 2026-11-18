@@ -272,11 +272,11 @@ export function getServiceEntitlementLicense(licenseId) {
   return apiRequest(`services/entitlements/${licenseId}/license/`)
 }
 
-export async function login(email, password) {
+export async function login(email, password, portal = 'school') {
   await getCsrfToken()
   const data = await apiRequest('auth/login/', {
     method: 'POST',
-    body: { email, password },
+    body: { email, password, portal },
   })
   setAccessToken(data.access)
   return data.user

@@ -266,6 +266,17 @@ class LoginView(APIView):
             raise
         user = serializer.validated_data["user"]
         self._clear_failed_logins(user)
+        portal = serializer.validated_data["portal"]
+        if portal == "platform" and not user.is_superuser:
+            return Response(
+                {"detail": "This sign-in is for EDUstacked platform administrators. School owners and staff should use School sign in."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if portal == "school" and user.is_superuser:
+            return Response(
+                {"detail": "Platform administrator accounts use the separate Platform sign in page."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         refresh = RefreshToken.for_user(user)
         access = str(refresh.access_token)
 

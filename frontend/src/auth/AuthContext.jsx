@@ -62,8 +62,8 @@ export function AuthProvider({ children }) {
     return () => { active = false }
   }, [loadIdentity])
 
-  const signIn = useCallback(async (email, password) => {
-    const profile = await apiLogin(email, password)
+  const signIn = useCallback(async (email, password, { portal = 'school' } = {}) => {
+    const profile = await apiLogin(email, password, portal)
     lastActivityAt.current = Date.now()
     lastSessionRefreshAt.current = Date.now()
     const memberships = await apiRequest('auth/schools/')
