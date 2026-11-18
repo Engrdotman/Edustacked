@@ -810,10 +810,16 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .contact-form-wrap>p { margin:8px 0 20px; color:#6d7c71; font-size:12px; }
 .company-contact-form { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
 .company-contact-form label { display:grid; gap:6px; color:#425a49; font-size:11px; font-weight:700; }
-.company-contact-form input,.company-contact-form textarea { width:100%; min-height:41px; padding:9px 10px; border:1px solid #d9d9e0; border-radius:5px; color:#2b4031; background:white; font:inherit; font-size:13px; }
+.company-contact-form input,.company-contact-form select,.company-contact-form textarea { width:100%; min-height:41px; padding:9px 10px; border:1px solid #d9d9e0; border-radius:5px; color:#2b4031; background:white; font:inherit; font-size:13px; }
 .company-contact-form textarea { resize:vertical; }
 .company-contact-form .contact-message,.company-contact-form .form-error,.company-contact-form .form-success,.company-contact-form button { grid-column:1/-1; }
 .company-contact-form .company-button { justify-self:start; }
+.assisted-onboarding-offer { display:flex; align-items:center; justify-content:space-between; gap:26px; margin-top:20px; padding:24px; border:1px solid #d9e6db; border-radius:12px; background:linear-gradient(120deg,#eff7f0,#fff 72%); }
+.assisted-onboarding-offer>div { max-width:660px; }
+.assisted-onboarding-offer h3 { margin:6px 0 8px; color:#203c2c; font-size:clamp(20px,2.4vw,27px); }
+.assisted-onboarding-offer p:not(.company-kicker) { margin:0 0 9px; color:#5d7163; font-size:13px; line-height:1.7; }
+.assisted-onboarding-offer small { color:#718176; font-size:11px; }
+.assisted-onboarding-offer .company-button { flex:none; }
 .company-footer { padding:45px clamp(22px,8vw,122px) 18px; color:#e9f0e9; background:#173e2b; }
 .footer-main { display:grid; grid-template-columns:1.4fr 1fr 1fr 1fr; gap:35px; padding-bottom:36px; }
 .company-footer .brand-name { color:white; }
@@ -835,6 +841,9 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .legal-draft-content section { margin:28px 0; }
 .legal-draft-content section h2 { color:#31513b; font-size:19px; }
 .legal-draft-content section p { color:#596c5f; font-size:14px; line-height:1.8; }
+.legal-draft-content section ul { display:grid; gap:10px; margin:14px 0 0; padding-left:22px; color:#596c5f; font-size:14px; line-height:1.75; }
+.legal-draft-content a,.legal-source-link a { color:#147f9b; text-underline-offset:3px; }
+.legal-source-link { margin:28px 0; color:#596c5f; font-size:13px; }
 .legal-footer { padding:18px; border-top:1px solid #e0e8e0; color:#78877c; background:white; font-size:10px; text-align:center; }
 @media(max-width:1080px) {
   .company-nav { gap:13px; }
@@ -870,6 +879,7 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
   .company-inspiration { grid-template-columns:65px 1fr; gap:18px; }
   .inspiration-mark { font-size:85px; }
   .company-step-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .assisted-onboarding-offer { align-items:flex-start; flex-direction:column; }
   .company-faq { grid-template-columns:1fr; gap:24px; }
   .footer-main { grid-template-columns:repeat(2,1fr); }
 }
@@ -924,6 +934,8 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
   .company-section h2 { font-size:34px; }
   .company-purpose-grid,.company-feature-grid,.company-step-grid { grid-template-columns:1fr; }
   .company-purpose-grid article { min-height:0; }
+  .assisted-onboarding-offer { padding:18px; }
+  .assisted-onboarding-offer .company-button { width:100%; }
   .company-inspiration { grid-template-columns:34px minmax(0,1fr); gap:10px; }
   .inspiration-mark { font-size:52px; }
   .company-inspiration .inspiration-lead { font-size:16px!important; }

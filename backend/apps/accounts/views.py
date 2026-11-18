@@ -173,7 +173,7 @@ class DemoRequestView(APIView):
         serializer = DemoRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response({"detail": "Your demo request has been received. Our team will be in touch."}, status=status.HTTP_201_CREATED)
+        return Response({"detail": "Your request has been received. Our team will be in touch."}, status=status.HTTP_201_CREATED)
 
 
 @method_decorator(csrf_protect, name="dispatch")

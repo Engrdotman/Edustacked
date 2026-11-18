@@ -51,9 +51,14 @@ Optional variables:
 - `DJANGO_LOG_LEVEL`: `INFO` (or `DEBUG` for troubleshooting)
 - `DB_CONN_MAX_AGE`: `60` (tune based on connection limits)
 - `DB_CONNECT_TIMEOUT`: `5`
+- `REDIS_URL`: `${{Redis.REDIS_URL}}` (private Railway Redis service reference; see [Redis setup](railway-redis-setup.md))
 - `DJANGO_SECURE_HSTS_SECONDS`: `31536000` (only after HTTPS verified)
 - `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS`: `false`
 - `DJANGO_SECURE_HSTS_PRELOAD`: `false`
+
+### Set up Redis for the backend
+
+Redis is optional for a single backend process. When `REDIS_URL` is unset, Django uses per-process memory cache. Add a private Railway Redis service and set the backend's `REDIS_URL` to that service's reference before running multiple backend instances so their cache and API throttling state are shared. Follow [the Railway Redis setup guide](railway-redis-setup.md).
 
 ## First Deployment
 

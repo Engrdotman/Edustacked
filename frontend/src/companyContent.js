@@ -56,8 +56,9 @@ export const faqs = [
   ['Can a school invite teachers?', 'School owners and authorized administrators can add staff and assign school roles.'],
   ['Can a school update its information?', 'Authorized school administrators can manage the school profile and configuration.'],
   ['How is school data separated?', 'School API access is scoped on the backend to an authenticated user’s active membership and selected school.'],
-  ['Is there a monthly subscription?', 'Subscription billing is not currently available. The planned approach is free access to core features within reasonable limits.'],
+  ['How does EDUstacked charge for the platform?', 'Report cards use one-time credit packages, charged when a student’s report card is finalized for the first time in a school, session, and term. Optional one-time staff onboarding is ₦15,000 remotely or ₦30,000 on-site, with the school covering transport. There is no recurring school subscription at this time.'],
   ['How do report-card credits work?', 'Schools can buy one-time packages: 100 credits for ₦30,000, 300 for ₦45,000, or 500 for ₦50,000. One credit is charged the first time a student’s approved report card is finalized for a school, session, and term. The selected payment provider must confirm a successful payment before credits are added.'],
   ['Can a school preview report cards for free?', 'Yes. Drafts, review, approval, preview, download, reprint, and later corrections do not use another credit. One credit is charged only for the first finalization in that student’s school, session, and term.'],
-  ['How can a school contact support?', 'Use Request a Demo to leave contact details. Official support email and phone details will be published when confirmed.'],
+  ['What is included in assisted onboarding?', 'Both the ₦15,000 remote session and the ₦30,000 on-site session include training school staff to use the workspace. For on-site training, the school also covers transport. Use the contact form to request a session.'],
+  ['How can a school contact support or request a demo?', 'Use the contact form to request a product demo, one-time assisted onboarding, or both.'],
 ]
