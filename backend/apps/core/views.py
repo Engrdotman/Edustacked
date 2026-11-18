@@ -1,5 +1,7 @@
 import logging
 
+from django.conf import settings
+from django.core.cache import cache
 from django.db import DatabaseError, connections
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -12,7 +14,20 @@ logger = logging.getLogger(__name__)
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def health_check(request, version=None):
-    return Response({"status": "ok"})
+    backend = settings.CACHES["default"]["BACKEND"]
+    cache_backend = "redis" if backend.endswith("redis.RedisCache") else "local-memory"
+    cache_status = "connected"
+    try:
+        cache.set("health-check", "ok", timeout=5)
+        if cache.get("health-check") != "ok":
+            cache_status = "unavailable"
+    except Exception:
+        cache_status = "unavailable"
+        logger.exception("Shared cache health check failed.")
+    return Response({
+        "status": "ok",
+        "cache": {"backend": cache_backend, "status": cache_status},
+    })
 
 
 @api_view(["GET"])

@@ -598,6 +598,8 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .company-hero-actions { display:flex; flex-wrap:wrap; gap:11px; }
 .company-demo-link { margin-top:18px; padding:4px 0; border:0; color:#6a7b70; background:none; font:inherit; font-size:13px; cursor:pointer; }
 .company-demo-link span { color:var(--company-green); font-weight:750; }
+.company-training-link { display:block; margin-top:5px; padding:4px 0; border:0; color:#526577; background:none; font:inherit; font-size:13px; text-align:left; cursor:pointer; }
+.company-training-link span { color:#147f9b; font-weight:800; }
 .company-hero-proof { display:flex; flex-wrap:wrap; gap:10px 19px; margin-top:38px; color:#68796d; font-size:11px; font-weight:650; }
 .company-hero-proof span::before { content:'✓'; margin-right:7px; color:#438057; font-weight:800; }
 .company-hero-visual { position:relative; padding:18px; }
@@ -691,6 +693,18 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .preview-onboarding-main>p>b { margin-left:auto; color:#51735a; font-size:6px; }
 .company-trust-strip { display:flex; align-items:center; justify-content:center; gap:27px; padding:22px; border-bottom:1px solid #e5ebe5; color:#637469; background:white; font-size:12px; font-weight:650; }
 .company-trust-strip i { width:4px; height:4px; border-radius:50%; background:#9ab59e; }
+.company-onboarding-promo { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(330px,.9fr); align-items:center; gap:36px; padding:clamp(30px,5vw,58px) clamp(22px,8vw,122px); color:white; background:linear-gradient(115deg,#454b72 0%,#315f78 54%,#148fa8 100%); }
+.onboarding-promo-copy .company-kicker { color:#a8e5df; }
+.onboarding-promo-copy h2 { max-width:610px; margin:10px 0 12px; color:white; font-size:clamp(27px,3.4vw,40px); line-height:1.12; letter-spacing:-.035em; }
+.onboarding-promo-copy>p:not(.company-kicker) { max-width:620px; margin:0 0 12px; color:rgba(255,255,255,.88); font-size:14px; line-height:1.75; }
+.onboarding-promo-copy>small { color:rgba(255,255,255,.72); font-size:11px; line-height:1.6; }
+.onboarding-promo-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.onboarding-promo-options article { display:grid; gap:7px; min-width:0; padding:17px; border:1px solid rgba(255,255,255,.25); border-radius:10px; background:rgba(255,255,255,.12); backdrop-filter:blur(6px); }
+.onboarding-promo-options article>span { color:#d4efeb; font-size:9px; font-weight:800; letter-spacing:.12em; }
+.onboarding-promo-options article>strong { color:white; font-size:clamp(22px,2.6vw,30px); line-height:1.1; }
+.onboarding-promo-options article>small { color:rgba(255,255,255,.79); font-size:10px; line-height:1.45; }
+.onboarding-promo-cta { grid-column:1/-1; display:flex; align-items:center; justify-content:center; gap:9px; min-height:49px; padding:12px 18px; border:1px solid white; border-radius:7px; color:#29374f; background:white; font:inherit; font-size:13px; font-weight:800; cursor:pointer; transition:transform .18s ease,box-shadow .18s ease; }
+.onboarding-promo-cta:hover { transform:translateY(-2px); box-shadow:0 10px 24px rgba(16,35,52,.2); }
 .company-section { scroll-margin-top:76px; padding:104px clamp(22px,8vw,122px); }
 .company-section-intro { max-width:590px; }
 .company-section h2 { margin:0; color:#1f3428; font-size:clamp(32px,4vw,48px); font-weight:620; line-height:1.12; letter-spacing:-.04em; }
@@ -873,6 +887,7 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
   .company-hero { grid-template-columns:1fr; padding-top:64px; }
   .company-hero-copy { max-width:700px; }
   .company-hero-visual { width:min(100%,720px); margin:auto; }
+  .company-onboarding-promo { grid-template-columns:1fr; gap:22px; }
   .company-about,.company-security,.company-contact { grid-template-columns:1fr; gap:30px; }
   .company-about-copy { max-width:780px; }
   .company-purpose-grid { grid-template-columns:1fr 1fr; }
@@ -888,6 +903,7 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
   .company-hero { min-height:auto; padding:50px 17px 45px; }
   .company-hero h1 { font-size:43px; }
   .company-hero-description { font-size:15px; }
+  .company-training-link { font-size:12px; line-height:1.6; }
   .company-hero-proof { display:grid; gap:9px; }
   .company-hero-visual { padding:7px 0; }
   .hero-showcase-window { aspect-ratio:1.34; }
@@ -929,6 +945,13 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
   .preview-panels { grid-template-columns:1fr; }
   .preview-activity { display:none; }
   .company-trust-strip { justify-content:flex-start; overflow:auto; gap:13px; padding:15px 17px; font-size:10px; white-space:nowrap; }
+  .company-onboarding-promo { gap:18px; padding:36px 17px; }
+  .onboarding-promo-copy h2 { font-size:30px; }
+  .onboarding-promo-copy>p:not(.company-kicker) { font-size:13px; }
+  .onboarding-promo-options { gap:8px; }
+  .onboarding-promo-options article { padding:13px 11px; }
+  .onboarding-promo-options article>strong { font-size:21px; }
+  .onboarding-promo-options article>small { font-size:9px; }
   .company-section { padding:68px 17px; }
   .company-section-heading { align-items:flex-start; flex-direction:column; gap:16px; margin-bottom:25px; }
   .company-section h2 { font-size:34px; }

@@ -181,6 +181,10 @@ CACHES = {
         "LOCATION": REDIS_URL or "edustacked-local-cache",
         "KEY_PREFIX": "edustacked",
         "TIMEOUT": 300,
+        "OPTIONS": {
+            "socket_connect_timeout": 2,
+            "socket_timeout": 2,
+        } if REDIS_URL else {},
     }
 }
 
@@ -237,6 +241,13 @@ SENDGRID_PASSWORD_SETUP_TEMPLATE_ID = os.getenv("SENDGRID_PASSWORD_SETUP_TEMPLAT
 SENDGRID_SCHOOL_SIGNUP_NOTIFICATION_TEMPLATE_ID = os.getenv("SENDGRID_SCHOOL_SIGNUP_NOTIFICATION_TEMPLATE_ID", "").strip()
 PLATFORM_SIGNUP_NOTIFICATION_EMAIL = os.getenv(
     "PLATFORM_SIGNUP_NOTIFICATION_EMAIL", "edustackedng@gmail.com"
+).strip()
+PLATFORM_DEMO_REQUEST_NOTIFICATION_EMAIL = os.getenv(
+    "PLATFORM_DEMO_REQUEST_NOTIFICATION_EMAIL",
+    PLATFORM_SIGNUP_NOTIFICATION_EMAIL or "edustackedng@gmail.com",
+).strip()
+SENDGRID_DEMO_REQUEST_NOTIFICATION_TEMPLATE_ID = os.getenv(
+    "SENDGRID_DEMO_REQUEST_NOTIFICATION_TEMPLATE_ID", ""
 ).strip()
 EMAIL_BACKEND = os.getenv(
     "EMAIL_BACKEND",

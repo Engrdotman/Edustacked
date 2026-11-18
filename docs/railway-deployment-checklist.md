@@ -43,6 +43,7 @@ Required production variables (set in Railway backend service Variables):
 | `EMAIL_USE_TLS` | `true` (if EMAIL_PORT is 587) |
 | `EMAIL_USE_SSL` | `false` (or `true` if EMAIL_PORT is 465 and EMAIL_USE_TLS is false) |
 | `DEFAULT_FROM_EMAIL` | `EDUstacked <noreply@yourdomain.com>` |
+| `PLATFORM_DEMO_REQUEST_NOTIFICATION_EMAIL` | `edustackedng@gmail.com` (receives demo and assisted-onboarding request alerts) |
 | `PAYSTACK_SECRET_KEY` | `sk_test_...` for test mode; `sk_live_...` only after verified |
 | `CBT_LICENSE_SIGNING_KEY` | Output of `python -c "import secrets; print(secrets.token_urlsafe(64))"` |
 | `CBT_PACKAGE_SIGNING_KEY` | Output of `python -c "import secrets; print(secrets.token_urlsafe(64))"` |
@@ -52,6 +53,7 @@ Optional variables:
 - `DB_CONN_MAX_AGE`: `60` (tune based on connection limits)
 - `DB_CONNECT_TIMEOUT`: `5`
 - `REDIS_URL`: `${{Redis.REDIS_URL}}` (private Railway Redis service reference; see [Redis setup](railway-redis-setup.md))
+- `SENDGRID_DEMO_REQUEST_NOTIFICATION_TEMPLATE_ID`: optional Dynamic Template ID for demo/onboarding request alerts; without it, the backend sends a plain-text email
 - `DJANGO_SECURE_HSTS_SECONDS`: `31536000` (only after HTTPS verified)
 - `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS`: `false`
 - `DJANGO_SECURE_HSTS_PRELOAD`: `false`

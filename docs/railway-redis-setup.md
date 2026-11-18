@@ -12,8 +12,14 @@ EDUstacked already supports Redis through Django's cache backend. Redis is an op
    ${{Redis.REDIS_URL}}
    ```
 
-4. Apply the variable change and deploy/restart the backend service. Do not add this variable to Netlify or Vercel; it is server-side only.
-5. In the backend service shell, confirm Django can read and write the cache:
+4. Make sure the variable is added to the **Edustacked backend service** in the same Railway environment as the running deployment, then redeploy. Do not add this variable to Netlify or Vercel; it is server-side only.
+5. After deployment, open `https://edustacked-production.up.railway.app/api/v1/health/`. The response now reports cache status without exposing the Redis URL:
+
+   - `"backend": "redis", "status": "connected"` means Django can read and write Redis.
+   - `"backend": "local-memory"` means `REDIS_URL` is not present on the running backend deployment.
+   - `"backend": "redis", "status": "unavailable"` means Django sees the URL but cannot reach Redis. Check that Redis is online, both services are in the same Railway environment, and the reference points to the Redis service's `REDIS_URL`.
+
+6. If you have access to the backend service shell, you can also confirm the cache directly:
 
    ```bash
    python manage.py shell -c "from django.conf import settings; from django.core.cache import cache; cache.set('redis_check', 'ok', 30); print(settings.CACHES['default']['BACKEND'], cache.get('redis_check'))"

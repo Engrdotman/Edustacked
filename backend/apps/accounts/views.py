@@ -30,8 +30,12 @@ from django.middleware.csrf import get_token
 from apps.schools.models import SchoolMembership
 from apps.schools.serializers import SchoolSelectionSerializer
 from apps.schools.tenancy import resolve_authorized_school
-from .emailing import send_password_setup_email
-from .emailing import issue_email_verification, send_email_verification
+from .emailing import (
+    issue_email_verification,
+    send_demo_request_notification,
+    send_email_verification,
+    send_password_setup_email,
+)
 from .models import EmailVerificationToken
 from .serializers import (
     LoginSerializer,
@@ -172,8 +176,27 @@ class DemoRequestView(APIView):
     def post(self, request, version=None):
         serializer = DemoRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response({"detail": "Your request has been received. Our team will be in touch."}, status=status.HTTP_201_CREATED)
+        demo_request = serializer.save()
+        notification_status = send_demo_request_notification(demo_request)
+        if notification_status == "sent":
+            detail = (
+                "Your request is saved. An email alert was sent to our team, and they will "
+                "contact you using the details provided."
+            )
+        elif notification_status == "local_only":
+            detail = (
+                "Your request is saved. In local development, the team notification appears "
+                "in the backend terminal, not your inbox."
+            )
+        else:
+            detail = (
+                "Your request is saved, but our team email alert could not be sent. Please "
+                "email edustackedng@gmail.com so we can follow up."
+            )
+        return Response(
+            {"detail": detail, "notification_status": notification_status},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 @method_decorator(csrf_protect, name="dispatch")

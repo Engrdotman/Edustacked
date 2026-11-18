@@ -132,6 +132,57 @@ def send_school_signup_notification(school, owner):
         return 0
 
 
+def send_demo_request_notification(demo_request):
+    """Alert EDUstacked about a public demo or assisted-onboarding request."""
+    recipient = getattr(settings, "PLATFORM_DEMO_REQUEST_NOTIFICATION_EMAIL", "").strip()
+    if not recipient:
+        logger.error("Platform demo request notification email is not configured.")
+        return "failed"
+
+    subject = f"New EDUstacked demo or onboarding request: {demo_request.school_name}"
+    request_message = demo_request.message.strip() or "No additional details provided."
+    body = (
+        "A new product demo or assisted-onboarding request was submitted.\n\n"
+        f"Request ID: {demo_request.pk}\n"
+        f"School: {demo_request.school_name}\n"
+        f"Administrator: {demo_request.administrator_name}\n"
+        f"Email: {demo_request.email}\n"
+        f"Phone: {demo_request.phone_number}\n"
+        f"Request details:\n{request_message}\n\n"
+        f"Received: {demo_request.created_at.isoformat()}\n"
+    )
+    template_id = getattr(settings, "SENDGRID_DEMO_REQUEST_NOTIFICATION_TEMPLATE_ID", "")
+    try:
+        if template_id and settings.EMAIL_BACKEND.endswith("SendgridBackend"):
+            message = EmailMessage(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient])
+            message.dynamic_template_id = template_id
+            message.dynamic_template_data = {
+                "request_id": demo_request.pk,
+                "school_name": demo_request.school_name,
+                "administrator_name": demo_request.administrator_name,
+                "requester_email": demo_request.email,
+                "phone_number": demo_request.phone_number,
+                "request_message": request_message,
+                "received_at": demo_request.created_at.isoformat(),
+                "support_email": settings.DEFAULT_FROM_EMAIL,
+            }
+            sent = message.send(fail_silently=False)
+        else:
+            sent = send_mail(
+                subject, body, settings.DEFAULT_FROM_EMAIL, [recipient], fail_silently=False
+            )
+    except Exception:
+        logger.exception("Platform demo request notification delivery failed.")
+        return "failed"
+
+    if not sent:
+        logger.error("Platform demo request notification was not accepted by the email backend.")
+        return "failed"
+    if settings.EMAIL_BACKEND.endswith(("locmem.EmailBackend", "console.EmailBackend", "filebased.EmailBackend")):
+        return "local_only"
+    return "sent"
+
+
 def send_staff_invitation_emails(user, verification=None, *, school_name=""):
     """Send needed staff access emails and report delivery without losing the membership."""
     statuses = {}
