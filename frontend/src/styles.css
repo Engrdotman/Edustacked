@@ -1447,3 +1447,111 @@ img,.school-logo-preview img,.principal-signature-preview img,.cbt-question-imag
   .dashboard-kpis,.dashboard-quick-actions { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .dashboard-panel-heading { flex-wrap:wrap; }
 }
+
+/* Shared grid and width rules for every authenticated screen. */
+.app-page { padding-inline:clamp(20px,5vw,88px); }
+.app-page > .app-content { width:min(100%,1280px); max-width:1280px; }
+.app-content > *,.app-topbar > *,.platform-content > * { min-width:0; }
+.app-topbar { min-height:76px; height:auto; gap:16px; }
+.app-content .intro { max-width:760px; }
+.app-content :is(input,select,textarea),.app-page :is(button,a) { max-width:100%; }
+.app-content :is(input,select,textarea) { min-width:0; }
+.app-content :is(.parent-table-wrap,.reports-table-wrap,.report-card-table-wrap,.cbt-results-table-scroll) {
+  width:100%; min-width:0; overflow-x:auto; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch;
+}
+.app-content :is(.parent-table-wrap,.reports-table-wrap,.report-card-table-wrap,.cbt-results-table-scroll) table { width:100%; }
+.app-content :is(.student-form,.student-list,.student-profile,.academic-panel,.attendance-panel,.assessment-panel,.report-card-panel,.reports-panel,.billing-panel,.parent-panel,.cbt-panel,.membership-directory,.platform-user-card) { min-width:0; }
+.app-content :is(.student-fields,.academic-form-grid,.attendance-selectors,.assessment-form-grid,.assessment-components-form,.assessment-score-grid,.report-card-filters,.reports-filter-panel,.platform-detail-grid,.platform-metric-grid,.cbt-form-grid,.cbt-result-meta,.cbt-result-kpis,.cbt-results-grid) > * { min-width:0; }
+.app-content :is(.student-fields,.academic-form-grid,.attendance-selectors,.assessment-form-grid,.assessment-components-form,.assessment-score-grid,.report-card-filters,.reports-filter-panel) label { min-width:0; }
+
+@media (max-width:1100px) {
+  .app-page { padding-inline:clamp(18px,4vw,44px); }
+  .app-page > .app-content { width:100%; }
+  .student-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .student-layout { grid-template-columns:minmax(220px,.8fr) minmax(0,1.4fr); }
+  .academic-columns { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .dashboard-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .platform-metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+
+@media (max-width:760px) {
+  html,body,#root { width:100%; min-width:320px; max-width:100%; overflow-x:clip; }
+  .app-page { padding-inline:clamp(14px,4vw,24px); }
+  .app-topbar { min-height:62px; padding-block:10px; flex-wrap:wrap; }
+  .app-content { padding-block:clamp(28px,7vw,42px); }
+  .app-page > .app-content { width:100%; }
+  .app-content .app-heading { max-width:100%; font-size:clamp(38px,8vw,58px); line-height:1.06; overflow-wrap:anywhere; }
+  .app-content .intro { max-width:68ch; font-size:15px; line-height:1.65; }
+  .app-content :is(.form-grid,.student-fields,.academic-form-grid,.attendance-selectors,.assessment-form-grid,.assessment-components-form,.assessment-score-grid,.report-card-filters,.reports-filter-panel,.platform-detail-grid,.platform-metric-grid,.cbt-result-meta,.cbt-result-kpis,.cbt-results-grid) { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .academic-columns,.student-layout,.dashboard-columns,.platform-revenue-panel { grid-template-columns:minmax(0,1fr); }
+  .student-toolbar { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .student-toolbar input { grid-column:1/-1; width:100%; min-width:0; }
+  .student-toolbar select,.student-toolbar button { width:100%; min-width:0; }
+  .attendance-selectors > .attendance-date-filter,.attendance-selectors > .attendance-term,
+  .reports-filter-panel > .reports-date-filter,.reports-filter-panel > button,
+  .report-card-filters > .report-card-date-filter { grid-column:1/-1; }
+  .reports-filter-panel > button { width:100%; }
+  .academic-tabs { flex-wrap:nowrap; overflow-x:auto; padding-bottom:4px; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; }
+  .academic-tabs button { flex:0 0 auto; white-space:nowrap; }
+  .academic-toolbar,.attendance-panel-heading,.assessment-panel-heading,.reports-panel-heading { align-items:stretch; flex-wrap:wrap; }
+  .academic-toolbar label { width:100%; }
+  .membership-invite { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .membership-invite > div:first-child { grid-column:1/-1; }
+  .dashboard-sidebar nav { max-width:100%; }
+  .dashboard-content { width:100%; }
+  .dashboard-topbar { flex-wrap:nowrap; }
+  .dashboard-content :is(.dashboard-kpis,.dashboard-quick-actions) { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .dashboard-content .dashboard-columns { grid-template-columns:minmax(0,1fr); }
+  .platform-filters { grid-template-columns:minmax(0,1fr); }
+  .platform-user-main,.platform-user-meta { min-width:0; flex-wrap:wrap; }
+  .platform-header { min-width:0; flex-wrap:wrap; }
+  .parent-panel,.settings-card,.academic-panel,.attendance-panel,.assessment-panel,.report-card-panel,.reports-panel,.billing-panel,.access-panel { padding:clamp(15px,3.5vw,22px); }
+  .form-actions,.student-actions,.attendance-actions,.cbt-actions { flex-wrap:wrap; }
+  .form-actions > *, .attendance-actions > *, .cbt-actions > * { max-width:100%; }
+}
+
+@media (max-width:560px) {
+  .app-page { padding-inline:14px; }
+  .app-topbar { min-height:56px; gap:8px; }
+  .app-topbar .brand { gap:8px; }
+  .app-topbar .brand-name { font-size:14px; }
+  .app-topbar > .text-button { font-size:12px; }
+  .app-content { padding-block:26px 38px; }
+  .app-content .app-heading { margin-block:18px 12px; font-size:clamp(36px,10vw,48px); }
+  .app-content .intro { font-size:14px; }
+  .app-content :is(.form-grid,.student-fields,.academic-form-grid) { grid-template-columns:minmax(0,1fr); }
+  .student-layout { grid-template-columns:minmax(0,1fr); }
+  .student-fields .field-wide { grid-column:auto; }
+  .student-toolbar { grid-template-columns:minmax(0,1fr); }
+  .student-toolbar input { grid-column:auto; }
+  .membership-invite { grid-template-columns:minmax(0,1fr); padding:15px; }
+  .membership-invite > div:first-child { grid-column:auto; }
+  .membership-invite > button { width:100%; }
+  .attendance-selectors,.report-card-filters,.reports-filter-panel,.assessment-form-grid,.assessment-components-form,.assessment-score-grid,.cbt-result-meta,.cbt-result-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .dashboard-content { padding-inline:14px; }
+  .dashboard-kpis { gap:9px; }
+  .dashboard-kpi,.dashboard-panel { padding:13px; }
+  .dashboard-kpi small { line-height:1.45; overflow-wrap:anywhere; }
+  .dashboard-topbar { padding-inline:14px; }
+  .dashboard-topbar > div { gap:8px; }
+  .platform-detail-grid { grid-template-columns:minmax(0,1fr); }
+  .platform-metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .report-card-list-row { min-width:0; }
+  .parent-table-wrap table,.reports-table-wrap table,.report-card-table-wrap table { min-width:620px; }
+  .cbt-results-table { min-width:790px; }
+  .app-content :is(.parent-table-wrap,.reports-table-wrap,.report-card-table-wrap,.cbt-results-table-scroll) { border-radius:8px; scrollbar-width:thin; }
+  .parent-profile-form,.parent-profile-form label { width:100%; min-width:0; }
+  .parent-profile-form > * { flex:1 1 100%; }
+  .parent-header-actions { flex-wrap:wrap; gap:8px; }
+  .billing-overview > div { align-items:flex-start; flex-direction:column; }
+  .platform-user-actions,.membership-account-actions { justify-content:flex-start; }
+}
+
+@media (max-width:380px) {
+  .app-content :is(.attendance-selectors,.report-card-filters,.reports-filter-panel,.assessment-form-grid,.assessment-components-form,.assessment-score-grid,.cbt-result-meta,.cbt-result-kpis,.platform-metric-grid) { grid-template-columns:minmax(0,1fr); }
+  .attendance-selectors > .attendance-date-filter,.attendance-selectors > .attendance-term,
+  .reports-filter-panel > .reports-date-filter,.reports-filter-panel > button,
+  .report-card-filters > .report-card-date-filter { grid-column:auto; }
+  .dashboard-kpis,.dashboard-quick-actions { grid-template-columns:minmax(0,1fr); }
+  .dashboard-topbar-actions > span { display:none; }
+}
