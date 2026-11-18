@@ -211,6 +211,13 @@ h1 em { color: #1486a8; font-weight: 500; }.intro { max-width: 440px; color: #76
 .academic-panel { min-width: 0; padding: 24px; border: 1px solid #d9d9e0; border-radius: 12px; background: #fff; }
 .academic-panel h2 { margin: 0 0 18px; font: 500 25px Georgia, serif; }
 .academic-panel h3, .academic-form h3 { margin: 0; color: #454b72; font: 600 14px 'Segoe UI', sans-serif; }
+.academic-copy-card { display:grid; gap:10px; margin:17px 0 22px; padding:16px; border:1px solid #d5e6e4; border-radius:10px; background:linear-gradient(135deg,#eef7f4,#f6f5fb); }
+.academic-copy-card h3 { margin:0; color:#263d4c; font-size:16px; }
+.academic-copy-card>p:not(.panel-kicker) { margin:0; color:#536b68; font-size:12px; line-height:1.65; }
+.academic-copy-card .panel-kicker { margin:0; color:#147f9b; font-size:9px; font-weight:800; letter-spacing:.13em; }
+.academic-copy-option { display:flex; align-items:flex-start; gap:8px; color:#465c50; font-size:12px; line-height:1.5; }
+.academic-copy-option input { flex:none; margin-top:2px; accent-color:#454b72; }
+.academic-copy-card>small { color:#708078; font-size:10px; line-height:1.5; }
 .academic-subheading { margin: 25px 0 10px !important; }
 .academic-record-list { display: grid; gap: 8px; }
 .academic-record { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 11px 10px; border: 1px solid #edf0eb; border-radius: 7px; background: #fcfdfb; }
@@ -443,6 +450,8 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .report-card-panel-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; margin-bottom:18px; }
 .report-card-panel-heading h2 { margin:4px 0; color:#203c29; font-size:23px; }
 .report-card-panel-heading p:not(.panel-kicker) { color:#526b57; font-size:14px; }
+.report-card-review-help { margin:16px 0; padding:14px 16px; border:1px solid #cfe0d1; border-radius:10px; color:#526b57; background:#eef6ef; font-size:13px; line-height:1.65; }
+.report-card-review-help strong { color:#294b34; }
 .report-card-filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); align-items:end; gap:12px; }
 .report-card-filters label,.report-card-remarks-grid label { display:grid; gap:7px; color:#294b34; font-size:14px; font-weight:650; }
 .report-card-filters input,.report-card-filters select,.report-card-remarks input,.report-card-remarks textarea { width:100%; min-height:43px; padding:9px 11px; border:1px solid #b9cabb; border-radius:9px; color:#1d3827; background:#fff; font:inherit; font-size:15px; }

@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     AcademicSessionDetailView, AcademicSessionListCreateView,
+    AcademicSessionCopySetupView,
     ClassArmDetailView, ClassArmListCreateView,
     ClassLevelDetailView, ClassLevelListCreateView,
     ClassSubjectDetailView, ClassSubjectListCreateView,
@@ -13,6 +14,7 @@ from .views import (
 
 urlpatterns = [
     path("academic-sessions/", AcademicSessionListCreateView.as_view(), name="academic-session-list"),
+    path("academic-sessions/<int:pk>/copy-setup/", AcademicSessionCopySetupView.as_view(), name="academic-session-copy-setup"),
     path("academic-sessions/<int:pk>/", AcademicSessionDetailView.as_view(), name="academic-session-detail"),
     path("terms/", TermListCreateView.as_view(), name="term-list"),
     path("terms/<int:pk>/", TermDetailView.as_view(), name="term-detail"),

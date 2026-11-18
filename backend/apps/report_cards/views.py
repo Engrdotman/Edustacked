@@ -210,6 +210,82 @@ class ReportCardDetailView(ReportCardViewMixin, APIView):
         return Response(self.serialized(card))
 
 
+class ReportCardCopyRatingsView(ReportCardViewMixin, APIView):
+    report_permissions = {"POST": "report_cards.update"}
+
+    def post(self, request, pk, **kwargs):
+        source = self.get_card(pk)
+        if source.status != ReportCard.Status.DRAFT:
+            raise serializers.ValidationError({"status": "Ratings can only be copied from a draft report card."})
+
+        serializer = ReportCardRemarksSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        if set(serializer.validated_data) != {"ratings"}:
+            raise serializers.ValidationError({"detail": "Send the student trait ratings to copy."})
+        ratings = serializer.validated_data["ratings"]
+        ratings = {
+            group: {trait: score for trait, score in values.items() if score is not None}
+            for group, values in ratings.items()
+        }
+        ratings = {group: values for group, values in ratings.items() if values}
+        if not ratings:
+            raise serializers.ValidationError({"ratings": "Choose at least one trait rating before copying."})
+
+        with transaction.atomic():
+            cards = list(
+                self.queryset().select_for_update().filter(
+                    school=source.school,
+                    academic_session=source.academic_session,
+                    term=source.term,
+                    class_level=source.class_level,
+                    class_arm=source.class_arm,
+                    status=ReportCard.Status.DRAFT,
+                ).prefetch_related("revisions")
+            )
+            if not any(card.pk == source.pk for card in cards):
+                raise serializers.ValidationError({"status": "The selected report card is no longer a draft."})
+            targets = [card for card in cards if card.pk != source.pk]
+            if not targets:
+                raise serializers.ValidationError({"detail": "There are no other draft report cards in this class and term to copy ratings to."})
+
+            updated_revisions = []
+            audit_events = []
+            for card in cards:
+                revision = next(
+                    (item for item in card.revisions.all() if item.revision_number == card.current_revision),
+                    None,
+                )
+                if revision is None:
+                    raise serializers.ValidationError({"detail": "A report card is missing its current draft revision. Refresh the page and contact support if the issue continues."})
+                if revision.status != ReportCardRevision.Status.DRAFT:
+                    raise serializers.ValidationError({"status": "A report card's current revision is not a draft. Refresh the page and try again."})
+                snapshot = dict(revision.snapshot)
+                snapshot["ratings"] = merge_ratings(snapshot.get("ratings", empty_ratings()), ratings)
+                revision.snapshot = snapshot
+                revision.generated_by = request.user
+                updated_revisions.append(revision)
+                audit_events.append(ReportCardAuditEvent(
+                    report_card=card,
+                    revision=revision,
+                    actor=request.user,
+                    action="remarks_updated",
+                    metadata={
+                        "bulk_class_rating_copy": True,
+                        "rating_groups": list(ratings),
+                        "rating_count": sum(len(values) for values in ratings.values()),
+                    },
+                ))
+
+            ReportCardRevision.objects.bulk_update(updated_revisions, ("snapshot", "generated_by"))
+            ReportCardAuditEvent.objects.bulk_create(audit_events)
+
+        return Response({
+            "detail": "Trait ratings copied to the draft report cards in this class. You can still adjust each student individually.",
+            "cards_updated": len(updated_revisions),
+            "other_cards_updated": len(targets),
+        })
+
+
 class ReportCardActionView(ReportCardViewMixin, APIView):
     report_action_permissions = {
         "review": "report_cards.review", "approve": "report_cards.approve",

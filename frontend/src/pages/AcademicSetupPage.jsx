@@ -47,6 +47,9 @@ export default function AcademicSetupPage({ navigate }) {
   const [scales, setScales] = useState([])
   const [bands, setBands] = useState([])
   const [sessionId, setSessionId] = useState('')
+  const [copyFromSessionId, setCopyFromSessionId] = useState('')
+  const [copyAssessmentPlans, setCopyAssessmentPlans] = useState(true)
+  const [copyTeachingAssignments, setCopyTeachingAssignments] = useState(true)
   const [classId, setClassId] = useState('')
   const [scaleId, setScaleId] = useState('')
   const [sessionForm, setSessionForm] = useState(emptySession)
@@ -133,9 +136,9 @@ export default function AcademicSetupPage({ navigate }) {
     setError('')
     setSuccess('')
     try {
-      await action()
-      await after?.()
-      setSuccess('Academic setup saved.')
+      const result = await action()
+      await after?.(result)
+      setSuccess(typeof result === 'string' ? result : 'Academic setup saved.')
     } catch (requestError) {
       setError(messageFor(requestError))
     } finally {
@@ -146,9 +149,30 @@ export default function AcademicSetupPage({ navigate }) {
   async function saveSession(event) {
     event.preventDefault()
     const path = sessionEditId ? `academic-sessions/${sessionEditId}/` : 'academic-sessions/'
-    await submit(() => academicRequest(path, { method: sessionEditId ? 'PATCH' : 'POST', body: sessionForm }), async () => {
+    let savedSession
+    await submit(async () => {
+      savedSession = await academicRequest(path, { method: sessionEditId ? 'PATCH' : 'POST', body: sessionForm })
+    }, async () => {
       setSessionForm(emptySession); setSessionEditId(null); await refreshSessions()
+      if (savedSession?.id && !sessionEditId) setSessionId(String(savedSession.id))
     })
+  }
+
+  async function copySessionSetup() {
+    if (!selectedSession || !selectedCopyFromSessionId || selectedSession.status !== 'draft') return
+    let result
+    await submit(async () => {
+      result = await academicRequest(`academic-sessions/${selectedSession.id}/copy-setup/`, {
+        method: 'POST',
+        body: {
+          source_session: Number(selectedCopyFromSessionId),
+          copy_assessment_plans: copyAssessmentPlans,
+          copy_teaching_assignments: copyTeachingAssignments,
+        },
+      })
+      const skipped = result.assessment_plans_skipped + result.teaching_assignments_skipped
+      return `${result.detail} ${result.terms_created} terms, ${result.assessment_plans_created} draft plans, and ${result.teaching_assignments_created} teaching assignments copied${skipped ? `; ${skipped} items skipped for review` : ''}.`
+    }, async () => { await refreshTerms(String(selectedSession.id)) })
   }
 
   async function saveTerm(event) {
@@ -230,6 +254,10 @@ export default function AcademicSetupPage({ navigate }) {
 
   const matching = (rows) => rows.filter((item) => JSON.stringify(item).toLowerCase().includes(search.toLowerCase()))
   const selectedSession = sessions.find((item) => String(item.id) === String(sessionId))
+  const copySourceSessions = sessions.filter((item) => String(item.id) !== String(sessionId))
+  const selectedCopyFromSessionId = copySourceSessions.some((item) => String(item.id) === copyFromSessionId)
+    ? copyFromSessionId
+    : String(copySourceSessions[0]?.id || '')
   const selectedClass = classes.find((item) => String(item.id) === String(classId))
   const selectedScale = scales.find((item) => String(item.id) === String(scaleId))
 
@@ -256,6 +284,7 @@ export default function AcademicSetupPage({ navigate }) {
                   {row.status === 'draft' && <button className="small-button" type="button" onClick={() => { setSessionEditId(row.id); setSessionForm({ name: row.name, start_date: row.start_date, end_date: row.end_date }) }}>Edit</button>}
                   {row.status !== 'completed' && <button className="small-button" type="button" disabled={saving} onClick={() => changeStatus(`academic-sessions/${row.id}/`, 'status', row.status === 'draft' ? 'active' : 'completed', refreshSessions, `${row.status === 'draft' ? 'Activate' : 'Complete'} this session?`)}>{row.status === 'draft' ? 'Activate' : 'Complete'}</button>}
                 </article>} />
+                <section className="academic-copy-card"><p className="panel-kicker">REUSE LAST YEAR’S SETUP</p><h3>Start this session with familiar settings</h3><p>Copy term dates, draft assessment plans, and optionally teaching assignments into the selected new session. Class, subject, arm, and grading-scale setup is already shared across sessions. Student enrollments, scores, attendance, and report cards are never copied.</p><label className="academic-field">Copy from session<select value={selectedCopyFromSessionId} onChange={(event) => setCopyFromSessionId(event.target.value)}><option value="">Choose a previous session</option>{copySourceSessions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="academic-copy-option"><input type="checkbox" checked={copyAssessmentPlans} onChange={(event) => setCopyAssessmentPlans(event.target.checked)} /> Copy assessment plans as drafts</label><label className="academic-copy-option"><input type="checkbox" checked={copyTeachingAssignments} onChange={(event) => setCopyTeachingAssignments(event.target.checked)} /> Carry forward active teaching assignments</label><button className="secondary-button" type="button" disabled={saving || !selectedSession || selectedSession.status !== 'draft' || !copySourceSessions.length} onClick={copySessionSetup}>Copy setup into selected draft session</button><small>New term dates shift by the difference between session start dates. Review them before activating the session.</small></section>
                 <form className="academic-form" onSubmit={saveSession}><h3>{sessionEditId ? 'Edit draft session' : 'Add session'}</h3>
                   <FormField label="Session name"><input required maxLength="100" value={sessionForm.name} onChange={(e) => setSessionForm({ ...sessionForm, name: e.target.value })} placeholder="2026/2027" /></FormField>
                   <div className="academic-form-grid"><FormField label="Starts"><input type="date" required value={sessionForm.start_date} onChange={(e) => setSessionForm({ ...sessionForm, start_date: e.target.value })} /></FormField><FormField label="Ends"><input type="date" required value={sessionForm.end_date} onChange={(e) => setSessionForm({ ...sessionForm, end_date: e.target.value })} /></FormField></div>

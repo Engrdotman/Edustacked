@@ -1,10 +1,12 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers, status
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.schools.permissions import HasSchoolPermission
 from apps.schools.tenancy import SchoolScopedQuerySetMixin
@@ -15,6 +17,12 @@ from .serializers import (
     ClassSubjectSerializer, GradeBandSerializer, GradingScaleSerializer,
     SubjectSerializer, TermSerializer,
 )
+
+
+class CopyAcademicSetupSerializer(serializers.Serializer):
+    source_session = serializers.IntegerField(min_value=1)
+    copy_assessment_plans = serializers.BooleanField(default=True)
+    copy_teaching_assignments = serializers.BooleanField(default=True)
 
 
 class AcademicPagination(PageNumberPagination):
@@ -69,6 +77,149 @@ class AcademicSessionDetailView(AcademicConfigMixin, RetrieveUpdateDestroyAPIVie
             )
         instance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AcademicSessionCopySetupView(AcademicConfigMixin, APIView):
+    """Carry a prior session's working configuration into a new draft session."""
+
+    def post(self, request, pk, **kwargs):
+        school = self.get_authorized_school()
+        target = get_object_or_404(AcademicSession, school=school, pk=pk)
+        serializer = CopyAcademicSetupSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        source = get_object_or_404(
+            AcademicSession.objects.filter(school=school),
+            pk=serializer.validated_data["source_session"],
+        )
+        if target.pk == source.pk:
+            raise serializers.ValidationError({"source_session": "Choose a different session to copy from."})
+        if target.status != AcademicSession.Status.DRAFT:
+            return Response(
+                {"detail": "Select a new draft session as the destination before copying setup."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if target.terms.exists() or target.assessment_plans.exists() or target.teacher_assignments.exists():
+            return Response(
+                {"detail": "This session already has terms, assessment plans, or teaching assignments. Copying is only available to a new empty session."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        source_terms = list(source.terms.order_by("sequence", "pk"))
+        if not source_terms:
+            raise serializers.ValidationError({"source_session": "The selected session has no terms to copy."})
+        date_shift = target.start_date - source.start_date
+        shifted_terms = [
+            (term, term.start_date + date_shift, term.end_date + date_shift)
+            for term in source_terms
+        ]
+        if any(start < target.start_date or end > target.end_date for _, start, end in shifted_terms):
+            raise serializers.ValidationError({
+                "detail": "The shifted term dates do not fit inside the new session dates. Adjust the new session dates or configure its terms manually."
+            })
+
+        from apps.results.models import AssessmentPlan, PlanComponent
+        from apps.staff.models import TeacherAssignment
+
+        term_map = {}
+        assessment_plans_created = 0
+        assessment_plans_skipped = 0
+        teaching_assignments_created = 0
+        teaching_assignments_skipped = 0
+        values = serializer.validated_data
+
+        with transaction.atomic():
+            for source_term, start_date, end_date in shifted_terms:
+                copied_term = Term.objects.create(
+                    school=school,
+                    academic_session=target,
+                    name=source_term.name,
+                    sequence=source_term.sequence,
+                    start_date=start_date,
+                    end_date=end_date,
+                    status=Term.Status.DRAFT,
+                )
+                term_map[source_term.pk] = copied_term
+
+            if values["copy_assessment_plans"]:
+                plans = AssessmentPlan.objects.filter(
+                    school=school, academic_session=source,
+                ).select_related("term").prefetch_related("components").order_by("pk")
+                for source_plan in plans:
+                    try:
+                        with transaction.atomic():
+                            copied_plan = AssessmentPlan(
+                                school=school,
+                                academic_session=target,
+                                term=term_map[source_plan.term_id],
+                                class_level=source_plan.class_level,
+                                class_arm=source_plan.class_arm,
+                                subject=source_plan.subject,
+                                grading_scale=source_plan.grading_scale,
+                                name=source_plan.name,
+                                calculation_method=source_plan.calculation_method,
+                                grading_scale_snapshot=source_plan.grading_scale_snapshot,
+                                status=AssessmentPlan.Status.DRAFT,
+                                created_by=request.user,
+                            )
+                            copied_plan.save()
+                            for component in source_plan.components.all():
+                                PlanComponent.objects.create(
+                                    plan=copied_plan,
+                                    component=component.component,
+                                    max_score=component.max_score,
+                                    weight=component.weight,
+                                    position=component.position,
+                                )
+                        assessment_plans_created += 1
+                    except (DjangoValidationError, IntegrityError):
+                        assessment_plans_skipped += 1
+
+            if values["copy_teaching_assignments"]:
+                assignments = TeacherAssignment.objects.filter(
+                    school=school,
+                    academic_session=source,
+                    status=TeacherAssignment.Status.ACTIVE,
+                ).select_related("teacher", "class_level", "class_arm", "subject")
+                for source_assignment in assignments:
+                    start_date = source_assignment.start_date + date_shift
+                    end_date = source_assignment.end_date + date_shift if source_assignment.end_date else None
+                    if (
+                        start_date < target.start_date
+                        or start_date > target.end_date
+                        or (end_date and end_date > target.end_date)
+                    ):
+                        teaching_assignments_skipped += 1
+                        continue
+                    try:
+                        with transaction.atomic():
+                            TeacherAssignment.objects.create(
+                                school=school,
+                                teacher=source_assignment.teacher,
+                                academic_session=target,
+                                class_level=source_assignment.class_level,
+                                class_arm=source_assignment.class_arm,
+                                subject=source_assignment.subject,
+                                start_date=start_date,
+                                end_date=end_date,
+                                status=TeacherAssignment.Status.ACTIVE,
+                            )
+                        teaching_assignments_created += 1
+                    except (DjangoValidationError, IntegrityError):
+                        teaching_assignments_skipped += 1
+
+        return Response({
+            "detail": "The previous session's setup was copied. Review the new term dates, teaching assignments, and draft assessment plans before activating them.",
+            "source_session": source.name,
+            "target_session": target.name,
+            "terms_created": len(term_map),
+            "assessment_plans_created": assessment_plans_created,
+            "assessment_plans_skipped": assessment_plans_skipped,
+            "teaching_assignments_created": teaching_assignments_created,
+            "teaching_assignments_skipped": teaching_assignments_skipped,
+            "student_records_copied": 0,
+            "results_copied": 0,
+            "attendance_copied": 0,
+        }, status=status.HTTP_201_CREATED)
 
 
 class TermListCreateView(AcademicConfigMixin, ListCreateAPIView):
