@@ -47,6 +47,8 @@ Create these in **backend service → Variables**. Do not paste actual secrets i
 | `CSRF_COOKIE_SAMESITE` | Set to `None` so browser requests can send the CSRF cookie to the Railway API. Both cookies require HTTPS in production. |
 | `FRONTEND_BASE_URL` | Exact HTTPS frontend origin, e.g. `https://www.yourdomain.ng`. The code reads this name when it creates Paystack callback URLs. |
 | `EMAIL_BACKEND` | For SendGrid Web API use `apps.core.sendgrid_backend.SendgridBackend`; for SMTP use `django.core.mail.backends.smtp.EmailBackend`. |
+| `PLATFORM_SIGNUP_NOTIFICATION_EMAIL` | EDUstacked inbox to alert when a new school workspace is registered. Defaults to `edustackedng@gmail.com`. |
+| `SENDGRID_SCHOOL_SIGNUP_NOTIFICATION_TEMPLATE_ID` | Optional SendGrid Dynamic Template ID for the platform alert. Receives `school_name`, `administrator_name`, `administrator_email`, `school_email`, `school_phone`, `school_type`, `country`, `state`, `local_government_area`, `verification_status`, `registered_at`, and `review_url`. |
 | `SENDGRID_API_KEY` | Required server-only SendGrid key when using the SendGrid Web API backend. Keep it in Railway's secret variables; never put it in Vercel or source. |
 | `SENDGRID_SANDBOX_MODE` | `false` for real delivery; `true` accepts test requests without delivering messages. |
 | `EMAIL_HOST` | Required only for SMTP: hostname from the chosen email provider. |
@@ -55,7 +57,8 @@ Create these in **backend service → Variables**. Do not paste actual secrets i
 | `EMAIL_HOST_PASSWORD` | SMTP only: password/API credential; keep secret. |
 | `EMAIL_USE_TLS` | SMTP only: `true` for STARTTLS where required; do not also set SSL true. |
 | `EMAIL_USE_SSL` | SMTP only: `true` if the provider requires implicit TLS; do not also set TLS true. |
-| `DEFAULT_FROM_EMAIL` | Verified sender, such as `EDUstacked <edustackedng@gmail.com>` if that address is configured to send through the SMTP provider. |
+| `DEFAULT_FROM_EMAIL` | Sender identity authenticated with the email provider. For SendGrid production delivery, use a sender/domain aligned with its SPF/DKIM authentication. |
+| `REDIS_URL` | Optional shared cache URL from a private Railway Redis service, e.g. `${{Redis.REDIS_URL}}`. Without it, Django falls back to per-process memory cache; set this to share API rate-limit cache across workers/instances. |
 | `PAYSTACK_SECRET_KEY` | Start with a Paystack test secret (`sk_test_...`) for test-mode checkout. The key is server-only. Set a live secret only after test-mode acceptance and business approval. |
 | `CBT_LICENSE_SIGNING_KEY` | Stable, long random secret for central CBT license signing; coordinate the matching verifier secret with each school-local server. |
 | `CBT_PACKAGE_SIGNING_KEY` | A separate stable random secret for signed exam packages; coordinate with local CBT servers. |
@@ -133,6 +136,8 @@ To inspect generated SQL for an individual migration locally, use `python manage
 7. Test signup/verification email, login/refresh/logout across the production Vercel/Railway domains, and a Paystack **test-mode** purchase. Do not switch to live Paystack until that flow and webhook are verified.
 8. Configure durable private media storage before uploading real school logos, signatures, student/staff photos, or CBT assets. `MEDIA_ROOT` currently points to local app disk and is not a durable object-storage integration.
 9. Take a database backup and rehearse restore before importing real school data.
+
+10. Add a private Railway Redis service and set `REDIS_URL` on the backend service to its private connection URL to enable shared caching. Local development and CI use Django's in-memory cache when this variable is unset.
 
 ## Current project limitations to resolve before production use
 

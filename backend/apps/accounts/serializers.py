@@ -83,7 +83,7 @@ class SchoolSignupSerializer(serializers.Serializer):
         school_name = validated_data["school_name"]
         admin_name = validated_data["administrator_name"].split(maxsplit=1)
         email = validated_data["email"]
-        from .emailing import issue_email_verification, send_email_verification
+        from .emailing import issue_email_verification, send_email_verification, send_school_signup_notification
 
         base_slug = slugify(school_name)[:180] or "school"
         slug = f"{base_slug}-{uuid4().hex[:8]}"
@@ -114,6 +114,7 @@ class SchoolSignupSerializer(serializers.Serializer):
         )
         token, secret = issue_email_verification(user)
         transaction.on_commit(lambda user=user, selector=token.selector, secret=secret: send_email_verification(user, selector, secret))
+        transaction.on_commit(lambda school=school, owner=user: send_school_signup_notification(school, owner))
         return school
 
 

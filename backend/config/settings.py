@@ -166,6 +166,24 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Use a shared cache in deployments that provide Redis. Keeping the local-memory
+# backend as a fallback lets local development and CI run without Redis.
+REDIS_URL = os.getenv("REDIS_URL", "").strip()
+if REDIS_URL and urlparse(REDIS_URL).scheme not in {"redis", "rediss"}:
+    raise ImproperlyConfigured("REDIS_URL must use redis:// or rediss://.")
+CACHES = {
+    "default": {
+        "BACKEND": (
+            "django.core.cache.backends.redis.RedisCache"
+            if REDIS_URL
+            else "django.core.cache.backends.locmem.LocMemCache"
+        ),
+        "LOCATION": REDIS_URL or "edustacked-local-cache",
+        "KEY_PREFIX": "edustacked",
+        "TIMEOUT": 300,
+    }
+}
+
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -216,6 +234,10 @@ SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "").strip()
 SENDGRID_SANDBOX_MODE = os.getenv("SENDGRID_SANDBOX_MODE", "false").lower() in {"1", "true", "yes"}
 SENDGRID_VERIFICATION_TEMPLATE_ID = os.getenv("SENDGRID_VERIFICATION_TEMPLATE_ID", "").strip()
 SENDGRID_PASSWORD_SETUP_TEMPLATE_ID = os.getenv("SENDGRID_PASSWORD_SETUP_TEMPLATE_ID", "").strip()
+SENDGRID_SCHOOL_SIGNUP_NOTIFICATION_TEMPLATE_ID = os.getenv("SENDGRID_SCHOOL_SIGNUP_NOTIFICATION_TEMPLATE_ID", "").strip()
+PLATFORM_SIGNUP_NOTIFICATION_EMAIL = os.getenv(
+    "PLATFORM_SIGNUP_NOTIFICATION_EMAIL", "edustackedng@gmail.com"
+).strip()
 EMAIL_BACKEND = os.getenv(
     "EMAIL_BACKEND",
     "django.core.mail.backends.console.EmailBackend"

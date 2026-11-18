@@ -82,6 +82,56 @@ def send_email_verification(user, selector, secret, *, school_name="", fail_sile
     return send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=fail_silently)
 
 
+def send_school_signup_notification(school, owner):
+    """Notify EDUstacked when a school workspace is registered; never block signup."""
+    recipient = getattr(settings, "PLATFORM_SIGNUP_NOTIFICATION_EMAIL", "").strip()
+    if not recipient:
+        return 0
+
+    subject = f"New school registration: {school.name}"
+    review_url = f"{settings.FRONTEND_BASE_URL}/platform/schools"
+    admin_name = owner.get_full_name().strip() or owner.email
+    body = (
+        "A new school workspace has been registered on EDUstacked.\n\n"
+        f"School: {school.name}\n"
+        f"Administrator: {admin_name}\n"
+        f"Administrator email: {owner.email}\n"
+        f"School email: {school.contact_email or 'Not provided'}\n"
+        f"School phone: {school.contact_phone or 'Not provided'}\n"
+        f"Location: {', '.join(value for value in (school.local_government_area, school.state, school.country) if value) or 'Not provided'}\n"
+        f"School type: {school.get_school_type_display()}\n"
+        f"Registration status: {school.get_verification_status_display()}\n"
+        f"Registered at: {school.created_at.isoformat()}\n\n"
+        f"Review registrations: {review_url}\n"
+    )
+    template_id = getattr(settings, "SENDGRID_SCHOOL_SIGNUP_NOTIFICATION_TEMPLATE_ID", "")
+    try:
+        if template_id and settings.EMAIL_BACKEND.endswith("SendgridBackend"):
+            message = EmailMessage(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient])
+            message.dynamic_template_id = template_id
+            message.dynamic_template_data = {
+                "school_name": school.name,
+                "administrator_name": admin_name,
+                "administrator_email": owner.email,
+                "school_email": school.contact_email or "",
+                "school_phone": school.contact_phone or "",
+                "school_type": school.get_school_type_display(),
+                "country": school.country,
+                "state": school.state,
+                "local_government_area": school.local_government_area,
+                "verification_status": school.get_verification_status_display(),
+                "registered_at": school.created_at.isoformat(),
+                "review_url": review_url,
+            }
+            return message.send(fail_silently=False)
+        return send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient], fail_silently=False)
+    except Exception:
+        # Signup has already committed; a provider outage must not make the new
+        # owner think registration failed. Keep the delivery failure observable.
+        logger.exception("Platform school signup notification delivery failed.")
+        return 0
+
+
 def send_staff_invitation_emails(user, verification=None, *, school_name=""):
     """Send needed staff access emails and report delivery without losing the membership."""
     statuses = {}

@@ -415,6 +415,7 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .assessment-component-list div { display:flex; justify-content:space-between; gap:12px; padding:12px 14px; border:1px solid #e1e9e1; border-radius:10px; }
 .assessment-component-list strong { color:#203c29; }
 .assessment-component-list span,.assessment-help { color:#526b57; font-size:14px; }
+.assessment-plan-billing-note { margin:14px 0 20px; padding:14px 16px; border:1px solid #cce3df; border-radius:12px; background:#eff8f6; line-height:1.6; }
 .assessment-template-actions { display:inline-flex; gap:10px; margin-left:8px; }
 .assessment-actions { display:flex; flex-wrap:wrap; gap:9px; margin:14px 0; }
 .assessment-student-list { display:grid; gap:14px; margin-top:20px; }
