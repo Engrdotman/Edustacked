@@ -412,7 +412,15 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .assessment-status-draft { color:#526b57; background:#edf2ed; }
 .assessment-status-not-started { color:#526b57; background:#f1f4f1; }
 .assessment-component-list { display:grid; gap:8px; margin:15px 0; }
-.assessment-component-list div { display:flex; justify-content:space-between; gap:12px; padding:12px 14px; border:1px solid #e1e9e1; border-radius:10px; }
+.assessment-component-list > div { display:flex; justify-content:space-between; gap:12px; padding:12px 14px; border:1px solid #e1e9e1; border-radius:10px; }
+.assessment-component-list .assessment-plan-component { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:12px 14px; border:1px solid #e1e9e1; border-radius:10px; }
+.assessment-plan-component-details { display:grid; gap:5px; min-width:0; }
+.assessment-plan-component-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:10px; }
+.assessment-component-edit-note { grid-column:1 / -1; margin:0; }
+.assessment-component-remove { color:#8b302b; }
+.assessment-weight-ready,.assessment-weight-warning { margin:12px 0; padding:12px 14px; border-radius:10px; line-height:1.5; }
+.assessment-weight-ready { color:#23573a; background:#eff8f0; }
+.assessment-weight-warning { color:#85423b; background:#fff3ef; }
 .assessment-component-list strong { color:#203c29; }
 .assessment-component-list span,.assessment-help { color:#526b57; font-size:14px; }
 .assessment-plan-billing-note { margin:14px 0 20px; padding:14px 16px; border:1px solid #cce3df; border-radius:12px; background:#eff8f6; line-height:1.6; }
@@ -429,7 +437,7 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .assessment-audit { margin-top:14px; color:#526b57; }
 .assessment-audit summary { color:#294b34; cursor:pointer; font-weight:700; }
 .assessment-audit p { font-size:13px; line-height:1.5; }
-@media (max-width:760px) { .assessment-panel { padding:17px; } .assessment-panel-heading,.assessment-student-heading { align-items:flex-start; flex-direction:column; } .assessment-component-list div { flex-direction:column; } }
+@media (max-width:760px) { .assessment-panel { padding:17px; } .assessment-panel-heading,.assessment-student-heading { align-items:flex-start; flex-direction:column; } .assessment-component-list > div,.assessment-component-list .assessment-plan-component { align-items:flex-start; flex-direction:column; } .assessment-plan-component-actions { justify-content:flex-start; } }
 .report-cards-page { max-width:1160px; }
 .report-card-panel { margin:25px 0; padding:24px; border:1px solid #d9e4da; border-radius:18px; background:#fff; box-shadow:0 8px 24px rgba(25,55,35,.05); }
 .report-card-panel-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; margin-bottom:18px; }
