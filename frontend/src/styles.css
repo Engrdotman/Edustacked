@@ -587,7 +587,25 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .company-menu-toggle .menu-icon.is-open i:nth-child(2) { opacity:0; }
 .company-menu-toggle .menu-icon.is-open i:last-child { transform:translateY(-6px) rotate(-45deg); }
 .company-hero { position:relative; display:grid; grid-template-columns:minmax(360px,.85fr) minmax(520px,1.15fr); align-items:center; gap:34px; min-height:650px; overflow:hidden; padding:78px clamp(22px,6vw,92px) 70px; background:radial-gradient(ellipse at 80% 40%,#e4efe6 0,rgba(237,245,238,.7) 28%,transparent 65%),linear-gradient(115deg,#f7faf6 0%,#f7faf6 48%,#eff5ef 100%); }
-.company-hero-copy { position:relative; z-index:1; max-width:630px; }
+.company-hero-copy { position:relative; z-index:1; max-width:630px; transition: all 0.3s ease;}
+
+/* for animation  */
+.company-hero-copy
+ {
+    animation: slideUp 1s ease forwards;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(80px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 .company-kicker { display:flex; align-items:center; gap:9px; margin:0 0 18px; color:#62766a; font-size:11px; font-weight:750; letter-spacing:.14em; }
 .company-kicker>span { width:8px; height:8px; border-radius:50%; background:#5a9469; box-shadow:0 0 0 4px #e4f0e6; }
 .company-hero h1 { max-width:670px; margin:0; color:#1f3428; font-size:clamp(45px,6vw,76px); font-weight:650; line-height:1.04; letter-spacing:-.055em; }
