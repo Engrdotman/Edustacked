@@ -160,6 +160,45 @@ class ClassLevel(models.Model):
         return self.name
 
 
+class PromotionCriteria(models.Model):
+    """School-defined year-end decision threshold for one class level."""
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="promotion_criteria")
+    class_level = models.OneToOneField(
+        ClassLevel, on_delete=models.CASCADE, related_name="promotion_criteria"
+    )
+    minimum_subjects_passed = models.PositiveSmallIntegerField(default=5)
+    pass_mark = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("40.00"))
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("class_level__name",)
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(minimum_subjects_passed__gte=1),
+                name="promotion_criteria_min_subjects_positive",
+            ),
+            models.CheckConstraint(
+                condition=Q(pass_mark__gte=0, pass_mark__lte=100),
+                name="promotion_criteria_pass_mark_pct_range",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.class_level_id and self.school_id and self.class_level.school_id != self.school_id:
+            raise ValidationError({"class_level": "The selected class belongs to another school."})
+        if self.minimum_subjects_passed is not None and self.minimum_subjects_passed < 1:
+            raise ValidationError({"minimum_subjects_passed": "Require at least one passed subject."})
+        if self.pass_mark is not None and not Decimal("0") <= self.pass_mark <= Decimal("100"):
+            raise ValidationError({"pass_mark": "Pass mark must be between 0 and 100 percent."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
 class ClassArm(models.Model):
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="class_arms")
     class_level = models.ForeignKey(ClassLevel, on_delete=models.PROTECT, related_name="arms")

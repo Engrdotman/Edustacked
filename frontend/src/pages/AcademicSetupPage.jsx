@@ -67,6 +67,8 @@ export default function AcademicSetupPage({ navigate }) {
   const [bandForm, setBandForm] = useState(emptyBand)
   const [bandEditId, setBandEditId] = useState(null)
   const [assignmentSubject, setAssignmentSubject] = useState('')
+  const [promotionForm, setPromotionForm] = useState({ minimum_subjects_passed: '1', pass_mark: '40.00' })
+  const [promotionConfigured, setPromotionConfigured] = useState(false)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -82,12 +84,15 @@ export default function AcademicSetupPage({ navigate }) {
     setTerms(id ? await academicList(`terms/?academic_session=${id}`) : [])
   }, [])
   const refreshClassChildren = useCallback(async (id) => {
-    if (!id) { setArms([]); setAssignments([]); return }
-    const [armRows, assignmentRows] = await Promise.all([
+    if (!id) { setArms([]); setAssignments([]); setPromotionConfigured(false); setPromotionForm({ minimum_subjects_passed: '1', pass_mark: '40.00' }); return }
+    const [armRows, assignmentRows, criteria] = await Promise.all([
       academicList(`classes/${id}/arms/`), academicList(`classes/${id}/subjects/`),
+      academicRequest(`classes/${id}/promotion-criteria/`),
     ])
     setArms(armRows)
     setAssignments(assignmentRows)
+    setPromotionConfigured(Boolean(criteria.configured))
+    setPromotionForm({ minimum_subjects_passed: String(criteria.minimum_subjects_passed || 1), pass_mark: String(criteria.pass_mark || '40.00') })
   }, [])
   const refreshBands = useCallback(async (id) => {
     setBands(id ? await academicList(`grading-scales/${id}/bands/`) : [])
@@ -218,6 +223,20 @@ export default function AcademicSetupPage({ navigate }) {
     }), async () => { setAssignmentSubject(''); await refreshClassChildren(classId) })
   }
 
+  async function savePromotionCriteria(event) {
+    event.preventDefault()
+    if (!classId) return
+    const payload = {
+      minimum_subjects_passed: Number(promotionForm.minimum_subjects_passed),
+      pass_mark: Number(promotionForm.pass_mark),
+    }
+    const method = promotionConfigured ? 'PATCH' : 'POST'
+    await submit(() => academicRequest(`classes/${classId}/promotion-criteria/`, { method, body: payload }), async () => {
+      setPromotionConfigured(true)
+      setSuccess('Promotion criteria saved for this class.')
+    })
+  }
+
   async function saveScale(event) {
     event.preventDefault()
     const path = scaleEditId ? `grading-scales/${scaleEditId}/` : 'grading-scales/'
@@ -249,6 +268,7 @@ export default function AcademicSetupPage({ navigate }) {
     setSubjectEditId(null); setSubjectForm(emptySubject)
     setScaleEditId(null); setScaleForm(emptyScale)
     setBandEditId(null); setBandForm(emptyBand)
+    setPromotionConfigured(false); setPromotionForm({ minimum_subjects_passed: '1', pass_mark: '40.00' })
     setError(''); setSuccess('')
   }
 
@@ -330,6 +350,7 @@ export default function AcademicSetupPage({ navigate }) {
                   <h3 className="academic-subheading">Class subjects</h3><p className="academic-hint">Subjects assigned here are available to students enrolled in this class, across its arms. Assign teachers for each session from Staff &amp; teachers.</p>
                   <EntryList rows={matching(assignments)} empty="No subjects assigned to this class." render={(row) => <article className="academic-record" key={row.id}><div className="academic-record-main"><strong>{row.subject_name}</strong><span>{row.is_active ? 'Active' : 'Inactive'}</span></div><button className="small-button" type="button" disabled={saving} onClick={() => changeStatus(`classes/${classId}/subjects/${row.id}/`, 'is_active', !row.is_active, () => refreshClassChildren(classId), `Change ${row.subject_name} assignment status?`)}>{row.is_active ? 'Deactivate' : 'Activate'}</button></article>} />
                   <form className="academic-form compact" onSubmit={saveAssignment}><h3>Assign a subject</h3><div className="academic-form-grid"><FormField label="Subject"><select required value={assignmentSubject} onChange={(e) => setAssignmentSubject(e.target.value)}><option value="">Select a school subject</option>{subjects.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></FormField><button className="primary-button" disabled={saving || !assignmentSubject}>{saving ? 'Saving…' : 'Assign subject'}</button></div></form>
+                  <form className="academic-form compact" onSubmit={savePromotionCriteria}><h3>Promotion criteria · {selectedClass.name}</h3><p className="academic-hint">Set how many subjects a student must pass and the minimum percentage that counts as a pass. These rules create recommendations only; they do not move a student automatically.</p><div className="academic-form-grid"><FormField label="Minimum subjects passed"><input type="number" min="1" max={Math.max(1, assignments.filter((row) => row.is_active).length)} required value={promotionForm.minimum_subjects_passed} onChange={(e) => setPromotionForm({ ...promotionForm, minimum_subjects_passed: e.target.value })} placeholder="e.g. 5" /></FormField><FormField label="Pass mark (%)"><input type="number" min="0" max="100" step="0.01" required value={promotionForm.pass_mark} onChange={(e) => setPromotionForm({ ...promotionForm, pass_mark: e.target.value })} placeholder="e.g. 40" /></FormField></div><p className="academic-hint">{assignments.filter((row) => row.is_active).length} active subjects are currently assigned. An end-of-session review needs approved results for every active subject.</p><button className="primary-button" disabled={saving || !assignments.some((row) => row.is_active)}>{saving ? 'Saving…' : promotionConfigured ? 'Update criteria' : 'Save criteria'}</button></form>
                 </>}
               </div>
             </div>}

@@ -5,7 +5,7 @@ from rest_framework import serializers
 from apps.schools.tenancy import resolve_authorized_school
 
 from .models import (
-    AcademicSession, ClassArm, ClassLevel, ClassSubject, GradeBand,
+    AcademicSession, ClassArm, ClassLevel, ClassSubject, GradeBand, PromotionCriteria,
     GradingScale, Subject, Term,
 )
 
@@ -89,6 +89,20 @@ class ClassLevelSerializer(ValidatedModelSerializer):
         model = ClassLevel
         fields = ("id", "school", "name", "code", "category", "description", "is_active", "created_at", "updated_at")
         read_only_fields = ("id", "school", "created_at", "updated_at")
+
+
+class PromotionCriteriaSerializer(ValidatedModelSerializer):
+    school = serializers.PrimaryKeyRelatedField(read_only=True)
+    class_level = serializers.PrimaryKeyRelatedField(read_only=True)
+    class_name = serializers.CharField(source="class_level.name", read_only=True)
+
+    class Meta:
+        model = PromotionCriteria
+        fields = (
+            "id", "school", "class_level", "class_name", "minimum_subjects_passed",
+            "pass_mark", "created_at", "updated_at",
+        )
+        read_only_fields = ("id", "school", "class_level", "class_name", "created_at", "updated_at")
 
 
 class ClassArmSerializer(ValidatedModelSerializer):

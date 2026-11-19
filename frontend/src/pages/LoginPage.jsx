@@ -68,7 +68,7 @@ export default function LoginPage({ navigate, sessionRequired = false }) {
         </div>
    
         <button className="text-button back-link" type="button" onClick={() => navigate('/')}>Back to home</button>
-        <button className="text-button platform-login-entry" type="button" onClick={() => navigate('/platform/login')}>Platform administrator sign in</button>
+        
       </section></div>
     </main>
   )

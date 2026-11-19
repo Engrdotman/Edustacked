@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     AcademicSessionDetailView, AcademicSessionListCreateView,
     AcademicSessionCopySetupView,
+    ClassPromotionCriteriaView, PromotionReviewView,
     ClassArmDetailView, ClassArmListCreateView,
     ClassLevelDetailView, ClassLevelListCreateView,
     ClassSubjectDetailView, ClassSubjectListCreateView,
@@ -20,6 +21,8 @@ urlpatterns = [
     path("terms/<int:pk>/", TermDetailView.as_view(), name="term-detail"),
     path("classes/", ClassLevelListCreateView.as_view(), name="class-list"),
     path("classes/<int:pk>/", ClassLevelDetailView.as_view(), name="class-detail"),
+    path("classes/<int:class_id>/promotion-criteria/", ClassPromotionCriteriaView.as_view(), name="class-promotion-criteria"),
+    path("classes/<int:class_id>/promotion-review/", PromotionReviewView.as_view(), name="class-promotion-review"),
     path("classes/<int:class_id>/arms/", ClassArmListCreateView.as_view(), name="class-arm-list"),
     path("classes/<int:class_id>/arms/<int:pk>/", ClassArmDetailView.as_view(), name="class-arm-detail"),
     path("classes/<int:class_id>/subjects/", ClassSubjectListCreateView.as_view(), name="class-subject-list"),

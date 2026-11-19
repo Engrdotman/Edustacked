@@ -1,4 +1,6 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
+from decimal import Decimal
+
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers, status
@@ -11,10 +13,10 @@ from rest_framework.views import APIView
 from apps.schools.permissions import HasSchoolPermission
 from apps.schools.tenancy import SchoolScopedQuerySetMixin
 
-from .models import AcademicSession, ClassArm, ClassLevel, ClassSubject, GradeBand, GradingScale, Subject, Term
+from .models import AcademicSession, ClassArm, ClassLevel, ClassSubject, GradeBand, GradingScale, PromotionCriteria, Subject, Term
 from .serializers import (
     AcademicSessionSerializer, ClassArmSerializer, ClassLevelSerializer,
-    ClassSubjectSerializer, GradeBandSerializer, GradingScaleSerializer,
+    ClassSubjectSerializer, GradeBandSerializer, GradingScaleSerializer, PromotionCriteriaSerializer,
     SubjectSerializer, TermSerializer,
 )
 
@@ -264,6 +266,212 @@ class ClassLevelDetailView(AcademicConfigMixin, SafeDeactivateMixin, RetrieveUpd
     queryset = ClassLevel.objects.select_related("school")
     serializer_class = ClassLevelSerializer
     http_method_names = ("get", "patch", "delete", "head", "options")
+
+
+class ClassPromotionCriteriaView(AcademicConfigMixin, APIView):
+    """Read or update the pass threshold used for promotion recommendations."""
+
+    def get_class_level(self):
+        return get_object_or_404(
+            ClassLevel.objects.filter(school=self.get_authorized_school()),
+            pk=self.kwargs["class_id"],
+        )
+
+    def get(self, request, *args, **kwargs):
+        class_level = self.get_class_level()
+        criteria = PromotionCriteria.objects.filter(class_level=class_level).first()
+        if not criteria:
+            return Response({
+                "configured": False,
+                "class_level": class_level.pk,
+                "class_name": class_level.name,
+                "minimum_subjects_passed": 1,
+                "pass_mark": "40.00",
+            })
+        data = PromotionCriteriaSerializer(criteria).data
+        data["configured"] = True
+        return Response(data)
+
+    def post(self, request, *args, **kwargs):
+        class_level = self.get_class_level()
+        if PromotionCriteria.objects.filter(class_level=class_level).exists():
+            return Response({"detail": "Promotion criteria already exist for this class. Edit the existing criteria instead."}, status=status.HTTP_409_CONFLICT)
+        return self.save_criteria(request, class_level)
+
+    def put(self, request, *args, **kwargs):
+        return self.patch(request, *args, **kwargs)
+
+    def patch(self, request, *args, **kwargs):
+        class_level = self.get_class_level()
+        criteria = PromotionCriteria.objects.filter(class_level=class_level).first()
+        if not criteria:
+            return Response({"detail": "Save promotion criteria for this class before editing them."}, status=status.HTTP_404_NOT_FOUND)
+        return self.save_criteria(request, class_level, criteria=criteria, partial=True)
+
+    def delete(self, request, *args, **kwargs):
+        class_level = self.get_class_level()
+        deleted, _ = PromotionCriteria.objects.filter(class_level=class_level).delete()
+        if not deleted:
+            return Response({"detail": "No promotion criteria are configured for this class."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def save_criteria(self, request, class_level, criteria=None, partial=False):
+        serializer = PromotionCriteriaSerializer(
+            criteria,
+            data=request.data,
+            partial=partial,
+            context={"request": request, "school": self.get_authorized_school()},
+        )
+        serializer.is_valid(raise_exception=True)
+        saved = serializer.save(school=self.get_authorized_school(), class_level=class_level)
+        data = PromotionCriteriaSerializer(saved).data
+        data["configured"] = True
+        return Response(data, status=status.HTTP_200_OK if criteria else status.HTTP_201_CREATED)
+
+
+class PromotionReviewView(AcademicConfigMixin, APIView):
+    """Report year-end promote/repeat recommendations without moving enrollments."""
+
+    def get(self, request, *args, **kwargs):
+        from apps.results.models import AssessmentPlan, AssessmentResult
+        from apps.students.models import StudentEnrollment
+
+        school = self.get_authorized_school()
+        class_level = get_object_or_404(ClassLevel.objects.filter(school=school), pk=kwargs["class_id"])
+        criteria = PromotionCriteria.objects.filter(class_level=class_level).first()
+        if not criteria:
+            raise serializers.ValidationError({"criteria": "Set promotion criteria for this class before reviewing students."})
+
+        def query_id(name):
+            value = request.query_params.get(name, "")
+            if not value.isdecimal():
+                raise serializers.ValidationError({name: "Choose a valid option."})
+            return int(value)
+
+        session = get_object_or_404(AcademicSession.objects.filter(school=school), pk=query_id("academic_session"))
+        term = get_object_or_404(Term.objects.filter(school=school, academic_session=session), pk=query_id("term"))
+        arm = get_object_or_404(ClassArm.objects.filter(school=school, class_level=class_level), pk=query_id("class_arm"))
+        final_term_sequence = Term.objects.filter(academic_session=session).order_by("-sequence").values_list("sequence", flat=True).first()
+        if term.sequence != final_term_sequence:
+            raise serializers.ValidationError({"term": "Promotion is reviewed from the final term of the academic session."})
+        if term.status != Term.Status.COMPLETED:
+            raise serializers.ValidationError({"term": "Complete the final term and approve its results before reviewing promotion."})
+
+        class_subjects = list(ClassSubject.objects.filter(
+            school=school, class_level=class_level, is_active=True, subject__is_active=True,
+        ).select_related("subject").order_by("subject__name"))
+        subject_ids = [row.subject_id for row in class_subjects]
+        if not subject_ids:
+            raise serializers.ValidationError({"class": "Assign active subjects to this class before reviewing promotion."})
+        if criteria.minimum_subjects_passed > len(subject_ids):
+            raise serializers.ValidationError({
+                "criteria": f"The pass requirement is {criteria.minimum_subjects_passed}, but this class currently has only {len(subject_ids)} active subjects. Update the class criteria first."
+            })
+
+        enrollments = StudentEnrollment.objects.filter(
+            school=school,
+            academic_session=session,
+            class_level=class_level,
+            class_arm=arm,
+            status__in=(StudentEnrollment.Status.ACTIVE, StudentEnrollment.Status.COMPLETED),
+            enrollment_date__lte=term.end_date,
+            student__status="active",
+        ).select_related("student", "class_level", "class_arm").order_by(
+            "student__last_name", "student__first_name", "student__id",
+        )
+        all_enrollments = list(enrollments)
+        paginator = AcademicPagination()
+        page = paginator.paginate_queryset(all_enrollments, request, view=self)
+        page_ids = {row.pk for row in page}
+        enrollment_ids = [row.pk for row in all_enrollments]
+        subject_names = {row.subject_id: row.subject.name for row in class_subjects}
+        plans = AssessmentPlan.objects.filter(
+            school=school,
+            academic_session=session,
+            term=term,
+            class_level=class_level,
+            class_arm=arm,
+            subject_id__in=subject_ids,
+            status__in=(AssessmentPlan.Status.PUBLISHED, AssessmentPlan.Status.CLOSED),
+        )
+        results = AssessmentResult.objects.filter(
+            school=school,
+            enrollment_id__in=enrollment_ids,
+            plan__in=plans,
+            status=AssessmentResult.Status.APPROVED,
+        ).values_list("enrollment_id", "plan__subject_id", "approved_percentage", "approved_grade")
+        by_enrollment = {}
+        for enrollment_id, subject_id, percentage, grade in results:
+            by_enrollment.setdefault(enrollment_id, {}).setdefault(subject_id, []).append((percentage, grade))
+
+        recommendations = []
+        pass_mark = Decimal(criteria.pass_mark)
+        for enrollment in all_enrollments:
+            subject_results = by_enrollment.get(enrollment.pk, {})
+            missing = []
+            duplicate = []
+            scored = []
+            passed = 0
+            for subject_id in subject_ids:
+                entries = subject_results.get(subject_id, [])
+                if not entries:
+                    missing.append(subject_names[subject_id])
+                elif len(entries) > 1:
+                    duplicate.append(subject_names[subject_id])
+                else:
+                    percentage, grade = entries[0]
+                    if percentage is None:
+                        missing.append(subject_names[subject_id])
+                    else:
+                        passed_subject = Decimal(percentage) >= pass_mark
+                        passed += int(passed_subject)
+                        scored.append({
+                            "subject": subject_names[subject_id],
+                            "percentage": str(percentage),
+                            "grade": grade,
+                            "passed": passed_subject,
+                        })
+            if missing or duplicate:
+                decision = "manual_review"
+            elif passed >= criteria.minimum_subjects_passed:
+                decision = "promote"
+            else:
+                decision = "repeat"
+            recommendations.append({
+                "enrollment_id": enrollment.pk,
+                "student_id": enrollment.student_id,
+                "student_name": " ".join(part for part in (enrollment.student.first_name, enrollment.student.middle_name, enrollment.student.last_name) if part),
+                "admission_number": enrollment.student.admission_number,
+                "class_name": enrollment.class_level.name,
+                "arm_name": enrollment.class_arm.name,
+                "subjects_passed": passed,
+                "subjects_required": criteria.minimum_subjects_passed,
+                "subjects_total": len(subject_ids),
+                "decision": decision,
+                "missing_subjects": missing,
+                "multiple_approved_results": duplicate,
+                "subject_results": scored,
+            })
+        decision_counts = {
+            key: sum(row["decision"] == key for row in recommendations)
+            for key in ("promote", "repeat", "manual_review")
+        }
+        response = paginator.get_paginated_response([
+            row for row in recommendations if row["enrollment_id"] in page_ids
+        ])
+        response.data["review"] = {
+            "academic_session": session.name,
+            "term": term.name,
+            "class_name": class_level.name,
+            "arm_name": arm.name,
+            "minimum_subjects_passed": criteria.minimum_subjects_passed,
+            "pass_mark": str(criteria.pass_mark),
+            "active_subjects": len(subject_ids),
+            "decision_counts": decision_counts,
+            "final_term_required": True,
+            "placement_is_automatic": False,
+        }
+        return response
 
 
 class SubjectListCreateView(AcademicConfigMixin, ListCreateAPIView):
