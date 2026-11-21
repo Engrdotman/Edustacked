@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import LoadingScreen from './components/LoadingScreen.jsx'
 import { flushSync } from 'react-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext.jsx'
 
@@ -73,15 +74,15 @@ function AppRoutes() {
   if (pathname === '/verify-email') return <VerifyEmailPage navigate={navigate} />
   if (pathname === '/demo') return <DemoRequestPage navigate={navigate} />
   if (pathname === '/platform/login') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Checking platform session…</p></main>
+    if (loading) return <LoadingScreen message="Checking platform session…" />
     return <PlatformLoginPage navigate={navigate} />
   }
   if (pathname === '/signup') {
-    if (user?.is_superuser) return <main className="auth-page"><p className="loading-message" role="status">Opening platform administration…</p></main>
+    if (user?.is_superuser) return <LoadingScreen message="Opening platform administration…" />
     return user ? <AuthenticatedHome navigate={navigate} /> : <SignupPage navigate={navigate} />
   }
   if (pathname === '/login') {
-    if (user?.is_superuser) return <main className="auth-page"><p className="loading-message" role="status">Opening platform administration…</p></main>
+    if (user?.is_superuser) return <LoadingScreen message="Opening platform administration…" />
     return user ? <AuthenticatedHome navigate={navigate} /> : <LoginPage navigate={navigate} />
   }
   if (pathname === '/forgot-password') {
@@ -97,7 +98,7 @@ function AppRoutes() {
     return <AccessDeniedPage navigate={navigate} signedIn={Boolean(user)} />
   }
   if (pathname === '/platform' || pathname === '/platform/schools' || /^\/platform\/schools\/\d+$/.test(pathname)) {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <PlatformLoginPage navigate={navigate} />
     if (!user.is_superuser) return <AccessDeniedPage navigate={navigate} signedIn />
     const detail = pathname.match(/^\/platform\/schools\/(\d+)$/)
@@ -107,28 +108,28 @@ function AppRoutes() {
   }
   if (pathname === '/app') {
     if (loading) {
-      return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+      return <LoadingScreen message="Restoring your secure session…" />
     }
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool && guardianProfile) return <ParentPortalPage navigate={navigate} />
     return selectedSchool ? <SchoolDashboardPage navigate={navigate} /> : <AuthenticatedHome navigate={navigate} />
   }
   if (pathname === '/app/school') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool) return <AuthenticatedHome navigate={navigate} />
     if (selectedSchool.role === 'teacher') return <AccessDeniedPage navigate={navigate} signedIn />
     return <SchoolProfilePage navigate={navigate} />
   }
   if (pathname === '/app/onboarding') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool) return <AuthenticatedHome navigate={navigate} />
     if (!['school_owner', 'school_admin', 'school_manager', 'principal'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <SchoolOnboardingPage navigate={navigate} />
   }
   if (pathname === '/app/academics') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool) return <AuthenticatedHome navigate={navigate} />
     if (!['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal'].includes(selectedSchool.role)) {
@@ -137,21 +138,21 @@ function AppRoutes() {
     return <AcademicSetupPage navigate={navigate} />
   }
   if (pathname === '/app/promotions') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool) return <AuthenticatedHome navigate={navigate} />
     if (!['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <PromotionPlanningPage navigate={navigate} />
   }
   if (pathname === '/app/students') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool) return <AuthenticatedHome navigate={navigate} />
     if (!['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher', 'receptionist'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <StudentManagementPage navigate={navigate} />
   }
   if (pathname === '/app/cbt' || pathname === '/app/cbt/results' || /^\/app\/cbt\/results\/[0-9a-f-]+$/i.test(pathname)) {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool || !['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     if (pathname === '/app/cbt') return <CbtManagementPage navigate={navigate} />
@@ -159,66 +160,66 @@ function AppRoutes() {
     return <CbtResultsPage navigate={navigate} resultId={resultId} />
   }
   if (pathname === '/app/services') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool || !['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <ServicesPage navigate={navigate} />
   }
   if (pathname === '/app/staff') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool) return <AuthenticatedHome navigate={navigate} />
     if (!['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher', 'receptionist'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <StaffManagementPage navigate={navigate} />
   }
   if (pathname === '/app/attendance') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool) return <AuthenticatedHome navigate={navigate} />
     if (!['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <AttendanceManagementPage navigate={navigate} />
   }
   if (pathname === '/app/assessments') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool) return <AuthenticatedHome navigate={navigate} />
     if (!['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <AssessmentResultsPage navigate={navigate} />
   }
   if (pathname === '/app/report-cards') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool) return <AuthenticatedHome navigate={navigate} />
     if (!['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <ReportCardsPage navigate={navigate} />
   }
   if (pathname === '/app/billing') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool) return <AuthenticatedHome navigate={navigate} />
     if (!['platform_superadmin', 'school_owner', 'school_admin', 'accountant'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <BillingPage navigate={navigate} />
   }
   if (pathname === '/app/finance') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool || !['platform_superadmin', 'school_owner', 'school_admin', 'accountant'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <SchoolFinancePage navigate={navigate} />
   }
   if (pathname === '/app/announcements') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool || !['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <AnnouncementsManagementPage navigate={navigate} />
   }
   if (pathname === '/app/reports') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool || !['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher', 'accountant', 'receptionist'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <ReportsPage navigate={navigate} />
   }
   if (pathname === '/parent') {
-    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user || !guardianProfile) return <AccessDeniedPage navigate={navigate} signedIn={Boolean(user)} />
     return <ParentPortalPage navigate={navigate} />
   }
@@ -226,5 +227,5 @@ function AppRoutes() {
 }
 
 export default function App() {
-  return <AuthProvider><Suspense fallback={<main className="auth-page"><p className="loading-message" role="status">Loading EDUstacked…</p></main>}><AppRoutes /></Suspense></AuthProvider>
+  return <AuthProvider><Suspense fallback={<LoadingScreen message="Loading EDUstacked…" />}><AppRoutes /></Suspense></AuthProvider>
 }
