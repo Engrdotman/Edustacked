@@ -15,13 +15,16 @@ const shiftDate = (value, days) => {
 const statusLabels = { present: 'Present', absent: 'Absent', late: 'Late', excused: 'Excused absence' }
 const displayDate = (value) => value ? new Date(`${value}T12:00:00`).toLocaleDateString() : ''
 
-export default function AttendanceManagementPage({ navigate }) {
+export default function AttendanceManagementPage({ navigate, registerMode = false }) {
   const { selectedSchool } = useAuth()
   const role = selectedSchool?.role
   const canManage = ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal'].includes(role)
-  const [date, setDate] = useState(todayText)
+  const [date, setDate] = useState(() => new URLSearchParams(window.location.search).get('date') || todayText())
   const [options, setOptions] = useState({ sessions: [], classes: [], terms: [] })
-  const [selection, setSelection] = useState({ academic_session: '', class_level: '', class_arm: '' })
+  const [selection, setSelection] = useState(() => {
+    const query = new URLSearchParams(window.location.search)
+    return { academic_session: query.get('academic_session') || '', class_level: query.get('class_level') || '', class_arm: query.get('class_arm') || '' }
+  })
   const [roster, setRoster] = useState([])
   const [register, setRegister] = useState(null)
   const [registers, setRegisters] = useState([])
@@ -74,13 +77,41 @@ export default function AttendanceManagementPage({ navigate }) {
 
   useEffect(() => {
     let live = true
+    const query = new URLSearchParams(window.location.search)
     Promise.all([apiRequest(`attendance/options/?date=${date}`), apiRequest(`attendance/registers/?date_from=${shiftDate(date, -30)}&date_to=${date}`)])
       .then(([optionData, registerData]) => {
         if (!live) return
         setOptions(optionData)
         setRegisters(registerData.results || [])
         const dateSession = optionData.sessions.find((item) => item.start_date <= date && item.end_date >= date) || optionData.sessions[0]
-        if (dateSession) setSelection((current) => ({ ...current, academic_session: String(dateSession.id) }))
+        const requestedSession = optionData.sessions.find((item) => String(item.id) === query.get('academic_session'))
+        const requestedClass = optionData.classes.find((item) => String(item.id) === query.get('class_level'))
+        const requestedArm = requestedClass?.arms.find((item) => String(item.id) === query.get('class_arm'))
+        const nextSelection = {
+          academic_session: String(requestedSession?.id || dateSession?.id || ''),
+          class_level: String(requestedClass?.id || ''),
+          class_arm: String(requestedArm?.id || ''),
+        }
+        setSelection(nextSelection)
+        const requestedRegister = query.get('register')
+        if (registerMode && requestedRegister) {
+          return apiRequest(`attendance/registers/${encodeURIComponent(requestedRegister)}/`).then((detail) => {
+            if (!live) return
+            setRegister(detail)
+            setDate(detail.attendance_date)
+            setSelection({ academic_session: String(detail.academic_session), class_level: String(detail.class_level), class_arm: String(detail.class_arm) })
+            setRoster(detail.records.map((row) => ({ ...row, student_id: row.student, id: row.student })))
+          })
+        }
+        if (registerMode && nextSelection.academic_session && nextSelection.class_level && nextSelection.class_arm) {
+          const params = new URLSearchParams({ ...nextSelection, date })
+          return apiRequest(`attendance/eligible-students/?${params}`).then((rows) => {
+            if (!live) return
+            setRoster(rows.map((item) => ({ ...item, student_id: item.id, note: item.note || '' })))
+            setMessage(rows.length ? `${rows.length} eligible student${rows.length === 1 ? '' : 's'} loaded.` : '')
+            if (!rows.length) setError('No students are eligible for this date and placement. Check the selected class, arm, session, and student enrollment dates.')
+          })
+        }
       })
       .catch((e) => live && setError(e.message || 'Could not load attendance setup.'))
       .finally(() => live && setLoading(false))
@@ -114,6 +145,8 @@ export default function AttendanceManagementPage({ navigate }) {
       } else {
         setMessage(`${rows.length} eligible student${rows.length === 1 ? '' : 's'} loaded.`)
       }
+      const route = new URLSearchParams({ ...selection, date })
+      navigate(`/app/attendance/register?${route}`)
     } catch (e) { setRoster([]); setError(e.message || 'Could not load eligible students.') }
     finally { setWorking(false) }
   }
@@ -124,7 +157,10 @@ export default function AttendanceManagementPage({ navigate }) {
     try {
       const created = await apiRequest('attendance/registers/create/', { method: 'POST', body: { ...selection, academic_session: Number(selection.academic_session), class_level: Number(selection.class_level), class_arm: Number(selection.class_arm), term: term.id, attendance_date: date } })
       setRegister(created); setRoster(created.records.map((row) => ({ ...row, student_id: row.student, id: row.student })))
-      setMessage('Draft register created with a saved roster snapshot.'); await loadRegisters()
+      setMessage('Draft register created with a saved roster snapshot.')
+      const route = new URLSearchParams({ ...selection, date, register: String(created.id) })
+      navigate(`/app/attendance/register?${route}`)
+      await loadRegisters()
     } catch (e) { setError(e.message || 'Could not create the register.') }
     finally { setWorking(false) }
   }
@@ -137,6 +173,8 @@ export default function AttendanceManagementPage({ navigate }) {
       setSelection({ academic_session: String(detail.academic_session), class_level: String(detail.class_level), class_arm: String(detail.class_arm) })
       setRoster(detail.records.map((row) => ({ ...row, student_id: row.student, id: row.student })))
       setHistory([]); setHistoryStudent('')
+      const route = new URLSearchParams({ academic_session: String(detail.academic_session), class_level: String(detail.class_level), class_arm: String(detail.class_arm), date: detail.attendance_date, register: String(detail.id) })
+      navigate(`/app/attendance/register?${route}`)
     } catch (e) { setError(e.message || 'Could not open this register.') }
     finally { setWorking(false) }
   }
@@ -201,14 +239,15 @@ export default function AttendanceManagementPage({ navigate }) {
   const editable = register && register.status !== 'finalized' && (register.status === 'draft' || canManage)
   const allMarked = roster.length > 0 && roster.every((item) => Boolean(item.status))
 
-  return <main className="app-page"><header className="app-topbar"><BrandMark navigate={navigate} /><button className="text-button" onClick={() => navigate('/app')}>Back to dashboard</button></header>
-    <section className="app-content attendance-page"><p className="eyebrow">{selectedSchool?.school_name} · ATTENDANCE</p><h1 className="app-heading">Student <em>attendance</em></h1><p className="intro">Create a dated class register, record each eligible student, and keep corrections auditable.</p>
+  return <main className="app-page"><header className="app-topbar"><BrandMark navigate={navigate} /><button className="text-button" onClick={() => navigate(registerMode ? '/app/attendance' : '/app')}>{registerMode ? 'Back to attendance' : 'Back to dashboard'}</button></header>
+    <section className={`app-content attendance-page${registerMode ? ' attendance-register-mode' : ''}`}><p className="eyebrow">{selectedSchool?.school_name} · ATTENDANCE</p><h1 className="app-heading">{registerMode ? <>Take <em>attendance</em></> : <>Student <em>attendance</em></>}</h1><p className="intro">{registerMode ? 'Record each student’s attendance for the selected class and date.' : 'Create a dated class register, review attendance history, and check finalized summaries.'}</p>
       {error && <p className="form-error" role="alert">{error}</p>}{message && <p className="form-success" role="status">{message}</p>}{loading && <p className="loading-message" role="status">Loading attendance…</p>}
       {!loading && role === 'teacher' && options.sessions.length === 0 && <aside className="attendance-assignment-notice" role="status"><div><p className="panel-kicker">TEACHER ACCESS</p><h2>No attendance class is assigned for this date</h2><p>The attendance list only shows active teaching assignments linked to your login and covering {date}. Ask your school owner or administrator to check your staff-profile link, active teacher designation, assignment dates, session, class, and arm.</p></div><button className="secondary-button" type="button" onClick={() => navigate('/app/staff')}>View my assignments</button></aside>}
-      <section className="attendance-panel"><div className="attendance-panel-heading"><div><p className="panel-kicker">CLASS REGISTER</p><h2>Take attendance</h2></div>{register && <span className={`attendance-state attendance-state-${register.status}`}>{register.status} · version {register.version}</span>}</div>
-        <div className="attendance-selectors"><label>Session<select value={selection.academic_session} onChange={(e) => setSelection({ ...selection, academic_session: e.target.value })}><option value="">Select session</option>{options.sessions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="attendance-date-filter">Date<input type="date" value={date} max={todayText()} onChange={(e) => chooseDate(e.target.value)} /></label><label>Class<select value={selection.class_level} onChange={(e) => setSelection({ ...selection, class_level: e.target.value, class_arm: '' })}><option value="">Select class</option>{options.classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Arm<select value={selection.class_arm} onChange={(e) => setSelection({ ...selection, class_arm: e.target.value })}><option value="">Select arm</option>{arms.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="attendance-term">Term<strong>{term ? `${term.name} · ${displayDate(term.start_date)}–${displayDate(term.end_date)}` : 'No term for selected date'}</strong></div></div>
-        {selectedSession && <p className={term ? 'attendance-term-guidance' : 'attendance-term-guidance attendance-term-guidance-warning'} role="status">{term ? `This date is within ${term.name} (${displayDate(term.start_date)}–${displayDate(term.end_date)}).` : sessionTerms.length ? `The selected date must be within one of the terms for ${selectedSession.name}: ${sessionTerms.map((item) => `${item.name}, ${displayDate(item.start_date)}–${displayDate(item.end_date)}`).join(' · ')}.` : `No terms have been configured for ${selectedSession.name}. A school administrator can add them under Classes & subjects → Academic terms.`}</p>}
-        <div className="attendance-actions"><button className="secondary-button" type="button" onClick={loadEligible} disabled={working}>{working ? 'Loading…' : 'Load eligible students'}</button>{!register && roster.length > 0 && <button className="primary-button" type="button" onClick={createRegister} disabled={working}>Create draft register</button>}</div>
+      <section className="attendance-panel"><div className="attendance-panel-heading"><div><p className="panel-kicker">{registerMode ? 'ATTENDANCE ENTRY' : 'CLASS REGISTER'}</p><h2>{registerMode ? 'Class register' : 'Take attendance'}</h2></div>{register && <span className={`attendance-state attendance-state-${register.status}`}>{register.status} · version {register.version}</span>}</div>
+        {(!registerMode || (!register && !roster.length)) && <div className="attendance-selectors"><label>Session<select value={selection.academic_session} onChange={(e) => setSelection({ ...selection, academic_session: e.target.value })}><option value="">Select session</option>{options.sessions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="attendance-date-filter">Date<input type="date" value={date} max={todayText()} onChange={(e) => chooseDate(e.target.value)} /></label><label>Class<select value={selection.class_level} onChange={(e) => setSelection({ ...selection, class_level: e.target.value, class_arm: '' })}><option value="">Select class</option>{options.classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Arm<select value={selection.class_arm} onChange={(e) => setSelection({ ...selection, class_arm: e.target.value })}><option value="">Select arm</option>{arms.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="attendance-term">Term<strong>{term ? `${term.name} · ${displayDate(term.start_date)}–${displayDate(term.end_date)}` : 'No term for selected date'}</strong></div></div>}
+        {(!registerMode || (!register && !roster.length)) && selectedSession && <p className={term ? 'attendance-term-guidance' : 'attendance-term-guidance attendance-term-guidance-warning'} role="status">{term ? `This date is within ${term.name} (${displayDate(term.start_date)}–${displayDate(term.end_date)}).` : sessionTerms.length ? `The selected date must be within one of the terms for ${selectedSession.name}: ${sessionTerms.map((item) => `${item.name}, ${displayDate(item.start_date)}–${displayDate(item.end_date)}`).join(' · ')}.` : `No terms have been configured for ${selectedSession.name}. A school administrator can add them under Classes & subjects → Academic terms.`}</p>}
+        {registerMode && (register || roster.length > 0) && <div className="attendance-context-card"><span>{displayDate(date)}</span><strong>{selectedSession?.name || 'Selected session'} · {options.classes.find((item) => String(item.id) === String(selection.class_level))?.name || 'Class'} {arms.find((item) => String(item.id) === String(selection.class_arm))?.name || ''}</strong><span>{term?.name || 'Term not found for this date'}</span></div>}
+        <div className="attendance-actions">{(!registerMode || (!register && !roster.length)) && <button className="secondary-button" type="button" onClick={loadEligible} disabled={working}>{working ? 'Loading…' : 'Load eligible students'}</button>}{registerMode && !register && roster.length > 0 && <button className="primary-button" type="button" onClick={createRegister} disabled={working}>Create draft register</button>}</div>
         {register && <><div className="attendance-register-tools"><input aria-label="Search register" placeholder="Search name or admission number" value={search} onChange={(e) => setSearch(e.target.value)} /><strong>{roster.filter((item) => item.status).length} / {roster.length} marked</strong></div>
           <div className="attendance-roster">{filteredRoster.map((item) => <div className="attendance-student" key={item.student_id}><div className="attendance-student-name"><strong>{item.last_name}, {item.first_name} {item.middle_name}</strong><span>{item.admission_number}</span></div><label>Status<select value={item.status || ''} disabled={!editable || working} onChange={(e) => updateRoster(item.student_id, { status: e.target.value, reason: '' })}><option value="">Not marked</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Note<input value={item.note || ''} disabled={!editable || working} maxLength={300} onChange={(e) => updateRoster(item.student_id, { note: e.target.value })} /></label></div>)}{!filteredRoster.length && <p className="academic-empty">No eligible students match this search.</p>}</div>
           <div className="attendance-actions">{editable && <button className="primary-button" type="button" onClick={saveDraft} disabled={working}>Save draft</button>}{register.status === 'draft' && <button className="secondary-button" type="button" onClick={() => runRegisterAction('submit')} disabled={working || !allMarked}>Submit register</button>}{canManage && register.status === 'submitted' && <button className="primary-button" type="button" onClick={() => runRegisterAction('finalize')} disabled={working}>Finalize register</button>}{canManage && register.status === 'finalized' && <button className="secondary-button" type="button" onClick={() => runRegisterAction('reopen')} disabled={working}>Reopen for correction</button>}</div>
@@ -216,9 +255,9 @@ export default function AttendanceManagementPage({ navigate }) {
         </>}
       </section>
 
-      <section className="attendance-panel"><div className="attendance-panel-heading"><div><p className="panel-kicker">REGISTER HISTORY</p><h2>Review registers</h2></div></div><div className="attendance-selectors"><label className="attendance-date-filter">From<input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></label><label className="attendance-date-filter">To<input type="date" value={to} min={from} max={todayText()} onChange={(e) => setTo(e.target.value)} /></label><label>Session<select value={registerFilters.academic_session} onChange={(e) => setRegisterFilters({ ...registerFilters, academic_session: e.target.value })}><option value="">All sessions</option>{options.sessions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Class<select value={registerFilters.class_level} onChange={(e) => setRegisterFilters({ ...registerFilters, class_level: e.target.value })}><option value="">All classes</option>{options.classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Status<select value={registerFilters.status} onChange={(e) => setRegisterFilters({ ...registerFilters, status: e.target.value })}><option value="">All statuses</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="finalized">Finalized</option></select></label><button className="secondary-button" type="button" onClick={() => loadRegisters()} disabled={working}>Filter</button></div><div className="attendance-register-list">{registers.map((item) => <button className="attendance-register-row" key={item.id} onClick={() => openRegister(item)}><strong>{item.attendance_date} · {item.class_name} {item.arm_name}</strong><span>{item.session_name} · {item.term_name} · {item.status} · {item.total_students} students</span></button>)}{!registers.length && <p className="academic-empty">No registers in this date range.</p>}</div></section>
+      <section className="attendance-panel attendance-secondary-panel"><div className="attendance-panel-heading"><div><p className="panel-kicker">REGISTER HISTORY</p><h2>Review registers</h2></div></div><div className="attendance-selectors"><label className="attendance-date-filter">From<input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></label><label className="attendance-date-filter">To<input type="date" value={to} min={from} max={todayText()} onChange={(e) => setTo(e.target.value)} /></label><label>Session<select value={registerFilters.academic_session} onChange={(e) => setRegisterFilters({ ...registerFilters, academic_session: e.target.value })}><option value="">All sessions</option>{options.sessions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Class<select value={registerFilters.class_level} onChange={(e) => setRegisterFilters({ ...registerFilters, class_level: e.target.value })}><option value="">All classes</option>{options.classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Status<select value={registerFilters.status} onChange={(e) => setRegisterFilters({ ...registerFilters, status: e.target.value })}><option value="">All statuses</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="finalized">Finalized</option></select></label><button className="secondary-button" type="button" onClick={() => loadRegisters()} disabled={working}>Filter</button></div><div className="attendance-register-list">{registers.map((item) => <button className="attendance-register-row" key={item.id} onClick={() => openRegister(item)}><strong>{item.attendance_date} · {item.class_name} {item.arm_name}</strong><span>{item.session_name} · {item.term_name} · {item.status} · {item.total_students} students</span></button>)}{!registers.length && <p className="academic-empty">No registers in this date range.</p>}</div></section>
 
-      <section className="attendance-panel"><div className="attendance-panel-heading"><div><p className="panel-kicker">FINALIZED SUMMARY</p><h2>Attendance report</h2></div><button className="secondary-button" onClick={loadReport} disabled={working}>Refresh report</button></div><p className="attendance-policy">Only finalized registers count. Present and late count as attended; excused absences remain in the denominator. Missing registers are excluded.</p>{report && <><div className="attendance-totals">{[['Present', report.totals.present], ['Absent', report.totals.absent], ['Late', report.totals.late], ['Excused', report.totals.excused], ['Attendance', `${report.totals.attendance_percentage}%`]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div><div className="attendance-register-list">{report.daily.map((item) => <div className="attendance-register-row" key={item.register__attendance_date}><strong>{item.register__attendance_date}</strong><span>{item.present} present · {item.absent} absent · {item.late} late · {item.excused} excused · {item.total} recorded</span></div>)}{!report.daily.length && <p className="academic-empty">No finalized records for this date range.</p>}</div></>}
+      <section className="attendance-panel attendance-secondary-panel"><div className="attendance-panel-heading"><div><p className="panel-kicker">FINALIZED SUMMARY</p><h2>Attendance report</h2></div><button className="secondary-button" onClick={loadReport} disabled={working}>Refresh report</button></div><p className="attendance-policy">Only finalized registers count. Present and late count as attended; excused absences remain in the denominator. Missing registers are excluded.</p>{report && <><div className="attendance-totals">{[['Present', report.totals.present], ['Absent', report.totals.absent], ['Late', report.totals.late], ['Excused', report.totals.excused], ['Attendance', `${report.totals.attendance_percentage}%`]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div><div className="attendance-register-list">{report.daily.map((item) => <div className="attendance-register-row" key={item.register__attendance_date}><strong>{item.register__attendance_date}</strong><span>{item.present} present · {item.absent} absent · {item.late} late · {item.excused} excused · {item.total} recorded</span></div>)}{!report.daily.length && <p className="academic-empty">No finalized records for this date range.</p>}</div></>}
         <label className="attendance-history-select">Student history<select value={historyStudent} onChange={(e) => loadStudentHistory(e.target.value)}><option value="">Choose a student from the loaded register</option>{roster.map((item) => <option key={item.student_id} value={item.student_id}>{item.admission_number} · {item.first_name} {item.last_name}</option>)}</select></label>{history.length > 0 && <div className="attendance-register-list">{history.map((item) => <div key={item.id} className="attendance-register-row"><strong>{item.attendance_date} · {statusLabels[item.status]}</strong><span>{item.note || item.register_status}</span></div>)}</div>}
       </section>
     </section>

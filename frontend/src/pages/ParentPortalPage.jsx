@@ -185,6 +185,7 @@ export default function ParentPortalPage({ navigate }) {
       <p className="eyebrow">EDUstacked · PARENT / GUARDIAN PORTAL</p>
       <h1 className="app-heading">Your family’s<br /><em>school updates.</em></h1>
       <p className="intro">View information for students linked to your account by their school.</p>
+      <div className="parent-fees-entry"><div><p className="panel-kicker">ONLINE SCHOOL FEES</p><strong>Review balances and pay securely</strong><span>Choose an individual student or pay for linked students at the same school together.</span></div><button className="primary-button" type="button" disabled={!studentId} onClick={() => navigate('/parent/fees')}>Open family fee payments</button></div>
       {error && <p className="form-error" role="alert">{error}</p>}{success && <p className="form-success" role="status">{success}</p>}
 
       <section className="parent-panel parent-profile-panel"><div><p className="panel-kicker">YOUR PROFILE</p><strong>{profile?.email}</strong><span>{profile?.schools?.map((item) => item.name).filter((name, index, names) => names.indexOf(name) === index).join(' · ')}</span></div>

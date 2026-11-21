@@ -394,7 +394,7 @@ class ResultBatchActionView(ResultsMixin, APIView):
                 if result.status != AssessmentResult.Status.SUBMITTED:
                     raise serializers.ValidationError({"status": "Only submitted results can be approved."})
                 if result.plan.created_by_id == request.user.pk or result.scores.filter(recorded_by=request.user).exists():
-                    raise PermissionDenied("You cannot approve results you created or entered.")
+                    raise PermissionDenied("For an independent review, another authorized school owner or administrator must approve a plan or result entered by your account.")
             elif action == "reopen":
                 if result.status != AssessmentResult.Status.APPROVED:
                     raise serializers.ValidationError({"status": "Only approved results can be reopened."})

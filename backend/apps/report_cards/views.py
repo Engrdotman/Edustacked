@@ -408,7 +408,7 @@ def render_report_pdf(card, revision, snapshot):
     muted = colors.HexColor("#59675e")
     pale = colors.HexColor("#edf3ee")
     styles.add(ParagraphStyle(name="SchoolTitle", parent=styles["Title"], alignment=TA_CENTER, textColor=ink, fontName="Helvetica-Bold", fontSize=18, leading=21, spaceAfter=2))
-    styles.add(ParagraphStyle(name="SchoolContact", parent=styles["BodyText"], alignment=TA_CENTER, textColor=muted, fontSize=9.2, leading=12, spaceAfter=1))
+    styles.add(ParagraphStyle(name="SchoolContact", parent=styles["BodyText"], alignment=TA_CENTER, textColor=muted, fontSize=10.5, leading=13, spaceAfter=1))
     styles.add(ParagraphStyle(name="SchoolMeta", parent=styles["BodyText"], alignment=TA_CENTER, textColor=muted, fontSize=7.2, leading=9))
     styles.add(ParagraphStyle(name="ReportTitle", parent=styles["Heading2"], alignment=TA_CENTER, textColor=colors.white, fontName="Helvetica-Bold", fontSize=10, leading=13))
     styles.add(ParagraphStyle(name="SectionTitle", parent=styles["Heading2"], textColor=colors.HexColor(primary), fontName="Helvetica-Bold", fontSize=9, leading=11, spaceBefore=5, spaceAfter=3))
@@ -503,8 +503,24 @@ def render_report_pdf(card, revision, snapshot):
         displayed_components = component_names or ["Assessment"]
         component_width = (186 - sum(fixed_widths)) / len(displayed_components)
         column_widths = [fixed_widths[0], *([component_width] * len(displayed_components)), *fixed_widths[1:]]
-        headers = ["Subject / teacher", *displayed_components, "Total", "Average", "Grade", "Position", "Highest", "Lowest", "Remark"]
-        wrapped_data = [[Paragraph(escape(str(value)), styles["ResultHeader"]) for value in headers]]
+        component_headers = []
+        for name in displayed_components:
+            maximum = next((
+                component.get("max_score")
+                for subject in subject_rows
+                for component in subject.get("components", [])
+                if (component.get("name") or "Assessment") == name and component.get("max_score") is not None
+            ), None)
+            label = escape(str(name))
+            if maximum is not None:
+                label += f"<br/><font size='5.6'>/ {escape(str(maximum))}</font>"
+            component_headers.append(Paragraph(label, styles["ResultHeader"]))
+        headers = [
+            Paragraph("Subject / teacher", styles["ResultHeader"]),
+            *component_headers,
+            *[Paragraph(label, styles["ResultHeader"]) for label in ("Total", "Average", "Grade", "Position", "Highest", "Lowest", "Remark")],
+        ]
+        wrapped_data = [headers]
         for subject in subject_rows:
             component_lookup = {item.get("name") or "Assessment": item for item in subject.get("components", [])}
             subject_html = escape(str(subject.get("subject_name", "")))
@@ -516,9 +532,8 @@ def render_report_pdf(card, revision, snapshot):
             for name in displayed_components:
                 component = component_lookup.get(name)
                 value = "-" if component is None else component.get("score")
-                maximum = "-" if component is None else component.get("max_score")
                 cells.append(Paragraph(
-                    f"{escape(str(value if value is not None else '-'))} / {escape(str(maximum or '-'))}",
+                    escape(str(value if value is not None else '-')),
                     styles["ResultCell"],
                 ))
             position = f"{subject.get('class_position')} of {subject.get('class_size_with_result')}" if subject.get("class_position") else "-"
@@ -640,12 +655,13 @@ def render_report_pdf(card, revision, snapshot):
     ], colWidths=[93 * mm, 93 * mm], hAlign="LEFT")
     signature_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), pale), ("LINEBELOW", (0, 2), (-1, 2), .6, colors.grey), ("VALIGN", (0, 0), (-1, -1), "BOTTOM"), ("ALIGN", (0, 0), (-1, -1), "LEFT"), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3), ("FONTSIZE", (0, 0), (-1, -1), 7)]))
     story.append(signature_table)
-    if revision.status != ReportCardRevision.Status.FINALIZED:
-        story.append(Spacer(1, 5 * mm))
-        story.append(Paragraph(f"{revision.status.upper()} - NOT AN OFFICIAL FINALIZED REPORT CARD", ParagraphStyle(name="DraftNotice", parent=styles["BodyText"], alignment=TA_CENTER, textColor=colors.HexColor("#9b3f2e"), fontName="Helvetica-Bold", fontSize=9)))
 
     def branded_footer(canvas, document):
         canvas.saveState()
+        if revision.status != ReportCardRevision.Status.FINALIZED:
+            canvas.setFillColor(colors.HexColor("#9b3f2e"))
+            canvas.setFont("Helvetica-Bold", 7)
+            canvas.drawCentredString(A4[0] / 2, 17 * mm, f"{revision.status.upper()} - NOT AN OFFICIAL FINALIZED REPORT CARD")
         canvas.setStrokeColor(colors.HexColor("#d5dfd7"))
         canvas.setLineWidth(.5)
         canvas.line(document.leftMargin, 13 * mm, A4[0] - document.rightMargin, 13 * mm)

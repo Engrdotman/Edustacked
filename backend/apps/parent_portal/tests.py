@@ -184,6 +184,16 @@ class ParentPortalApiTests(TestCase):
         new_guardian.refresh_from_db()
         self.assertIsNotNone(invitation.accepted_at)
         self.assertIsNotNone(new_guardian.user_id)
+        login = self.client.post("/api/v1/auth/login/", {
+            "email": "musa@example.test", "password": "Strong-Parent-Password-42!",
+        }, format="json")
+        self.assertEqual(login.status_code, status.HTTP_200_OK, login.data)
+        self.client.force_authenticate(new_guardian.user)
+        parent_profile = self.client.get("/api/v1/parent/profile/")
+        self.assertEqual(parent_profile.status_code, status.HTTP_200_OK, parent_profile.data)
+        linked_students = self.client.get("/api/v1/parent/students/")
+        self.assertEqual(linked_students.status_code, status.HTTP_200_OK, linked_students.data)
+        self.assertEqual([student["id"] for student in linked_students.data], [self.student.pk])
         again = self.client.post("/api/v1/guardian/activate/", {"token": token, "password": "Strong-Parent-Password-42!"}, format="json")
         self.assertEqual(again.status_code, status.HTTP_400_BAD_REQUEST)
 

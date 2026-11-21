@@ -270,14 +270,18 @@ class StudentGuardianReadSerializer(serializers.ModelSerializer):
     phone = serializers.CharField(source="guardian.phone", read_only=True)
     email = serializers.EmailField(source="guardian.email", read_only=True)
     address = serializers.CharField(source="guardian.address", read_only=True)
+    portal_access = serializers.SerializerMethodField()
 
     class Meta:
         model = StudentGuardian
         fields = (
-            "id", "guardian_id", "full_name", "phone", "email", "address", "relationship_type",
+            "id", "guardian_id", "full_name", "phone", "email", "address", "portal_access", "relationship_type",
             "is_primary_contact", "is_emergency_contact", "can_receive_communications", "is_active",
         )
         read_only_fields = fields
+
+    def get_portal_access(self, obj):
+        return bool(obj.guardian.user_id)
 
 
 class StudentGuardianCreateSerializer(serializers.Serializer):

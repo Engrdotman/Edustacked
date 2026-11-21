@@ -20,6 +20,7 @@ const ReportCardsPage = lazy(() => import('./pages/ReportCardsPage.jsx'))
 const BillingPage = lazy(() => import('./pages/BillingPage.jsx'))
 const SchoolFinancePage = lazy(() => import('./pages/SchoolFinancePage.jsx'))
 const ParentPortalPage = lazy(() => import('./pages/ParentPortalPage.jsx'))
+const ParentFeesPage = lazy(() => import('./pages/ParentFeesPage.jsx'))
 const GuardianActivationPage = lazy(() => import('./pages/GuardianActivationPage.jsx'))
 const AnnouncementsManagementPage = lazy(() => import('./pages/AnnouncementsManagementPage.jsx'))
 const ReportsPage = lazy(() => import('./pages/ReportsPage.jsx'))
@@ -44,6 +45,43 @@ function AppRoutes() {
     const onPopState = () => setLocation(`${window.location.pathname}${window.location.search}`)
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  useEffect(() => {
+    const root = document.getElementById('root')
+    if (!root) return undefined
+    const selector = '.form-error, .form-success, .success-message, .action-feedback'
+    let frame = 0
+    const reveal = (element) => {
+      if (!element?.textContent?.trim()) return
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(() => {
+        if (!element.isConnected || !element.getClientRects().length) return
+        const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+        element.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' })
+      })
+    }
+    const observer = new MutationObserver((records) => {
+      records.forEach((record) => {
+        if (record.type === 'characterData') {
+          reveal(record.target.parentElement?.closest(selector))
+          return
+        }
+        record.addedNodes.forEach((node) => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            reveal(node.parentElement?.closest(selector))
+          } else if (node.nodeType === Node.ELEMENT_NODE) {
+            if (node.matches(selector)) reveal(node)
+            node.querySelectorAll(selector).forEach(reveal)
+          }
+        })
+      })
+    })
+    observer.observe(root, { childList: true, characterData: true, subtree: true })
+    return () => {
+      observer.disconnect()
+      window.cancelAnimationFrame(frame)
+    }
   }, [])
 
   const navigate = useCallback((path) => {
@@ -172,12 +210,12 @@ function AppRoutes() {
     if (!['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher', 'receptionist'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <StaffManagementPage navigate={navigate} />
   }
-  if (pathname === '/app/attendance') {
+  if (pathname === '/app/attendance' || pathname === '/app/attendance/register') {
     if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <AccessDeniedPage navigate={navigate} />
     if (!selectedSchool) return <AuthenticatedHome navigate={navigate} />
     if (!['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
-    return <AttendanceManagementPage navigate={navigate} />
+    return <AttendanceManagementPage navigate={navigate} registerMode={pathname === '/app/attendance/register'} />
   }
   if (pathname === '/app/assessments') {
     if (loading) return <LoadingScreen message="Restoring your secure session…" />
@@ -218,9 +256,10 @@ function AppRoutes() {
     if (!selectedSchool || !['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher', 'accountant', 'receptionist'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <ReportsPage navigate={navigate} />
   }
-  if (pathname === '/parent') {
+  if (pathname === '/parent' || pathname === '/parent/fees') {
     if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user || !guardianProfile) return <AccessDeniedPage navigate={navigate} signedIn={Boolean(user)} />
+    if (pathname === '/parent/fees') return <ParentFeesPage navigate={navigate} />
     return <ParentPortalPage navigate={navigate} />
   }
   return <WelcomePage onLogin={() => navigate('/login')} onSignup={() => navigate('/signup')} onDemo={() => navigate('/demo')} />

@@ -199,6 +199,60 @@ class SchoolFeesApiTests(TestCase):
         self.assertEqual(denied.status_code, status.HTTP_404_NOT_FOUND)
 
     @patch("apps.school_fees.views.provider_for")
+    def test_parent_can_pay_for_two_linked_children_in_one_online_checkout(self, provider_for_mock):
+        self.configure_online()
+        first_charge = self.create_schedule(amount=100_000).charges.get()
+        second_student = self.make_student("FEE-005", "Tomi")
+        issue_fee_schedule(first_charge.fee_schedule, self.admin)
+        second_charge = FeeCharge.objects.get(fee_schedule=first_charge.fee_schedule, student=second_student)
+        StudentGuardian.objects.create(
+            school=self.school, student=second_student, guardian=self.guardian,
+            relationship_type="Parent", can_receive_communications=True,
+        )
+
+        linked = self.api("get", "/api/v1/parent/students/", user=self.parent)
+        self.assertEqual({row["id"] for row in linked.data}, {self.student.pk, second_student.pk})
+        for student in (self.student, second_student):
+            fee_list = self.api("get", f"/api/v1/parent/students/{student.pk}/fees/", user=self.parent)
+            self.assertEqual(fee_list.status_code, status.HTTP_200_OK, fee_list.data)
+            self.assertTrue(fee_list.data["charges"])
+
+        provider = Mock()
+        provider.initialize.return_value = {"authorization_url": "https://checkout.example.test/secure"}
+        provider.verify.return_value = {
+            "reference": "", "status": "success", "amount": 55_000,
+            "currency": "NGN", "id": "multi-child-transaction", "channel": "card",
+        }
+        provider_for_mock.return_value = provider
+        initialized = self.api("post", "/api/v1/parent/fees/payments/initialize/", {
+            "allocations": [
+                {"fee_charge_id": first_charge.pk, "amount_minor": 20_000},
+                {"fee_charge_id": second_charge.pk, "amount_minor": 35_000},
+            ],
+        }, user=self.parent)
+        self.assertEqual(initialized.status_code, status.HTTP_201_CREATED, initialized.data)
+        self.assertEqual(initialized.data["amount_minor"], 55_000)
+        self.assertIsInstance(initialized.data["amount_minor"], int)
+        provider.initialize.assert_called_once()
+        self.assertEqual(provider.initialize.call_args.kwargs["amount_minor"], 55_000)
+        self.assertIsInstance(provider.initialize.call_args.kwargs["amount_minor"], int)
+
+        payment = SchoolFeePayment.objects.get(reference=initialized.data["reference"])
+        provider.verify.return_value["reference"] = payment.reference
+        self.assertEqual(payment.amount_minor, 55_000)
+        self.assertEqual(payment.provider_metadata["pending_allocations"], [
+            {"fee_charge_id": first_charge.pk, "amount_minor": 20_000},
+            {"fee_charge_id": second_charge.pk, "amount_minor": 35_000},
+        ])
+        callback = self.api("post", f"/api/v1/parent/fees/payments/{payment.reference}/", {}, user=self.parent)
+        self.assertEqual(callback.status_code, status.HTTP_200_OK, callback.data)
+        self.assertEqual(callback.data["status"], SchoolFeePayment.Status.SUCCESS)
+        self.assertEqual(FeePaymentAllocation.objects.filter(payment=payment).count(), 2)
+        self.assertEqual(FeeLedgerEntry.objects.filter(payment=payment, kind=FeeLedgerEntry.Kind.PAYMENT).count(), 2)
+        self.assertEqual(charge_balance_value(first_charge), 80_000)
+        self.assertEqual(charge_balance_value(second_charge), 65_000)
+
+    @patch("apps.school_fees.views.provider_for")
     def test_parent_checkout_callback_can_verify_pending_payment_before_allocations_exist(self, provider_for_mock):
         self.configure_online()
         charge = self.create_schedule().charges.get()
