@@ -17,6 +17,7 @@ const AttendanceManagementPage = lazy(() => import('./pages/AttendanceManagement
 const AssessmentResultsPage = lazy(() => import('./pages/AssessmentResultsPage.jsx'))
 const ReportCardsPage = lazy(() => import('./pages/ReportCardsPage.jsx'))
 const BillingPage = lazy(() => import('./pages/BillingPage.jsx'))
+const SchoolFinancePage = lazy(() => import('./pages/SchoolFinancePage.jsx'))
 const ParentPortalPage = lazy(() => import('./pages/ParentPortalPage.jsx'))
 const GuardianActivationPage = lazy(() => import('./pages/GuardianActivationPage.jsx'))
 const AnnouncementsManagementPage = lazy(() => import('./pages/AnnouncementsManagementPage.jsx'))
@@ -197,6 +198,12 @@ function AppRoutes() {
     if (!selectedSchool) return <AuthenticatedHome navigate={navigate} />
     if (!['platform_superadmin', 'school_owner', 'school_admin', 'accountant'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <BillingPage navigate={navigate} />
+  }
+  if (pathname === '/app/finance') {
+    if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>
+    if (!user) return <AccessDeniedPage navigate={navigate} />
+    if (!selectedSchool || !['platform_superadmin', 'school_owner', 'school_admin', 'accountant'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
+    return <SchoolFinancePage navigate={navigate} />
   }
   if (pathname === '/app/announcements') {
     if (loading) return <main className="auth-page"><p className="loading-message" role="status">Restoring your secure session…</p></main>

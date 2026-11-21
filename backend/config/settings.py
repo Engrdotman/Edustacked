@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "apps.results.apps.ResultsConfig",
     "apps.report_cards.apps.ReportCardsConfig",
     "apps.billing.apps.BillingConfig",
+    "apps.school_fees.apps.SchoolFeesConfig",
     "apps.entitlements.apps.EntitlementsConfig",
     "apps.cbt.apps.CbtConfig",
     "apps.parent_portal.apps.ParentPortalConfig",
@@ -284,6 +285,12 @@ if not DEBUG and urlparse(FRONTEND_BASE_URL).hostname in {"localhost", "127.0.0.
     FRONTEND_BASE_URL = "https://edustacked.vercel.app"
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY", "")
 FLUTTERWAVE_SECRET_KEY = os.getenv("FLUTTERWAVE_SECRET_KEY", "")
+PAYSTACK_WEBHOOK_SECRET = os.getenv("PAYSTACK_WEBHOOK_SECRET", "").strip() or PAYSTACK_SECRET_KEY
+FLUTTERWAVE_WEBHOOK_SECRET = os.getenv("FLUTTERWAVE_WEBHOOK_SECRET", "").strip()
+TERMII_API_KEY = os.getenv("TERMII_API_KEY", "").strip()
+TERMII_BASE_URL = os.getenv("TERMII_BASE_URL", "https://api.ng.termii.com").strip().rstrip("/")
+TERMII_SENDER_ID = os.getenv("TERMII_SENDER_ID", "").strip()
+TERMII_CHANNEL = os.getenv("TERMII_CHANNEL", "generic").strip() or "generic"
 BACHS_API_KEY = os.getenv("BACHS_API_KEY", "")
 BACHS_API_BASE_URL = (
     os.getenv("BACHS_API_BASE_URL", "").strip()

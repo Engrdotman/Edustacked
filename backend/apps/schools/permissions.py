@@ -30,6 +30,7 @@ ROLE_PERMISSIONS = {
             "report_cards.view", "report_cards.generate", "report_cards.update", "report_cards.review", "report_cards.approve", "report_cards.finalize",
             "finance.view",
             "finance.manage",
+            "fees.view", "fees.record", "fees.manage", "fees.settings",
             "billing.view", "billing.purchase",
             "services.view", "services.manage",
             "cbt.questions.view", "cbt.questions.manage", "cbt.questions.publish",
@@ -84,7 +85,7 @@ ROLE_PERMISSIONS = {
     SchoolMembership.Role.TEACHER: frozenset(
         {"school.view", "students.view", "attendance.view", "attendance.record", "results.view", "results.enter", "services.view", "cbt.questions.view", "cbt.questions.manage", "cbt.questions.publish", "cbt.exams.view", "cbt.exams.manage", "cbt.results.view", "report_cards.view", "report_cards.update", "teacher.profile.view", "teacher_assignments.view", "reports.dashboard", "reports.attendance", "reports.academics", "reports.report_cards"}
     ),
-    SchoolMembership.Role.ACCOUNTANT: frozenset({"school.view", "finance.view", "finance.manage", "billing.view", "billing.purchase", "reports.dashboard", "reports.finance"}),
+    SchoolMembership.Role.ACCOUNTANT: frozenset({"school.view", "finance.view", "finance.manage", "fees.view", "fees.record", "fees.manage", "billing.view", "billing.purchase", "reports.dashboard", "reports.finance"}),
     SchoolMembership.Role.RECEPTIONIST: frozenset(
         {
             "school.view", "students.view", "students.enroll",
