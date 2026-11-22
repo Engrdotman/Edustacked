@@ -84,7 +84,7 @@ export default function PlatformAdminDashboardPage({ navigate }) {
     <section className="platform-content platform-admin-content">
       <p className="eyebrow">EDUstacked · PLATFORM OWNER</p><h1>Platform overview</h1>
       <p className="auth-intro">Monitor school access, accounts, and verified payments across EDUstacked.</p>
-      <div className="platform-dashboard-actions"><button className="primary-button" onClick={() => navigate('/platform/schools')}>Review school registrations</button><button className="secondary-button" onClick={load} disabled={loading}>Refresh overview</button></div>
+      <div className="platform-dashboard-actions"><button className="primary-button" onClick={() => navigate('/platform/schools')}>Review school registrations</button><button className="secondary-button" onClick={() => navigate('/platform/sms')}>SMS management</button><button className="secondary-button" onClick={load} disabled={loading}>Refresh overview</button></div>
 
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="platform-metric-grid">{cards.map(([label, value, note]) => <article className="platform-metric" key={label}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>)}</div>

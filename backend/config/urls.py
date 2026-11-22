@@ -14,6 +14,7 @@ urlpatterns = [
     path("api/<str:version>/", include("apps.report_cards.urls")),
     path("api/<str:version>/", include("apps.billing.urls")),
     path("api/<str:version>/", include("apps.school_fees.urls")),
+    path("api/<str:version>/", include("apps.sms_management.urls")),
     path("api/<str:version>/", include("apps.entitlements.urls")),
     path("api/<str:version>/", include("apps.cbt.urls")),
     path("api/<str:version>/", include("apps.parent_portal.urls")),

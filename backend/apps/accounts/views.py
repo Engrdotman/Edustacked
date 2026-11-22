@@ -277,6 +277,22 @@ class LoginView(APIView):
                 {"detail": "Platform administrator accounts use the separate Platform sign in page."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        if portal == "parent":
+            if user.is_superuser:
+                return Response(
+                    {"detail": "Platform administrator accounts use the separate Platform sign in page."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            from apps.students.models import Guardian
+            has_parent_access = Guardian.objects.filter(
+                user=user, is_active=True,
+                student_links__is_active=True,
+            ).exists()
+            if not has_parent_access:
+                return Response(
+                    {"detail": "This account is not linked to a parent portal yet. Use School sign in, or ask your school to invite your guardian email."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         refresh = RefreshToken.for_user(user)
         access = str(refresh.access_token)
 

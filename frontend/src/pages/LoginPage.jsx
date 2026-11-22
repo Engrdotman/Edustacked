@@ -9,6 +9,7 @@ export default function LoginPage({ navigate, sessionRequired = false }) {
   const { signIn } = useAuth()
   const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get('email') || '')
   const [password, setPassword] = useState('')
+  const [portal, setPortal] = useState('school')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [notice, setNotice] = useState('')
@@ -18,8 +19,8 @@ export default function LoginPage({ navigate, sessionRequired = false }) {
     setError('')
     setSubmitting(true)
     try {
-      const profile = await signIn(email, password, { portal: 'school' })
-      navigate(profile.guardian_portal ? '/parent' : '/app')
+      const profile = await signIn(email, password, { portal })
+      navigate(portal === 'parent' && profile.guardian_portal ? '/parent' : '/app')
     } catch (requestError) {
       setError(requestError instanceof ApiError
         ? requestError.message
@@ -44,8 +45,15 @@ export default function LoginPage({ navigate, sessionRequired = false }) {
       </section>
       <div className="auth-panel"><section className="auth-card auth-card-login" aria-labelledby="login-title">
         <h1 id="login-title">Welcome back.</h1>
-        <p className="auth-intro">{sessionRequired ? 'Your session needs a fresh sign-in. Enter your account details to continue.' : 'Sign in to continue to your EDUstacked school workspace.'}</p>
-        <p className="parent-login-hint">Parent or guardian? Use the email the school invited. After sign-in, EDUstacked opens your parent portal automatically.</p>
+        <p className="auth-intro">{sessionRequired ? 'Your session needs a fresh sign-in. Enter your account details to continue.' : 'Choose your account type, then sign in to continue.'}</p>
+        <label htmlFor="login-portal">I am signing in as</label>
+        <select id="login-portal" name="portal" className="auth-portal-select" value={portal} onChange={(event) => { setPortal(event.target.value); setError('') }}>
+          <option value="school">School owner or staff</option>
+          <option value="parent">Parent or guardian</option>
+        </select>
+        <p className="parent-login-hint">{portal === 'parent'
+          ? 'Use the email the school invited and the password you set from the activation link. You will go directly to your linked students.'
+          : 'Use the email and password for your school workspace. Parent and guardian accounts should choose the parent option.'}</p>
         {new URLSearchParams(window.location.search).get('registered') === '1' && <p className="form-success" role="status">Your school account has been created. Check your email inbox or spam folder and verify it to continue.</p>}
         {new URLSearchParams(window.location.search).get('verify') === '1' && <p className="form-success" role="status">Enter your email address and request a fresh verification link.</p>}
         <form className="auth-form" onSubmit={handleSubmit}>

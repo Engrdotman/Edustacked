@@ -32,10 +32,21 @@ def attendance_summary(enrollment, term):
     return finalized_enrollment_summary(enrollment, term.start_date, term.end_date)
 
 
-def _subject_data(enrollment, subject, plans, cohort_enrollment_ids, teacher_assignment=None):
+def _subject_data(enrollment, subject, term, plans, cohort_enrollment_ids, teacher_assignment=None):
     subject_plans = plans.get(subject.pk, [])
     if not subject_plans:
-        return None, f"No assessment plan exists for {subject.name}."
+        candidates = AssessmentPlan.objects.filter(
+            school=enrollment.school, academic_session=enrollment.academic_session,
+            term=term, subject=subject,
+        ).select_related("class_level", "class_arm")
+        same_slot = candidates.filter(class_level=enrollment.class_level, class_arm=enrollment.class_arm)
+        if same_slot.filter(status=AssessmentPlan.Status.DRAFT).exists():
+            return None, f"An assessment plan for {subject.name} exists for this class and arm, but it is still a draft. Publish it in Assessments & results."
+        other_slots = list(candidates.filter(status__in=(AssessmentPlan.Status.PUBLISHED, AssessmentPlan.Status.CLOSED)).values_list("class_level__name", "class_arm__name"))
+        if other_slots:
+            slot = ", ".join(f"{class_name} {arm_name}".strip() for class_name, arm_name in other_slots[:3])
+            return None, f"The published assessment plan for {subject.name} is assigned to {slot}; this report card is for {enrollment.class_level.name} {enrollment.class_arm.name}. Check the plan's session, term, class, arm, and subject."
+        return None, f"No published assessment plan for {subject.name} matches {enrollment.class_level.name} {enrollment.class_arm.name} in {enrollment.academic_session.name}, {term.name}. Create or publish the matching plan in Assessments & results."
     approved = []
     for plan in subject_plans:
         result = AssessmentResult.objects.filter(
@@ -128,7 +139,7 @@ def build_report_snapshot(enrollment, term):
         assignment_by_subject.setdefault(assignment.subject_id, assignment)
     for subject in subjects:
         row, error = _subject_data(
-            enrollment, subject, plans, cohort_enrollment_ids,
+            enrollment, subject, term, plans, cohort_enrollment_ids,
             assignment_by_subject.get(subject.pk),
         )
         if row:
@@ -228,6 +239,37 @@ def generate_report_card(enrollment, term, actor):
         revision.save(update_fields=("snapshot", "validation_errors", "generated_by", "status", "reason"))
     if created:
         ReportCardAuditEvent.objects.create(report_card=card, revision=revision, actor=actor, action="generated", metadata={"validation_error_count": len(errors)})
+    return card, revision, errors
+
+
+@transaction.atomic
+def refresh_report_card_draft(card, actor):
+    card = ReportCard.objects.select_for_update().select_related(
+        "enrollment__student", "enrollment__academic_session", "enrollment__class_level",
+        "enrollment__class_arm", "school", "term",
+    ).get(pk=card.pk)
+    if card.status != ReportCard.Status.DRAFT:
+        raise ValidationError({"status": "Only a draft report card can refresh its academic data."})
+    revision = ReportCardRevision.objects.select_for_update().get(
+        report_card=card, revision_number=card.current_revision,
+    )
+    if revision.status not in (ReportCardRevision.Status.DRAFT, ReportCardRevision.Status.RETURNED):
+        raise ValidationError({"status": "This report-card revision cannot be refreshed in its current state."})
+    snapshot, errors = build_report_snapshot(card.enrollment, card.term)
+    previous = revision.snapshot or {}
+    snapshot["ratings"] = previous.get("ratings") or empty_ratings()
+    snapshot["remarks"] = previous.get("remarks") or {"teacher": "", "head_teacher": "", "conduct": "", "effort": ""}
+    snapshot["signatures"] = previous.get("signatures") or {"class_teacher": "", "head_teacher": "", "signed": False}
+    revision.snapshot = snapshot
+    revision.validation_errors = errors
+    revision.generated_by = actor
+    revision.status = ReportCardRevision.Status.DRAFT
+    revision.reason = ""
+    revision.save(update_fields=("snapshot", "validation_errors", "generated_by", "status", "reason"))
+    ReportCardAuditEvent.objects.create(
+        report_card=card, revision=revision, actor=actor, action="draft_refreshed",
+        metadata={"validation_error_count": len(errors)},
+    )
     return card, revision, errors
 
 

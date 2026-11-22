@@ -146,7 +146,7 @@ class DemoRequestSerializer(serializers.Serializer):
 
 
 class LoginSerializer(serializers.Serializer):
-    portal = serializers.ChoiceField(choices=("school", "platform"), required=False, default="school", write_only=True)
+    portal = serializers.ChoiceField(choices=("school", "parent", "platform"), required=False, default="school", write_only=True)
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
 

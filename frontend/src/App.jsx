@@ -36,6 +36,8 @@ const LegalDraftPage = lazy(() => import('./pages/LegalDraftPage.jsx'))
 const CbtManagementPage = lazy(() => import('./pages/CbtManagementPage.jsx'))
 const CbtResultsPage = lazy(() => import('./pages/CbtResultsPage.jsx'))
 const ServicesPage = lazy(() => import('./pages/ServicesPage.jsx'))
+const SchoolSMSPage = lazy(() => import('./pages/SchoolSMSPage.jsx'))
+const PlatformSMSPage = lazy(() => import('./pages/PlatformSMSPage.jsx'))
 
 function AppRoutes() {
   const [location, setLocation] = useState(() => `${window.location.pathname}${window.location.search}`)
@@ -135,10 +137,11 @@ function AppRoutes() {
   if (pathname === '/denied') {
     return <AccessDeniedPage navigate={navigate} signedIn={Boolean(user)} />
   }
-  if (pathname === '/platform' || pathname === '/platform/schools' || /^\/platform\/schools\/\d+$/.test(pathname)) {
+  if (pathname === '/platform' || pathname === '/platform/schools' || pathname === '/platform/sms' || /^\/platform\/schools\/\d+$/.test(pathname)) {
     if (loading) return <LoadingScreen message="Restoring your secure session…" />
     if (!user) return <PlatformLoginPage navigate={navigate} />
     if (!user.is_superuser) return <AccessDeniedPage navigate={navigate} signedIn />
+    if (pathname === '/platform/sms') return <PlatformSMSPage navigate={navigate} />
     const detail = pathname.match(/^\/platform\/schools\/(\d+)$/)
     if (detail) return <PlatformSchoolDetailPage schoolId={detail[1]} navigate={navigate} />
     if (pathname === '/platform/schools') return <PlatformSchoolsPage navigate={navigate} />
@@ -237,6 +240,13 @@ function AppRoutes() {
     if (!selectedSchool) return <AuthenticatedHome navigate={navigate} />
     if (!['platform_superadmin', 'school_owner', 'school_admin', 'accountant'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
     return <BillingPage navigate={navigate} />
+  }
+  if (pathname === '/app/sms') {
+    if (loading) return <LoadingScreen message="Restoring your secure session…" />
+    if (!user) return <AccessDeniedPage navigate={navigate} />
+    if (!selectedSchool) return <AuthenticatedHome navigate={navigate} />
+    if (!['school_owner', 'school_admin', 'school_manager', 'principal'].includes(selectedSchool.role)) return <AccessDeniedPage navigate={navigate} signedIn />
+    return <SchoolSMSPage navigate={navigate} />
   }
   if (pathname === '/app/finance') {
     if (loading) return <LoadingScreen message="Restoring your secure session…" />

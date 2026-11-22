@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "apps.report_cards.apps.ReportCardsConfig",
     "apps.billing.apps.BillingConfig",
     "apps.school_fees.apps.SchoolFeesConfig",
+    "apps.sms_management.apps.SMSManagementConfig",
     "apps.entitlements.apps.EntitlementsConfig",
     "apps.cbt.apps.CbtConfig",
     "apps.parent_portal.apps.ParentPortalConfig",
@@ -202,6 +203,7 @@ REST_FRAMEWORK = {
         "anon": "10/minute",
         "login": os.getenv("AUTH_LOGIN_RATE", "10/minute"),
         "cbt_sync": "120/minute",
+        "sms_send": os.getenv("SMS_SEND_RATE", "10/minute"),
     },
 }
 
@@ -291,6 +293,7 @@ TERMII_API_KEY = os.getenv("TERMII_API_KEY", "").strip()
 TERMII_BASE_URL = os.getenv("TERMII_BASE_URL", "https://api.ng.termii.com").strip().rstrip("/")
 TERMII_SENDER_ID = os.getenv("TERMII_SENDER_ID", "").strip()
 TERMII_CHANNEL = os.getenv("TERMII_CHANNEL", "generic").strip() or "generic"
+TERMII_WEBHOOK_SECRET = os.getenv("TERMII_WEBHOOK_SECRET", "").strip()
 BACHS_API_KEY = os.getenv("BACHS_API_KEY", "")
 BACHS_API_BASE_URL = (
     os.getenv("BACHS_API_BASE_URL", "").strip()

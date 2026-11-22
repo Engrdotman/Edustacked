@@ -505,9 +505,12 @@ class SchoolProfileApiTests(TestCase):
         self.assertTrue(upload.data["logo_present"])
 
         logo = self.request("get", "/api/v1/schools/profile/logo/")
-        self.assertEqual(logo.status_code, status.HTTP_200_OK)
-        self.assertEqual(logo["Cache-Control"], "private, no-store")
-        self.assertEqual(logo["X-Content-Type-Options"], "nosniff")
+        try:
+            self.assertEqual(logo.status_code, status.HTTP_200_OK)
+            self.assertEqual(logo["Cache-Control"], "private, no-store")
+            self.assertEqual(logo["X-Content-Type-Options"], "nosniff")
+        finally:
+            logo.close()
         other_admin = User.objects.create_user(username="other-school-admin", password="test")
         SchoolMembership.objects.create(
             user=other_admin, school=self.other_school, role=SchoolMembership.Role.SCHOOL_ADMIN

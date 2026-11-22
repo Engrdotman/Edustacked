@@ -32,6 +32,7 @@ ROLE_PERMISSIONS = {
             "finance.manage",
             "fees.view", "fees.record", "fees.manage", "fees.settings",
             "billing.view", "billing.purchase",
+            "sms.view", "sms.send", "sms.manage",
             "services.view", "services.manage",
             "cbt.questions.view", "cbt.questions.manage", "cbt.questions.publish",
             "cbt.exams.view", "cbt.exams.manage", "cbt.exams.publish", "cbt.exams.assign",
@@ -56,6 +57,7 @@ ROLE_PERMISSIONS = {
             "attendance.record",
             "results.view",
             "results.enter",
+            "sms.view", "sms.send",
             "services.view",
             "cbt.questions.view", "cbt.questions.manage",
             "cbt.exams.view", "cbt.exams.manage", "cbt.exams.assign",
@@ -70,6 +72,7 @@ ROLE_PERMISSIONS = {
     SchoolMembership.Role.PRINCIPAL: frozenset(
         {
             "school.view", "academics.manage", "memberships.manage",
+            "sms.view", "sms.send", "sms.manage",
             "students.view", "students.manage", "students.enroll",
             "students.guardians.view", "students.guardians.manage",
             "attendance.view", "attendance.manage", "attendance.record",

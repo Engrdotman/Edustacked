@@ -72,11 +72,11 @@ class FlutterwaveProvider:
             raise ValidationError({"payment": "Flutterwave rejected the payment request."})
         return result["data"]
 
-    def initialize(self, *, email, amount_minor, reference, callback_url):
+    def initialize(self, *, email, amount_minor, reference, callback_url, title="EDUstacked", description="Report-card credits"):
         data = self._request("POST", "/payments", {
             "tx_ref": reference, "amount": f"{amount_minor / 100:.2f}", "currency": "NGN",
             "redirect_url": callback_url, "customer": {"email": email},
-            "customizations": {"title": "EDUstacked", "description": "Report-card credits"},
+            "customizations": {"title": title, "description": description},
         })
         if not data.get("link"):
             raise ValidationError({"payment": "Flutterwave did not return a checkout link."})

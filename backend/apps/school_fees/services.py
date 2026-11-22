@@ -305,7 +305,23 @@ def reverse_payment(*, payment, amount_minor, reason, actor, external_reference=
     return reversal
 
 
-def _termii_send(phone, message):
+def _termii_send(phone, message, *, school=None, idempotency_key=""):
+    if school is not None:
+        from apps.sms_management.services import send_school_sms
+        try:
+            result = send_school_sms(
+                school=school, actor=None, recipients=[phone], message=message,
+                idempotency_key=idempotency_key,
+            )
+        except (ImproperlyConfigured, ValidationError) as exc:
+            raise ValidationError(getattr(exc, "messages", [str(exc)])[0]) from exc
+        message_result = (result.get("messages") or [{}])[0]
+        if message_result.get("status") not in {"submitted", "delivered"}:
+            raise ValidationError(message_result.get("last_error") or "Termii could not confirm this SMS. The request is recorded for reconciliation before another send.")
+        return message_result.get("provider_message_id", "")
+
+    # Keep this direct adapter for its focused provider-configuration check;
+    # product notifications pass a school and always go through the wallet service above.
     api_key = getattr(settings, "TERMII_API_KEY", "")
     sender = getattr(settings, "TERMII_SENDER_ID", "")
     if not api_key or not sender:
@@ -342,7 +358,7 @@ def send_fee_sms(*, school, payment, guardian, kind, message):
     notification.attempt_count += 1
     notification.last_attempt_at = timezone.now()
     try:
-        message_id = _termii_send(phone, message)
+        message_id = _termii_send(phone, message, school=school, idempotency_key=f"fee-sms-notification:{notification.pk}")
         notification.status = FeeNotification.Status.SENT
         notification.provider_message_id = message_id
         notification.sent_at = timezone.now()

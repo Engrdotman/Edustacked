@@ -20,6 +20,7 @@ from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.schools.models import School, SchoolMembership
+from apps.students.models import Guardian, Student, StudentGuardian
 from apps.accounts.models import EmailVerificationToken
 
 User = get_user_model()
@@ -67,6 +68,23 @@ class AuthenticationApiTests(TestCase):
         self.assertNotIn("refresh", response.data)
         self.assertTrue(response.cookies["school_refresh"]["httponly"])
         self.assertEqual(response.data["user"]["email"], "amira@example.com")
+
+    def test_parent_login_requires_and_accepts_active_student_link(self):
+        school = School.objects.create(name="Parent Login School")
+        student = Student.objects.create(school=school, admission_number="PARENT-001", first_name="Ayo", last_name="Student")
+        guardian = Guardian.objects.create(school=school, user=self.user, full_name="Amira Parent", phone="08031234567", email=self.user.email)
+
+        unlinked = self.client.post(self.login_url, {
+            "email": self.user.email, "password": "Strong-Test-Pass-284!", "portal": "parent",
+        }, format="json")
+        StudentGuardian.objects.create(school=school, student=student, guardian=guardian, relationship_type="Parent", is_active=True)
+        linked = self.client.post(self.login_url, {
+            "email": self.user.email, "password": "Strong-Test-Pass-284!", "portal": "parent",
+        }, format="json")
+
+        self.assertEqual(unlinked.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("not linked to a parent portal", unlinked.data["detail"])
+        self.assertEqual(linked.status_code, status.HTTP_200_OK, linked.data)
 
     def test_invalid_credentials_and_inactive_accounts_are_rejected(self):
         invalid = self.client.post(
@@ -304,8 +322,9 @@ class SchoolSignupApiTests(TestCase):
     @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
     def test_email_verification_is_expiring_single_use_and_enables_sign_in(self):
         with self.captureOnCommitCallbacks(execute=True):
-            self.client.post(self.url, self.payload, format="json")
-        body = mail.outbox[-1].body
+            signup = self.client.post(self.url, self.payload, format="json")
+        self.assertEqual(signup.status_code, status.HTTP_201_CREATED, signup.data)
+        body = next(message.body for message in mail.outbox if "/verify-email?" in message.body)
         link = next(line for line in body.splitlines() if "/verify-email?" in line)
         values = parse_qs(urlparse(link).query)
         verify_url = reverse("auth-verify-email", kwargs={"version": "v1"})
@@ -325,11 +344,13 @@ class SchoolSignupApiTests(TestCase):
     @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
     def test_expired_email_verification_token_is_rejected(self):
         with self.captureOnCommitCallbacks(execute=True):
-            self.client.post(self.url, self.payload, format="json")
+            signup = self.client.post(self.url, self.payload, format="json")
+        self.assertEqual(signup.status_code, status.HTTP_201_CREATED, signup.data)
         token_record = EmailVerificationToken.objects.get()
         token_record.expires_at = timezone.now() - timedelta(minutes=1)
         token_record.save(update_fields=("expires_at",))
-        values = parse_qs(urlparse(next(line for line in mail.outbox[-1].body.splitlines() if "/verify-email?" in line)).query)
+        body = next(message.body for message in mail.outbox if "/verify-email?" in message.body)
+        values = parse_qs(urlparse(next(line for line in body.splitlines() if "/verify-email?" in line)).query)
         response = self.client.post(reverse("auth-verify-email", kwargs={"version": "v1"}), {"selector": values["selector"][0], "token": values["token"][0]}, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 

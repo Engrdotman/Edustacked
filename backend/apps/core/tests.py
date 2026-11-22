@@ -10,7 +10,9 @@ class HealthCheckTests(APITestCase):
         response = self.client.get(reverse("health-check", kwargs={"version": "v1"}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.json(), {"status": "ok"})
+        self.assertEqual(response.json()["status"], "ok")
+        self.assertIn(response.json()["cache"]["backend"], {"redis", "local-memory"})
+        self.assertIn(response.json()["cache"]["status"], {"connected", "unavailable"})
 
     def test_database_health_endpoint_reports_database_connectivity(self):
         response = self.client.get(

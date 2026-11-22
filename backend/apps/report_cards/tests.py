@@ -101,6 +101,34 @@ class ReportCardApiTests(TestCase):
         self.assertEqual(batch.data["generated"], 1)
         self.assertEqual(batch.data["failed"], 0)
 
+    def test_draft_plan_explains_why_report_card_cannot_use_it(self):
+        AssessmentPlan.objects.filter(pk=self.plan.pk).update(status=AssessmentPlan.Status.DRAFT)
+
+        card = self.generate()
+
+        self.assertTrue(any("still a draft" in item.lower() for item in card["current"]["validation_errors"]))
+        self.assertEqual(card["current"]["snapshot"]["subjects"], [])
+
+    def test_refreshing_draft_uses_new_approved_scores_and_preserves_traits_and_remarks(self):
+        card = self.generate()
+        saved = self.api("patch", f"/api/v1/report-cards/{card['id']}/", {
+            "teacher": "Excellent focus this term.",
+            "ratings": {"psychomotor": {"Handwriting": 4}},
+        })
+        self.assertEqual(saved.status_code, status.HTTP_200_OK, saved.data)
+        AssessmentResult.objects.filter(pk=self.result.pk).update(
+            approved_total=Decimal("90.00"), approved_percentage=Decimal("90.00"),
+            approved_calculation={**self.result.approved_calculation, "calculated_total": "90.00", "percentage": "90.00"},
+        )
+
+        refreshed = self.api("post", f"/api/v1/report-cards/{card['id']}/refresh/", {})
+
+        self.assertEqual(refreshed.status_code, status.HTTP_200_OK, refreshed.data)
+        snapshot = refreshed.data["report_card"]["current"]["snapshot"]
+        self.assertEqual(snapshot["subjects"][0]["total"], "90.00")
+        self.assertEqual(snapshot["remarks"]["teacher"], "Excellent focus this term.")
+        self.assertEqual(snapshot["ratings"]["psychomotor"]["Handwriting"], 4)
+
     def test_lifecycle_final_snapshot_pdf_and_correction_revision(self):
         card = self.generate()
         remarks = self.api("patch", f"/api/v1/report-cards/{card['id']}/", {"teacher": "Good progress this term."})

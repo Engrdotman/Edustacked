@@ -37,7 +37,7 @@ from .serializers import (
     ReportCardRemarksSerializer, ReportCardSerializer,
 )
 from .services import (
-    finalize_report_card, generate_report_card, report_enrollments,
+    finalize_report_card, generate_report_card, refresh_report_card_draft, report_enrollments,
     start_correction_revision, validate_revision_ready,
 )
 
@@ -166,6 +166,22 @@ class ReportCardGenerateClassView(ReportCardViewMixin, APIView):
             except (DjangoValidationError, IntegrityError) as exc:
                 failures.append({"student_id": enrollment.student_id, "admission_number": enrollment.student.admission_number, "errors": getattr(exc, "message_dict", None) or getattr(exc, "messages", None) or ["Generation failed."]})
         return Response({"generated": len(results), "failed": len(failures), "results": results, "failures": failures}, status=status.HTTP_200_OK)
+
+
+class ReportCardRefreshView(ReportCardViewMixin, APIView):
+    report_permissions = {"POST": "report_cards.update"}
+
+    def post(self, request, pk, **kwargs):
+        card = self.get_card(pk)
+        if self.role() == "teacher":
+            raise PermissionDenied("A school owner, administrator, manager, or principal must refresh report-card source data.")
+        if card.status != ReportCard.Status.DRAFT:
+            raise serializers.ValidationError({"status": "Only a draft report card can refresh its academic data."})
+        try:
+            card, revision, errors = refresh_report_card_draft(card, request.user)
+        except (DjangoValidationError, IntegrityError) as exc:
+            raise serializers.ValidationError(getattr(exc, "message_dict", None) or getattr(exc, "messages", None) or "Could not refresh this draft report card.") from exc
+        return Response({"report_card": self.serialized(card), "validation_errors": errors, "actionable": not errors, "detail": "Draft refreshed with the latest matching assessment plans, approved results, and finalized attendance. Existing traits and remarks were kept."})
 
 
 class ReportCardDetailView(ReportCardViewMixin, APIView):
