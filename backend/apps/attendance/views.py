@@ -1,28 +1,39 @@
 from datetime import date, timedelta
+import hashlib
+import hmac
+import json
+import secrets
+from uuid import uuid4
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
+from django.http import Http404
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from apps.academics.models import AcademicSession, ClassArm, ClassLevel, Term
+from apps.schools.models import SchoolMembership
 from apps.schools.permissions import ROLE_PERMISSIONS, authorized_membership
+from apps.schools.tenancy import resolve_authorized_school
 from apps.schools.tenancy import SchoolScopedQuerySetMixin
 from apps.students.models import Student, StudentEnrollment
 
-from .models import AttendanceAuditEvent, AttendanceRecord, AttendanceRegister
+from .models import AttendanceAuditEvent, AttendanceRecord, AttendanceRegister, OfflineAttendanceGrant
 from .permissions import HasAttendancePermission
 from .serializers import (
     AttendanceRecordSerializer, AttendanceRecordUpdateSerializer,
     AttendanceRegisterCreateSerializer, AttendanceRegisterListSerializer,
     AttendanceRegisterSerializer, BulkAttendanceSerializer,
-    EligibleStudentSerializer, RegisterActionSerializer,
+    EligibleStudentSerializer, OfflineAttendanceGrantSerializer,
+    OfflineAttendanceSyncSerializer, RegisterActionSerializer,
 )
 from .services import (
     eligible_enrollments, local_school_date, scoped_teacher_register_filter,
@@ -281,6 +292,139 @@ class AttendanceBulkUpdateView(AttendanceViewMixin, APIView):
         if error:
             return error
         return Response(AttendanceRegisterSerializer(register, context=self.get_serializer_context()).data)
+
+
+class AttendanceOfflineGrantView(AttendanceViewMixin, APIView):
+    attendance_permissions = {"POST": "attendance.record"}
+
+    def post(self, request, **kwargs):
+        serializer = OfflineAttendanceGrantSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        school = self.get_school()
+        register = get_object_or_404(
+            AttendanceRegister.objects.select_related(
+                "academic_session", "term", "class_level", "class_arm",
+            ).filter(school=school),
+            pk=serializer.validated_data["register_id"],
+        )
+        if register.status != AttendanceRegister.Status.DRAFT:
+            return Response(
+                {"detail": "Prepare offline access while the register is still a draft."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if not self.can_manage() and not teacher_has_register_assignment(request.user, register):
+            return Response({"detail": "You are not assigned to this attendance register."}, status=status.HTTP_404_NOT_FOUND)
+
+        now = timezone.now()
+        expires_at = now + timedelta(hours=24)
+        raw_token = secrets.token_urlsafe(48)
+        with transaction.atomic():
+            OfflineAttendanceGrant.objects.filter(
+                school=school,
+                user=request.user,
+                register=register,
+                revoked_at__isnull=True,
+            ).update(revoked_at=now)
+            grant = OfflineAttendanceGrant.objects.create(
+                school=school,
+                user=request.user,
+                register=register,
+                token_digest=hashlib.sha256(raw_token.encode("utf-8")).hexdigest(),
+                expires_at=expires_at,
+            )
+
+        register_data = AttendanceRegisterSerializer(
+            register, context=self.get_serializer_context(),
+        ).data
+        return Response(
+            {"grant_id": grant.pk, "token": raw_token, "expires_at": expires_at, "register": register_data},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class AttendanceOfflineSyncView(APIView):
+    """Sync one encrypted, single-register offline queue after online access returns."""
+
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    throttle_classes = (AnonRateThrottle,)
+
+    def post(self, request, **kwargs):
+        authorization = request.headers.get("Authorization", "")
+        scheme, _, raw_token = authorization.partition(" ")
+        if scheme.lower() != "offline" or not raw_token:
+            return Response({"detail": "Offline attendance access is missing. Sign in online and prepare this register again."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        serializer = OfflineAttendanceSyncSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+        digest = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+        payload_hash = hashlib.sha256(json.dumps(
+            {"version": payload["version"], "records": payload["records"]},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        now = timezone.now()
+
+        with transaction.atomic():
+            grant = OfflineAttendanceGrant.objects.select_for_update().select_related(
+                "user", "school", "register",
+            ).filter(
+                token_digest=digest,
+                revoked_at__isnull=True,
+                expires_at__gt=now,
+            ).first()
+            if grant is None:
+                return Response({"detail": "Offline attendance access has expired. Sign in online and prepare this register again."}, status=status.HTTP_401_UNAUTHORIZED)
+
+            user = grant.user
+            if not user.is_active:
+                return Response({"detail": "This account is no longer active. Contact your school administrator."}, status=status.HTTP_403_FORBIDDEN)
+            try:
+                school = resolve_authorized_school(user, grant.school_id)
+            except Http404:
+                return Response({"detail": "Your access to this school has changed. Sign in and ask a school administrator to review it."}, status=status.HTTP_403_FORBIDDEN)
+
+            if user.is_superuser:
+                role = "school_admin"
+            else:
+                membership = SchoolMembership.objects.filter(
+                    user=user, school=school, is_active=True,
+                ).first()
+                if membership is None:
+                    return Response({"detail": "Your school access has changed. Ask a school administrator to review it."}, status=status.HTTP_403_FORBIDDEN)
+                role = membership.role
+            permissions = ROLE_PERMISSIONS.get(role, frozenset())
+            if "attendance.record" not in permissions:
+                return Response({"detail": "Your role no longer allows attendance marking."}, status=status.HTTP_403_FORBIDDEN)
+            can_manage = user.is_superuser or "attendance.manage" in permissions
+            register = grant.register
+            if register.school_id != school.pk:
+                return Response({"detail": "This offline register is no longer available for this school."}, status=status.HTTP_404_NOT_FOUND)
+            if role == "teacher" and not teacher_has_register_assignment(user, register):
+                return Response({"detail": "Your teaching assignment no longer covers this register. Ask a school administrator to review it."}, status=status.HTTP_403_FORBIDDEN)
+
+            if grant.last_sync_id == payload["sync_id"]:
+                if not hmac.compare_digest(grant.last_sync_payload_hash, payload_hash):
+                    return Response({"detail": "This offline save was changed after sync began. Keep the saved copy and contact your school administrator."}, status=status.HTTP_409_CONFLICT)
+                return Response(grant.last_sync_response or {})
+
+            request.user = user
+            request.attendance_school = school
+            request.attendance_can_manage = can_manage
+            updated, error = _record_changes(request, register.pk, payload)
+            if error:
+                return error
+
+            result = dict(AttendanceRegisterSerializer(updated).data)
+            grant.last_used_at = now
+            grant.last_sync_id = payload["sync_id"]
+            grant.last_sync_payload_hash = payload_hash
+            grant.last_sync_response = result
+            grant.save(update_fields=(
+                "last_used_at", "last_sync_id", "last_sync_payload_hash", "last_sync_response",
+            ))
+        return Response(result)
 
 
 class AttendanceRecordListView(AttendanceViewMixin, ListAPIView):

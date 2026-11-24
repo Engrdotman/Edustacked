@@ -264,9 +264,16 @@ class AssessmentResult(models.Model):
 
 
 class ComponentScore(models.Model):
+    class Outcome(models.TextChoices):
+        SCORED = "scored", "Score recorded"
+        MISSED = "missed", "Missed; make-up pending"
+        EXCUSED = "excused", "Excused"
+
     result = models.ForeignKey(AssessmentResult, on_delete=models.CASCADE, related_name="scores")
     plan_component = models.ForeignKey(PlanComponent, on_delete=models.PROTECT, related_name="scores")
-    score = models.DecimalField(max_digits=7, decimal_places=2)
+    score = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    outcome = models.CharField(max_length=10, choices=Outcome.choices, default=Outcome.SCORED)
+    reason = models.CharField(max_length=500, blank=True)
     recorded_by = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="recorded_component_scores")
     last_modified_by = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="modified_component_scores")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -275,7 +282,13 @@ class ComponentScore(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=("result", "plan_component"), name="component_score_result_component_uniq"),
-            models.CheckConstraint(condition=Q(score__gte=0), name="component_score_nonnegative"),
+            models.CheckConstraint(
+                condition=(
+                    Q(outcome="scored", score__isnull=False, score__gte=0, reason="")
+                    | Q(outcome__in=("missed", "excused"), score__isnull=True) & ~Q(reason="")
+                ),
+                name="component_score_outcome_valid",
+            ),
         ]
         ordering = ("plan_component__position",)
 
@@ -283,10 +296,21 @@ class ComponentScore(models.Model):
         super().clean()
         if self.result_id and self.plan_component_id and self.result.plan_id != self.plan_component.plan_id:
             raise ValidationError({"plan_component": "The component is not part of this result's plan."})
-        if self.score is None or self.score < 0:
-            raise ValidationError({"score": "Score cannot be negative."})
-        if self.plan_component_id and self.score > self.plan_component.max_score:
-            raise ValidationError({"score": f"Score cannot exceed {self.plan_component.max_score}."})
+        self.reason = self.reason.strip()
+        if self.outcome == self.Outcome.SCORED:
+            if self.score is None or self.score < 0:
+                raise ValidationError({"score": "Enter a score of zero or higher."})
+            if self.reason:
+                raise ValidationError({"reason": "A score does not need an absence reason."})
+            if self.plan_component_id and self.score > self.plan_component.max_score:
+                raise ValidationError({"score": f"Score cannot exceed {self.plan_component.max_score}."})
+        elif self.outcome in (self.Outcome.MISSED, self.Outcome.EXCUSED):
+            if self.score is not None:
+                raise ValidationError({"score": "A missed or excused component cannot also have a score."})
+            if not self.reason:
+                raise ValidationError({"reason": "Give a reason for marking this component missed or excused."})
+        else:
+            raise ValidationError({"outcome": "Choose a valid assessment outcome."})
         if self.result_id and self.result.status != AssessmentResult.Status.DRAFT:
             raise ValidationError({"result": "Scores can only change while a result is a draft."})
 
@@ -302,6 +326,9 @@ class ResultAuditEvent(models.Model):
     class EventType(models.TextChoices):
         SCORE_RECORDED = "score_recorded", "Score recorded"
         SCORE_CORRECTED = "score_corrected", "Score corrected"
+        COMPONENT_MISSED = "component_missed", "Component marked missed"
+        COMPONENT_EXCUSED = "component_excused", "Component excused"
+        MAKEUP_RECORDED = "makeup_recorded", "Make-up score recorded"
         SUBMITTED = "submitted", "Submitted"
         APPROVED = "approved", "Approved"
         REOPENED = "reopened", "Reopened"

@@ -170,6 +170,15 @@ class BulkAttendanceSerializer(serializers.Serializer):
         return records
 
 
+class OfflineAttendanceGrantSerializer(serializers.Serializer):
+    register_id = serializers.IntegerField(min_value=1)
+
+
+class OfflineAttendanceSyncSerializer(BulkAttendanceSerializer):
+    sync_id = serializers.UUIDField()
+    records = BulkAttendanceEntrySerializer(many=True, allow_empty=False, max_length=1500)
+
+
 class AttendanceRecordUpdateSerializer(serializers.Serializer):
     version = serializers.IntegerField(min_value=1)
     status = serializers.ChoiceField(choices=AttendanceRecord.Status.choices)

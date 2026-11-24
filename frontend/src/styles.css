@@ -1266,6 +1266,13 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
   .auth-panel .auth-card,.auth-panel-signup .signup-card { padding:22px 17px; }
 }
 
+/* Keep keyboard focus clear without the oversized ring on auth screens. */
+.auth-page :is(button,a,input,select,textarea):focus-visible,
+.auth-page-split :is(button,a,input,select,textarea):focus-visible {
+  outline:2px solid rgba(20,134,168,.62);
+  outline-offset:1px;
+}
+
 .scroll-reveal { opacity:0; transform:translateY(22px); transition:opacity .65s ease,transform .65s cubic-bezier(.2,.65,.3,1); }
 .scroll-reveal.is-visible { opacity:1; transform:translateY(0); }
 .company-section.is-visible .company-feature-card,.company-section.is-visible .company-step-card { animation:card-enter .55s both; }
@@ -1859,4 +1866,29 @@ img,.school-logo-preview img,.principal-signature-preview img,.cbt-question-imag
   .loading-orbit,.loading-progress span { animation:none; }
   .loading-progress span { width:100%; transform:none; }
   .company-purpose-details>summary span,.company-grid-toggle { transition:none; }
+}
+
+/* Google identity sign-in and installable workspace controls. */
+.google-signin-wrap { display:grid; justify-items:center; gap:12px; width:100%; margin-top:20px; }
+.google-signin-divider { display:flex; width:100%; align-items:center; gap:12px; color:#718078; font-size:12px; font-weight:650; }
+.google-signin-divider::before,.google-signin-divider::after { height:1px; flex:1; background:#e2e8e2; content:""; }
+.google-signin-button { display:flex; min-height:44px; width:100%; justify-content:center; overflow:hidden; }
+.google-signin-button iframe { max-width:100%; }
+.pwa-status-banner { position:fixed; z-index:1200; right:max(16px,env(safe-area-inset-right)); bottom:max(16px,env(safe-area-inset-bottom)); display:flex; width:min(520px,calc(100vw - 32px)); align-items:center; justify-content:space-between; gap:16px; padding:14px 16px; border:1px solid rgba(255,255,255,.15); border-radius:16px; color:#f8fbff; background:#1d2a34; box-shadow:0 16px 42px rgba(22,39,53,.22); animation:pwa-banner-in .24s ease-out both; }
+.pwa-status-banner>div { display:grid; gap:4px; min-width:0; }
+.pwa-status-banner strong { font-size:14px; }
+.pwa-status-banner span { color:#d9e4e6; font-size:12px; line-height:1.45; }
+.pwa-status-banner .secondary-button { flex:0 0 auto; min-height:40px; padding:9px 14px; border-color:#6479ab; color:#fff; background:#464b71; }
+.pwa-status-install { border-color:#d8e7e2; color:#203c2c; background:#fff; }
+.pwa-status-install span { color:#586b64; }
+.pwa-status-install .secondary-button { border-color:#464b71; background:#464b71; }
+@keyframes pwa-banner-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@media(max-width:560px) {
+  .pwa-status-banner { right:10px; bottom:max(10px,env(safe-area-inset-bottom)); width:calc(100vw - 20px); gap:10px; padding:12px; border-radius:13px; }
+  .pwa-status-banner strong { font-size:13px; }
+  .pwa-status-banner span { font-size:11px; }
+  .pwa-status-banner .secondary-button { min-height:38px; padding:8px 10px; white-space:nowrap; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .pwa-status-banner { animation:none; }
 }

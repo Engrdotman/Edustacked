@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
 from datetime import timedelta
+import uuid
 
 from apps.academics.models import AcademicSession, ClassArm, ClassLevel, Term
 from apps.schools.models import School
@@ -172,3 +173,25 @@ class AttendanceAuditEvent(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ValidationError("Attendance audit history cannot be deleted.")
+
+
+class OfflineAttendanceGrant(models.Model):
+    """Short-lived, single-register credential for queued offline attendance sync."""
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="offline_attendance_grants")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="offline_attendance_grants")
+    register = models.ForeignKey(AttendanceRegister, on_delete=models.CASCADE, related_name="offline_grants")
+    token_digest = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField(db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    last_sync_id = models.UUIDField(null=True, blank=True)
+    last_sync_payload_hash = models.CharField(max_length=64, blank=True)
+    last_sync_response = models.JSONField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=("school", "register", "expires_at"), name="att_offline_grant_scope_idx"),
+            models.Index(fields=("user", "revoked_at"), name="att_offline_grant_user_idx"),
+        ]

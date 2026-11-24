@@ -166,6 +166,14 @@ class LoginSerializer(serializers.Serializer):
         return attrs
 
 
+class GoogleLoginSerializer(serializers.Serializer):
+    portal = serializers.ChoiceField(
+        choices=("school", "parent", "platform"), required=False, default="school", write_only=True,
+    )
+    credential = serializers.CharField(trim_whitespace=True, max_length=8192, write_only=True)
+    nonce = serializers.CharField(trim_whitespace=False, max_length=128, write_only=True)
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     email_verified = serializers.SerializerMethodField()
     phone_verified = serializers.SerializerMethodField()

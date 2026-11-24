@@ -282,6 +282,21 @@ export async function login(email, password, portal = 'school') {
   return data.user
 }
 
+export async function getGoogleLoginChallenge() {
+  await getCsrfToken()
+  return apiRequest('auth/google/challenge/', { method: 'POST', body: {} })
+}
+
+export async function loginWithGoogle(credential, nonce, portal = 'school') {
+  await getCsrfToken()
+  const data = await apiRequest('auth/google/', {
+    method: 'POST',
+    body: { credential, nonce, portal },
+  })
+  setAccessToken(data.access)
+  return data.user
+}
+
 export function signupSchool(values) {
   return apiRequest('auth/signup/', { method: 'POST', body: values })
 }

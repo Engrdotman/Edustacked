@@ -92,6 +92,7 @@ def _subject_data(enrollment, subject, term, plans, cohort_enrollment_ids, teach
         "grade_description": next((band.get("description") or band.get("label") for band in plan.grading_scale_snapshot.get("bands", []) if band.get("label") == result.approved_grade), result.approved_grade),
         "grading_scale_snapshot": plan.grading_scale_snapshot,
         "class_position": position if peer_results else None,
+        "class_size": len(cohort_enrollment_ids),
         "class_size_with_result": len(peer_results),
         "highest_total": str(max(score_values)) if score_values else None,
         "lowest_total": str(min(score_values)) if score_values else None,
@@ -180,7 +181,9 @@ def build_report_snapshot(enrollment, term):
             current_average = sum(percentages, Decimal("0")) / len(percentages)
             if enrollment.pk in complete_peers:
                 overall["class_position"] = 1 + sum(score > current_average for score in complete_peers.values())
-                overall["class_position_size"] = len(complete_peers)
+                # Ranking compares approved results, while the displayed denominator
+                # should describe the full eligible class roster for this term.
+                overall["class_position_size"] = len(cohort_enrollment_ids)
     snapshot = {
         "school": {
             "name": school.name, "contact_email": school.contact_email,

@@ -20,7 +20,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image, KeepInFrame, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from apps.academics.models import AcademicSession, ClassArm, ClassLevel, Term
 from apps.schools.permissions import ROLE_PERMISSIONS, authorized_membership
@@ -431,6 +431,7 @@ def render_report_pdf(card, revision, snapshot):
     styles.add(ParagraphStyle(name="SmallBody", parent=styles["BodyText"], fontSize=7.5, leading=9.2, textColor=ink))
     styles.add(ParagraphStyle(name="ResultCell", parent=styles["BodyText"], fontSize=6.6, leading=8, textColor=ink))
     styles.add(ParagraphStyle(name="ResultHeader", parent=styles["ResultCell"], fontName="Helvetica-Bold", textColor=colors.white, fontSize=6.5, leading=7.5))
+    styles.add(ParagraphStyle(name="CompactSubject", parent=styles["BodyText"], fontSize=6.2, leading=7.3, textColor=ink))
     styles.add(ParagraphStyle(name="MetaLabel", parent=styles["SmallBody"], fontName="Helvetica-Bold", textColor=muted, fontSize=6.5, leading=7.5))
     styles.add(ParagraphStyle(name="MetricValue", parent=styles["SmallBody"], fontName="Helvetica-Bold", fontSize=10, leading=12, alignment=TA_CENTER))
     styles.add(ParagraphStyle(name="MetricLabel", parent=styles["SmallBody"], textColor=muted, fontSize=6.4, leading=7.5, alignment=TA_CENTER))
@@ -438,6 +439,22 @@ def render_report_pdf(card, revision, snapshot):
 
     def para(value, style="SmallBody"):
         return Paragraph(escape(str(value or "-")), styles[style])
+
+    def position_label(position, class_size, fallback_size=None):
+        if position in (None, ""):
+            return "Not ranked"
+        try:
+            rank = int(position)
+        except (TypeError, ValueError):
+            return "Not ranked"
+        if rank < 1:
+            return "Not ranked"
+        suffix = "th" if 10 <= rank % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(rank % 10, "th")
+        try:
+            size = int(class_size or fallback_size or 0)
+        except (TypeError, ValueError):
+            size = 0
+        return f"{rank}{suffix} of {size}" if size > 0 else f"{rank}{suffix}"
 
     logo_path = school.get("logo_path")
     logo = ""
@@ -475,7 +492,8 @@ def render_report_pdf(card, revision, snapshot):
     student = snapshot.get("student", {})
     overall = snapshot.get("overall") or {}
     class_position = overall.get("class_position")
-    position_text = f"{class_position} of {overall.get('class_position_size')}" if class_position else "Not ranked"
+    class_size = overall.get("class_size") or overall.get("class_position_size")
+    position_text = position_label(class_position, class_size)
     identity = [
         ["Student", student.get("name", ""), "Admission no.", student.get("admission_number", "")],
         ["Class / arm", f"{student.get('class_name', '')} {student.get('arm_name', '')}", "Session", academic.get("session", "")],
@@ -514,7 +532,7 @@ def render_report_pdf(card, revision, snapshot):
             if name not in component_names:
                 component_names.append(name)
     component_grid = len(component_names) <= 3
-    fixed_widths = [35, 19, 14, 12, 16, 16, 16, 20]
+    fixed_widths = [33, 19, 14, 12, 20, 14, 14, 22]
     if component_grid:
         displayed_components = component_names or ["Assessment"]
         component_width = (186 - sum(fixed_widths)) / len(displayed_components)
@@ -527,7 +545,7 @@ def render_report_pdf(card, revision, snapshot):
                 for component in subject.get("components", [])
                 if (component.get("name") or "Assessment") == name and component.get("max_score") is not None
             ), None)
-            label = escape(str(name))
+            label = "Exam" if str(name).strip().lower() == "examination" else escape(str(name))
             if maximum is not None:
                 label += f"<br/><font size='5.6'>/ {escape(str(maximum))}</font>"
             component_headers.append(Paragraph(label, styles["ResultHeader"]))
@@ -552,7 +570,10 @@ def render_report_pdf(card, revision, snapshot):
                     escape(str(value if value is not None else '-')),
                     styles["ResultCell"],
                 ))
-            position = f"{subject.get('class_position')} of {subject.get('class_size_with_result')}" if subject.get("class_position") else "-"
+            position = position_label(
+                subject.get("class_position"), subject.get("class_size") or class_size,
+                subject.get("class_size_with_result"),
+            ) if subject.get("class_position") else "-"
             cells.extend(Paragraph(escape(str(value)), styles["ResultCell"]) for value in (
                 f"{subject.get('total', '-')} / {subject.get('maximum', '-')}",
                 f"{subject.get('percentage', '-')}%", subject.get("grade", "-"), position,
@@ -578,7 +599,10 @@ def render_report_pdf(card, revision, snapshot):
                 component_lines.append(f"<font color='#59675e'>{teacher_line}</font>")
             breakdown = "<br/>".join(component_lines) or "No component detail"
             high_low = f"{subject.get('highest_total') or '-'} / {subject.get('lowest_total') or '-'}"
-            position = f"{subject.get('class_position')} of {subject.get('class_size_with_result')}" if subject.get("class_position") else "-"
+            position = position_label(
+                subject.get("class_position"), subject.get("class_size") or class_size,
+                subject.get("class_size_with_result"),
+            ) if subject.get("class_position") else "-"
             wrapped_data.append([
                 Paragraph(escape(str(subject.get("subject_name", ""))), styles["ResultCell"]),
                 Paragraph(breakdown, styles["ResultCell"]),
@@ -588,18 +612,72 @@ def render_report_pdf(card, revision, snapshot):
                     position, subject.get("grade_description", "-"), high_low,
                 )],
             ])
-        column_widths = [31 * mm, 48 * mm, 22 * mm, 17 * mm, 12 * mm, 17 * mm, 17 * mm, 22 * mm]
+        column_widths = [31 * mm, 46 * mm, 22 * mm, 17 * mm, 12 * mm, 20 * mm, 16 * mm, 22 * mm]
     if not subject_rows:
         wrapped_data.append([Paragraph("No approved results are available.", styles["ResultCell"])] + [""] * (len(headers) - 1))
-    result_table = Table(wrapped_data, repeatRows=1, colWidths=[width * mm for width in column_widths], hAlign="LEFT")
-    result_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(primary)),
-        ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#c8d6ca")),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f6f9f6")]),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (2, 1), (-1, -1), "CENTER"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-    ]))
+    if len(subject_rows) > 15:
+        # A two-column subject summary avoids shrinking a wide score table to
+        # unreadable size while keeping the full report on one portrait page.
+        grid_columns = 2 if len(subject_rows) <= 30 else 3
+        compact_cells = []
+        for subject in subject_rows:
+            subject_name = escape(str(subject.get("subject_name", "Subject")))
+            teacher_parts = [subject.get("teacher_name"), subject.get("teacher_qualification")]
+            teacher = " · ".join(escape(str(part)) for part in teacher_parts if part)
+            component_text = "  ·  ".join(
+                f"{escape(str(component.get('name') or 'Assessment'))}: "
+                f"{escape(str(component.get('score') if component.get('score') is not None else '-'))}/"
+                f"{escape(str(component.get('max_score') if component.get('max_score') is not None else '-'))}"
+                for component in subject.get("components", [])
+            ) or "No component scores"
+            subject_position = position_label(
+                subject.get("class_position"), subject.get("class_size") or class_size,
+                subject.get("class_size_with_result"),
+            ) if subject.get("class_position") else "Not ranked"
+            subject_total = subject.get("total") if subject.get("total") is not None else "-"
+            subject_maximum = subject.get("maximum") if subject.get("maximum") is not None else "-"
+            subject_percentage = subject.get("percentage") if subject.get("percentage") is not None else "-"
+            score_summary = (
+                f"<b>{escape(str(subject_total))} / {escape(str(subject_maximum))}</b>"
+                f"  ·  {escape(str(subject_percentage))}%"
+                f"  ·  Grade {escape(str(subject.get('grade') or '—'))}"
+                f"  ·  {escape(subject_position)}"
+            )
+            subject_line = f"<b>{subject_name}</b>"
+            if teacher:
+                subject_line += f"  ·  <font color='#59675e'>{teacher}</font>"
+            grade_description = subject.get("grade_description")
+            if grade_description:
+                score_summary += f" ({escape(str(grade_description))})"
+            compact_cells.append(Paragraph(
+                f"{subject_line}<br/>{component_text}  ·  {score_summary}",
+                styles["CompactSubject"],
+            ))
+        compact_rows = [
+            compact_cells[index:index + grid_columns]
+            for index in range(0, len(compact_cells), grid_columns)
+        ]
+        if compact_rows and len(compact_rows[-1]) < grid_columns:
+            compact_rows[-1].extend([""] * (grid_columns - len(compact_rows[-1])))
+        compact_width = 186 * mm / grid_columns
+        result_table = Table(compact_rows, colWidths=[compact_width] * grid_columns, hAlign="LEFT")
+        result_table.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#c8d6ca")),
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f6f9f6")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ]))
+    else:
+        result_table = Table(wrapped_data, repeatRows=1, colWidths=[width * mm for width in column_widths], hAlign="LEFT")
+        result_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(primary)),
+            ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#c8d6ca")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f6f9f6")]),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (2, 1), (-1, -1), "CENTER"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+            ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
     story.append(result_table)
     story.append(Paragraph("ATTENDANCE", styles["SectionTitle"]))
     attendance = snapshot.get("attendance", {})
@@ -687,5 +765,9 @@ def render_report_pdf(card, revision, snapshot):
         canvas.drawRightString(A4[0] - document.rightMargin, 8.5 * mm, f"Page {document.page}")
         canvas.restoreState()
 
+    if len(subject_rows) > 15:
+        # Keep the complete student result together; ReportLab scales the content
+        # slightly when the subject table would otherwise spill to another page.
+        story = [KeepInFrame(doc.width, doc.height, story, mode="shrink", hAlign="LEFT", vAlign="TOP")]
     doc.build(story, onFirstPage=branded_footer, onLaterPages=branded_footer)
     return output.getvalue()

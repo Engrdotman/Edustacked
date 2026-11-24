@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { apiRequest, login as apiLogin, logout as apiLogout, refreshSession, setAccessToken, setSelectedSchoolId, verifySchoolEmail } from '../services/api.js'
+import { apiRequest, getGoogleLoginChallenge, login as apiLogin, loginWithGoogle as apiGoogleLogin, logout as apiLogout, refreshSession, setAccessToken, setSelectedSchoolId, verifySchoolEmail } from '../services/api.js'
+import { clearOfflineAuthSnapshot, loadOfflineAuthSnapshot } from '../services/offlineAttendance.js'
 
 const AuthContext = createContext(null)
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000
@@ -12,6 +13,7 @@ export function AuthProvider({ children }) {
   const [selectedSchool, setSelectedSchool] = useState(null)
   const [guardianProfile, setGuardianProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [offlineMode, setOfflineMode] = useState(false)
   const lastActivityAt = useRef(Date.now())
   const lastSessionRefreshAt = useRef(Date.now())
   const refreshInProgress = useRef(false)
@@ -39,31 +41,8 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  useEffect(() => {
-    let active = true
-    async function restoreSession() {
-      try {
-        await refreshSession()
-        lastSessionRefreshAt.current = Date.now()
-        await loadIdentity()
-        lastActivityAt.current = Date.now()
-      } catch {
-        if (active) {
-          setUser(null)
-          setSchools([])
-          setSelectedSchool(null)
-          setGuardianProfile(null)
-        }
-      } finally {
-        if (active) setLoading(false)
-      }
-    }
-    restoreSession()
-    return () => { active = false }
-  }, [loadIdentity])
-
-  const signIn = useCallback(async (email, password, { portal = 'school' } = {}) => {
-    const profile = await apiLogin(email, password, portal)
+  const establishSession = useCallback(async (profile) => {
+    setOfflineMode(false)
     lastActivityAt.current = Date.now()
     lastSessionRefreshAt.current = Date.now()
     const memberships = await apiRequest('auth/schools/')
@@ -84,6 +63,52 @@ export function AuthProvider({ children }) {
     return { ...profile, guardian_portal: Boolean(portalProfile) }
   }, [])
 
+  useEffect(() => {
+    let active = true
+    async function restoreSession() {
+      try {
+        await refreshSession()
+        setOfflineMode(false)
+        lastSessionRefreshAt.current = Date.now()
+        await loadIdentity()
+        lastActivityAt.current = Date.now()
+      } catch {
+        if (active) {
+          const offlineIdentity = navigator.onLine === false ? await loadOfflineAuthSnapshot().catch(() => null) : null
+          if (offlineIdentity?.user && offlineIdentity?.selectedSchool) {
+            setUser(offlineIdentity.user)
+            setSchools([offlineIdentity.selectedSchool])
+            setSelectedSchool(offlineIdentity.selectedSchool)
+            setSelectedSchoolId(offlineIdentity.selectedSchool.school_id)
+            setGuardianProfile(null)
+            setOfflineMode(true)
+          } else {
+            setUser(null)
+            setSchools([])
+            setSelectedSchool(null)
+            setSelectedSchoolId(null)
+            setGuardianProfile(null)
+            setOfflineMode(false)
+          }
+        }
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    restoreSession()
+    return () => { active = false }
+  }, [loadIdentity])
+
+  const signIn = useCallback(async (email, password, { portal = 'school' } = {}) => {
+    const profile = await apiLogin(email, password, portal)
+    return establishSession(profile)
+  }, [establishSession])
+
+  const signInWithGoogle = useCallback(async (credential, nonce, { portal = 'school' } = {}) => {
+    const profile = await apiGoogleLogin(credential, nonce, portal)
+    return establishSession(profile)
+  }, [establishSession])
+
   const completeEmailVerification = useCallback(async (selector, token) => {
     const result = await verifySchoolEmail({ selector, token })
     setAccessToken(result.access)
@@ -95,12 +120,32 @@ export function AuthProvider({ children }) {
     try {
       await apiLogout()
     } finally {
+      await clearOfflineAuthSnapshot().catch(() => {})
       setUser(null)
       setSchools([])
       setSelectedSchool(null)
+      setSelectedSchoolId(null)
       setGuardianProfile(null)
+      setOfflineMode(false)
     }
   }, [])
+
+  useEffect(() => {
+    if (!offlineMode) return undefined
+    const recoverSession = async () => {
+      if (navigator.onLine === false) return
+      try {
+        await refreshSession()
+        lastSessionRefreshAt.current = Date.now()
+        setOfflineMode(false)
+      } catch {
+        // Keep the prepared attendance workspace available so its scoped queue can sync.
+      }
+    }
+    window.addEventListener('online', recoverSession)
+    recoverSession()
+    return () => window.removeEventListener('online', recoverSession)
+  }, [offlineMode])
 
   useEffect(() => {
     if (!user) return undefined
@@ -113,6 +158,7 @@ export function AuthProvider({ children }) {
 
     const checkSession = async () => {
       const now = Date.now()
+      if (offlineMode || navigator.onLine === false) return
       if (now - lastActivityAt.current >= IDLE_TIMEOUT_MS) {
         await signOut()
         return
@@ -142,7 +188,7 @@ export function AuthProvider({ children }) {
       window.clearInterval(interval)
       activityEvents.forEach((eventName) => window.removeEventListener(eventName, markActivity))
     }
-  }, [user, signOut])
+  }, [user, offlineMode, signOut])
 
   const selectSchool = useCallback(async (schoolId) => {
     const selection = await apiRequest('auth/schools/select/', {
@@ -160,11 +206,14 @@ export function AuthProvider({ children }) {
     selectedSchool,
     guardianProfile,
     loading,
+    offlineMode,
     signIn,
+    signInWithGoogle,
+    getGoogleLoginChallenge,
     signOut,
     selectSchool,
     completeEmailVerification,
-  }), [user, schools, selectedSchool, guardianProfile, loading, signIn, signOut, selectSchool, completeEmailVerification])
+  }), [user, schools, selectedSchool, guardianProfile, loading, offlineMode, signIn, signInWithGoogle, signOut, selectSchool, completeEmailVerification])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

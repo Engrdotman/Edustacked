@@ -6,6 +6,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    build: {
+      manifest: 'build-manifest.json',
+    },
     server: {
       proxy: {
         '/api': {

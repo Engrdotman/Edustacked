@@ -1,4 +1,5 @@
 from urllib.parse import parse_qs, urlsplit
+from unittest.mock import patch
 
 from datetime import timedelta
 from urllib.parse import parse_qs, urlparse
@@ -21,7 +22,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.schools.models import School, SchoolMembership
 from apps.students.models import Guardian, Student, StudentGuardian
-from apps.accounts.models import EmailVerificationToken
+from apps.accounts.models import EmailVerificationToken, GoogleIdentity, GoogleLoginChallenge
 
 User = get_user_model()
 
@@ -232,6 +233,137 @@ class AuthenticationApiTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password("Strong-Test-Pass-284!"))
+
+
+@override_settings(
+    PASSWORD_HASHERS=("django.contrib.auth.hashers.MD5PasswordHasher",),
+    GOOGLE_OAUTH_CLIENT_ID="google-client-id.apps.googleusercontent.com",
+)
+class GoogleLoginApiTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="google-user",
+            email="google.user@example.com",
+            password="Strong-Test-Pass-284!",
+        )
+        self.challenge_url = reverse("auth-google-challenge", kwargs={"version": "v1"})
+        self.login_url = reverse("auth-google-login", kwargs={"version": "v1"})
+
+    def _challenge(self):
+        response = self.client.post(self.challenge_url, {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return response.data["nonce"]
+
+    @staticmethod
+    def _claims(nonce, **overrides):
+        claims = {
+            "iss": "https://accounts.google.com",
+            "email": "google.user@example.com",
+            "email_verified": True,
+            "sub": "google-subject-123",
+            "nonce": nonce,
+        }
+        return {**claims, **overrides}
+
+    def _google_login(self, nonce, claims=None, portal="school"):
+        with patch("apps.accounts.views._verify_google_id_token", return_value=claims or self._claims(nonce)) as verify:
+            response = self.client.post(
+                self.login_url,
+                {"credential": "mocked-google-id-token", "nonce": nonce, "portal": portal},
+                format="json",
+            )
+        verify.assert_called_once_with("mocked-google-id-token")
+        return response
+
+    def test_login_links_a_verified_google_subject_to_existing_user(self):
+        nonce = self._challenge()
+        response = self._google_login(nonce)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["user"]["id"], self.user.pk)
+        self.assertNotIn("refresh", response.data)
+        self.assertTrue(response.cookies["school_refresh"]["httponly"])
+        self.assertEqual(GoogleIdentity.objects.get(user=self.user).subject, "google-subject-123")
+        self.assertTrue(GoogleLoginChallenge.objects.get().consumed_at)
+
+    def test_google_nonce_is_single_use(self):
+        nonce = self._challenge()
+        self.assertEqual(self._google_login(nonce).status_code, status.HTTP_200_OK)
+
+        replay = self._google_login(nonce)
+
+        self.assertEqual(replay.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("expired or was already used", replay.data["detail"])
+
+    def test_unverified_google_email_is_rejected_without_linking_account(self):
+        nonce = self._challenge()
+        response = self._google_login(nonce, self._claims(nonce, email_verified=False))
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(GoogleIdentity.objects.exists())
+
+    def test_google_nonce_must_match_the_issued_challenge(self):
+        nonce = self._challenge()
+        response = self._google_login(nonce, self._claims("different-nonce"))
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(GoogleIdentity.objects.exists())
+
+    def test_expired_google_challenge_cannot_link_account(self):
+        nonce = self._challenge()
+        challenge = GoogleLoginChallenge.objects.get()
+        challenge.expires_at = timezone.now() - timedelta(seconds=1)
+        challenge.save(update_fields=("expires_at",))
+
+        response = self._google_login(nonce)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(GoogleIdentity.objects.exists())
+
+    def test_one_edu_account_cannot_be_rebound_to_a_second_google_account(self):
+        GoogleIdentity.objects.create(
+            user=self.user,
+            subject="already-linked-google-subject",
+            email=self.user.email,
+        )
+        nonce = self._challenge()
+
+        response = self._google_login(nonce, self._claims(nonce, sub="second-google-subject"))
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(GoogleIdentity.objects.get(user=self.user).subject, "already-linked-google-subject")
+
+    def test_google_challenge_requires_csrf_protection(self):
+        client = APIClient(enforce_csrf_checks=True)
+
+        response = client.post(self.challenge_url, {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_google_login_never_creates_a_new_edustacked_account(self):
+        nonce = self._challenge()
+        response = self._google_login(
+            nonce,
+            self._claims(nonce, email="new.person@example.com", sub="new-google-subject"),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(User.objects.count(), 1)
+        self.assertFalse(GoogleIdentity.objects.exists())
+
+    def test_platform_account_is_not_linked_when_using_school_portal(self):
+        self.user.is_superuser = True
+        self.user.is_staff = True
+        self.user.save(update_fields=("is_superuser", "is_staff"))
+        nonce = self._challenge()
+
+        response = self._google_login(nonce)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("separate Platform sign in", response.data["detail"])
+        self.assertFalse(GoogleIdentity.objects.exists())
 
 
 @override_settings(PASSWORD_HASHERS=("django.contrib.auth.hashers.MD5PasswordHasher",))

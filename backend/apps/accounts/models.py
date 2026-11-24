@@ -69,6 +69,35 @@ class EmailVerificationToken(models.Model):
         indexes = [models.Index(fields=("user", "expires_at"), name="acct_verify_user_exp_idx")]
 
 
+class GoogleIdentity(models.Model):
+    """A Google account explicitly bound to an existing EDUstacked user."""
+
+    subject = models.CharField(max_length=255, unique=True)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="google_identity",
+    )
+    email = models.EmailField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_authenticated_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"Google identity for user {self.user_id}"
+
+
+class GoogleLoginChallenge(models.Model):
+    """One-time, short-lived nonce record used to stop Google ID-token replay."""
+
+    nonce_hash = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True)
+    consumed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=("expires_at", "consumed_at"), name="acct_google_chal_exp_idx")]
+
+
 class DemoRequest(models.Model):
     class Status(models.TextChoices):
         NEW = "new", "New"

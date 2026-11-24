@@ -2,6 +2,7 @@ import { useState } from 'react'
 import BrandMark from '../components/BrandMark.jsx'
 import PasswordField from '../components/PasswordField.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
+import GoogleSignInButton from '../components/GoogleSignInButton.jsx'
 
 export default function PlatformLoginPage({ navigate }) {
   const { user, signIn, signOut } = useAuth()
@@ -49,6 +50,12 @@ export default function PlatformLoginPage({ navigate }) {
       <PasswordField id="platform-password" name="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
       <button className="primary-button" type="submit" disabled={working}>{working ? 'Signing in…' : 'Sign in to platform'}</button>
     </form>}
+    {!user && import.meta.env.VITE_GOOGLE_CLIENT_ID && <GoogleSignInButton
+      portal="platform"
+      onSuccess={() => navigate('/platform')}
+      onError={setError}
+      onBusy={setWorking}
+    />}
     <button className="text-button platform-school-login-link" type="button" onClick={() => navigate('/login')}>School owner and staff sign in</button>
   </section></main>
 }

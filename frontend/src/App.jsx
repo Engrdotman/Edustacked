@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import LoadingScreen from './components/LoadingScreen.jsx'
+import PWAControls from './components/PWAControls.jsx'
 import { flushSync } from 'react-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext.jsx'
 
@@ -276,5 +277,5 @@ function AppRoutes() {
 }
 
 export default function App() {
-  return <AuthProvider><Suspense fallback={<LoadingScreen message="Loading EDUstacked…" />}><AppRoutes /></Suspense></AuthProvider>
+  return <AuthProvider><PWAControls /><Suspense fallback={<LoadingScreen message="Loading EDUstacked…" />}><AppRoutes /></Suspense></AuthProvider>
 }

@@ -10,3 +10,4 @@ gunicorn>=23.0,<24
 whitenoise>=6.8,<7
 sendgrid>=6.11,<7
 redis>=5.0,<7
+google-auth>=2.63.1,<3

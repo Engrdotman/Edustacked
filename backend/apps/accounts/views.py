@@ -1,4 +1,6 @@
 from datetime import timedelta
+import logging
+import secrets
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -36,8 +38,9 @@ from .emailing import (
     send_email_verification,
     send_password_setup_email,
 )
-from .models import EmailVerificationToken
+from .models import EmailVerificationToken, GoogleIdentity, GoogleLoginChallenge
 from .serializers import (
+    GoogleLoginSerializer,
     LoginSerializer,
     PasswordChangeSerializer,
     PasswordResetConfirmSerializer,
@@ -51,12 +54,54 @@ from .serializers import (
 )
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 class LoginRateThrottle(AnonRateThrottle):
     """Limit password login attempts per source IP independently of other endpoints."""
 
     scope = "login"
+
+
+def _portal_access_denial(user, portal):
+    if portal == "platform" and not user.is_superuser:
+        return "This sign-in is for EDUstacked platform administrators. School owners and staff should use School sign in."
+    if portal in {"school", "parent"} and user.is_superuser:
+        return "Platform administrator accounts use the separate Platform sign in page."
+    if portal == "parent":
+        from apps.students.models import Guardian
+        if not Guardian.objects.filter(
+            user=user, is_active=True, student_links__is_active=True,
+        ).exists():
+            return "This account is not linked to a parent portal yet. Use School sign in, or ask your school to invite your guardian email."
+    return ""
+
+
+class GoogleAuthUnavailable(Exception):
+    """Raised when the optional Google ID-token verifier is missing."""
+
+
+class InvalidGoogleCredential(Exception):
+    """Raised when Google cannot validate the submitted ID token."""
+
+
+def _verify_google_id_token(credential):
+    try:
+        from google.auth.exceptions import GoogleAuthError
+        from google.auth.transport.requests import Request as GoogleRequest
+        from google.oauth2 import id_token
+    except ImportError as exc:
+        raise GoogleAuthUnavailable from exc
+
+    try:
+        return id_token.verify_oauth2_token(
+            credential,
+            GoogleRequest(),
+            settings.GOOGLE_OAUTH_CLIENT_ID,
+            clock_skew_in_seconds=30,
+        )
+    except (ValueError, GoogleAuthError) as exc:
+        raise InvalidGoogleCredential from exc
 
 
 def _set_refresh_cookie(response, token):
@@ -267,32 +312,9 @@ class LoginView(APIView):
         user = serializer.validated_data["user"]
         self._clear_failed_logins(user)
         portal = serializer.validated_data["portal"]
-        if portal == "platform" and not user.is_superuser:
-            return Response(
-                {"detail": "This sign-in is for EDUstacked platform administrators. School owners and staff should use School sign in."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if portal == "school" and user.is_superuser:
-            return Response(
-                {"detail": "Platform administrator accounts use the separate Platform sign in page."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if portal == "parent":
-            if user.is_superuser:
-                return Response(
-                    {"detail": "Platform administrator accounts use the separate Platform sign in page."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            from apps.students.models import Guardian
-            has_parent_access = Guardian.objects.filter(
-                user=user, is_active=True,
-                student_links__is_active=True,
-            ).exists()
-            if not has_parent_access:
-                return Response(
-                    {"detail": "This account is not linked to a parent portal yet. Use School sign in, or ask your school to invite your guardian email."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+        denial = _portal_access_denial(user, portal)
+        if denial:
+            return Response({"detail": denial}, status=status.HTTP_403_FORBIDDEN)
         refresh = RefreshToken.for_user(user)
         access = str(refresh.access_token)
 
@@ -303,6 +325,121 @@ class LoginView(APIView):
         _set_refresh_cookie(response, refresh)
         user.last_login = timezone.now()
         user.save(update_fields=["last_login", "updated_at"])
+        return response
+
+
+@method_decorator(csrf_protect, name="dispatch")
+class GoogleLoginChallengeView(APIView):
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    throttle_classes = (LoginRateThrottle,)
+
+    def post(self, request, version=None):
+        if not settings.GOOGLE_OAUTH_CLIENT_ID:
+            return Response(
+                {"detail": "Google sign-in has not been configured yet. Use your email and password for now."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        now = timezone.now()
+        GoogleLoginChallenge.objects.filter(expires_at__lte=now).delete()
+        nonce = secrets.token_urlsafe(32)
+        GoogleLoginChallenge.objects.create(
+            nonce_hash=sha256(nonce.encode("utf-8")).hexdigest(),
+            expires_at=now + timedelta(minutes=5),
+        )
+        return Response({"nonce": nonce, "expires_in": 300})
+
+
+@method_decorator(csrf_protect, name="dispatch")
+class GoogleLoginView(APIView):
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    throttle_classes = (LoginRateThrottle,)
+
+    def post(self, request, version=None):
+        if not settings.GOOGLE_OAUTH_CLIENT_ID:
+            return Response(
+                {"detail": "Google sign-in has not been configured yet. Use your email and password for now."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        serializer = GoogleLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        values = serializer.validated_data
+        try:
+            claims = _verify_google_id_token(values["credential"])
+        except GoogleAuthUnavailable:
+            logger.error("Google sign-in dependency is missing from the backend environment.")
+            return Response(
+                {"detail": "Google sign-in is temporarily unavailable. Contact EDUstacked support."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except InvalidGoogleCredential:
+            return Response({"detail": "Google could not verify this sign-in. Choose your account and try again."}, status=status.HTTP_400_BAD_REQUEST)
+
+        email = str(claims.get("email") or "").strip().lower()
+        subject = str(claims.get("sub") or "").strip()
+        token_nonce = str(claims.get("nonce") or "")
+        if (
+            claims.get("iss") not in {"accounts.google.com", "https://accounts.google.com"}
+            or claims.get("email_verified") is not True
+            or not email or not subject or not compare_digest(token_nonce, values["nonce"])
+        ):
+            return Response({"detail": "Google could not verify this sign-in. Choose your account and try again."}, status=status.HTTP_400_BAD_REQUEST)
+
+        now = timezone.now()
+        nonce_hash = sha256(values["nonce"].encode("utf-8")).hexdigest()
+        try:
+            with transaction.atomic():
+                challenge = GoogleLoginChallenge.objects.select_for_update().filter(
+                    nonce_hash=nonce_hash, expires_at__gt=now, consumed_at__isnull=True,
+                ).first()
+                if challenge is None:
+                    return Response({"detail": "This Google sign-in expired or was already used. Try again."}, status=status.HTTP_400_BAD_REQUEST)
+                challenge.consumed_at = now
+                challenge.save(update_fields=("consumed_at",))
+
+                identity = GoogleIdentity.objects.select_related("user").filter(subject=subject).first()
+                if identity:
+                    user = User.objects.select_for_update().filter(
+                        pk=identity.user_id, is_active=True, email_verified_at__isnull=False,
+                    ).first()
+                    if user is None:
+                        return Response({"detail": "This EDUstacked account is inactive or needs email verification."}, status=status.HTTP_403_FORBIDDEN)
+                else:
+                    user = User.objects.select_for_update().filter(
+                        login_email=email, is_active=True, email_verified_at__isnull=False,
+                    ).first()
+                    if user is None:
+                        return Response({"detail": "No active, verified EDUstacked account matches this Google address. Ask your school to invite you or register your school first."}, status=status.HTTP_403_FORBIDDEN)
+
+                # Check portal separation before creating or changing a Google link.
+                denial = _portal_access_denial(user, values["portal"])
+                if denial:
+                    return Response({"detail": denial}, status=status.HTTP_403_FORBIDDEN)
+
+                if identity:
+                    identity.email = email
+                    identity.last_authenticated_at = now
+                    identity.save(update_fields=("email", "last_authenticated_at"))
+                else:
+                    if GoogleIdentity.objects.filter(user=user).exists():
+                        return Response({"detail": "This EDUstacked account is already linked to another Google account. Contact support if you need to change it."}, status=status.HTTP_409_CONFLICT)
+                    GoogleIdentity.objects.create(
+                        user=user, subject=subject, email=email, last_authenticated_at=now,
+                    )
+                user.last_login = now
+                user.save(update_fields=("last_login", "updated_at"))
+        except IntegrityError:
+            # Unique subject/user constraints protect account binding if two
+            # Google callbacks for this account arrive at nearly the same time.
+            return Response(
+                {"detail": "This EDUstacked account is already linked to a different Google account. Contact support if you need help."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        refresh = RefreshToken.for_user(user)
+        response = Response({"access": str(refresh.access_token), "user": UserProfileSerializer(user).data})
+        _set_refresh_cookie(response, refresh)
         return response
 
 

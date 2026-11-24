@@ -141,7 +141,7 @@ class ComponentScoreSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ComponentScore
-        fields = ("id", "plan_component_id", "component_name", "score", "max_score", "recorded_by", "last_modified_by", "created_at", "updated_at")
+        fields = ("id", "plan_component_id", "component_name", "score", "max_score", "outcome", "reason", "recorded_by", "last_modified_by", "created_at", "updated_at")
         read_only_fields = fields
 
 
@@ -180,7 +180,32 @@ class AssessmentResultSerializer(serializers.ModelSerializer):
 
 class ScoreValueSerializer(serializers.Serializer):
     plan_component_id = serializers.IntegerField(min_value=1)
-    score = serializers.DecimalField(max_digits=7, decimal_places=2, min_value=Decimal("0"))
+    score = serializers.DecimalField(max_digits=7, decimal_places=2, min_value=Decimal("0"), required=False, allow_null=True)
+    outcome = serializers.ChoiceField(choices=ComponentScore.Outcome.choices, required=False)
+    reason = serializers.CharField(required=False, allow_blank=True, max_length=500)
+
+    def validate(self, attrs):
+        score = attrs.get("score")
+        outcome = attrs.get("outcome")
+        if outcome is None:
+            outcome = ComponentScore.Outcome.SCORED if score is not None else None
+        if outcome is None:
+            raise serializers.ValidationError("Enter a score or choose Missed or Excused.")
+        attrs["outcome"] = outcome
+        reason = attrs.get("reason", "").strip()
+        if outcome == ComponentScore.Outcome.SCORED:
+            if score is None:
+                raise serializers.ValidationError({"score": "Enter a score, including 0 if that is the school's decision."})
+            if reason:
+                raise serializers.ValidationError({"reason": "A score does not need an absence reason."})
+            attrs["reason"] = ""
+        else:
+            if score is not None:
+                raise serializers.ValidationError({"score": "A missed or excused component cannot also have a score."})
+            if not reason:
+                raise serializers.ValidationError({"reason": "Give a reason for marking this component missed or excused."})
+            attrs["reason"] = reason
+        return attrs
 
 
 class StudentScoreEntrySerializer(serializers.Serializer):

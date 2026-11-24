@@ -1,7 +1,10 @@
 from datetime import date
+import hashlib
+from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -9,7 +12,7 @@ from apps.academics.models import AcademicSession, ClassArm, ClassLevel, Subject
 from apps.schools.models import School, SchoolMembership
 from apps.staff.models import StaffProfile, TeacherAssignment, TeacherProfile
 from apps.students.models import Student, StudentEnrollment
-from .models import AttendanceAuditEvent, AttendanceRecord, AttendanceRegister
+from .models import AttendanceAuditEvent, AttendanceRecord, AttendanceRegister, OfflineAttendanceGrant
 
 User = get_user_model()
 
@@ -171,4 +174,76 @@ class AttendanceApiTests(TestCase):
         self.assertEqual(AttendanceRecord.objects.get(register_id=register["id"], student=self.student_a).enrollment_id, old_enrollment.pk)
         # The new placement starts on the transfer date, so it is not eligible in the old class on the prior register date.
         self.assertEqual(AttendanceRecord.objects.filter(register__attendance_date=date(2026, 10, 16), student=self.student_a).count(), 0)
+
+    def test_offline_grant_is_scoped_short_lived_and_stored_as_a_digest(self):
+        register = self.create_register()
+        grant_response = self.api("post", "/api/v1/attendance/offline/grants/", {"register_id": register["id"]})
+
+        self.assertEqual(grant_response.status_code, status.HTTP_201_CREATED, grant_response.data)
+        grant = OfflineAttendanceGrant.objects.get(pk=grant_response.data["grant_id"])
+        self.assertNotEqual(grant.token_digest, grant_response.data["token"])
+        self.assertEqual(grant.token_digest, hashlib.sha256(grant_response.data["token"].encode()).hexdigest())
+        self.assertGreaterEqual((grant.expires_at - timezone.now()).total_seconds(), 23 * 60 * 60)
+
+        second_grant = self.api("post", "/api/v1/attendance/offline/grants/", {"register_id": register["id"]})
+        self.assertEqual(second_grant.status_code, status.HTTP_201_CREATED, second_grant.data)
+        grant.refresh_from_db()
+        self.assertIsNotNone(grant.revoked_at)
+
+    def test_offline_sync_revalidates_access_and_is_safe_to_retry(self):
+        register = self.create_register(user=self.teacher_user)
+        self.client.force_authenticate(self.teacher_user)
+        prepared = self.api("post", "/api/v1/attendance/offline/grants/", {"register_id": register["id"]})
+        self.assertEqual(prepared.status_code, status.HTTP_201_CREATED, prepared.data)
+        token = prepared.data["token"]
+        sync_id = str(uuid4())
+        payload = {
+            "version": 1,
+            "sync_id": sync_id,
+            "records": [
+                {"student_id": self.student_a.pk, "status": "present", "note": ""},
+                {"student_id": self.student_b.pk, "status": "late", "note": ""},
+            ],
+        }
+        self.client.force_authenticate(user=None)
+
+        saved = self.client.post(
+            "/api/v1/attendance/offline/sync/", payload, format="json",
+            HTTP_AUTHORIZATION=f"Offline {token}",
+        )
+        replay = self.client.post(
+            "/api/v1/attendance/offline/sync/", payload, format="json",
+            HTTP_AUTHORIZATION=f"Offline {token}",
+        )
+
+        self.assertEqual(saved.status_code, status.HTTP_200_OK, saved.data)
+        self.assertEqual(replay.status_code, status.HTTP_200_OK, replay.data)
+        self.assertEqual(replay.data["version"], 2)
+        self.assertEqual(AttendanceRecord.objects.filter(register_id=register["id"], status__isnull=False).count(), 2)
+        self.assertEqual(AttendanceAuditEvent.objects.filter(register_id=register["id"], event_type=AttendanceAuditEvent.EventType.RECORDED).count(), 2)
+
+        changed_replay = {**payload, "records": [{"student_id": self.student_a.pk, "status": "absent"}]}
+        conflict = self.client.post(
+            "/api/v1/attendance/offline/sync/", changed_replay, format="json",
+            HTTP_AUTHORIZATION=f"Offline {token}",
+        )
+        self.assertEqual(conflict.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(AttendanceRecord.objects.get(register_id=register["id"], student=self.student_a).status, "present")
+
+    def test_offline_sync_cannot_be_used_after_membership_revocation(self):
+        register = self.create_register(user=self.teacher_user)
+        self.client.force_authenticate(self.teacher_user)
+        prepared = self.api("post", "/api/v1/attendance/offline/grants/", {"register_id": register["id"]})
+        self.assertEqual(prepared.status_code, status.HTTP_201_CREATED, prepared.data)
+        SchoolMembership.objects.filter(user=self.teacher_user, school=self.school).update(is_active=False)
+        self.client.force_authenticate(user=None)
+
+        denied = self.client.post(
+            "/api/v1/attendance/offline/sync/",
+            {"version": 1, "sync_id": str(uuid4()), "records": [{"student_id": self.student_a.pk, "status": "present"}]},
+            format="json", HTTP_AUTHORIZATION=f"Offline {prepared.data['token']}",
+        )
+
+        self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIsNone(AttendanceRecord.objects.get(register_id=register["id"], student=self.student_a).status)
 
