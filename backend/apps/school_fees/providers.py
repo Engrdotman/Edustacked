@@ -1,6 +1,6 @@
 """Provider operations for school-owned fee collection accounts."""
 import json
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -153,8 +153,9 @@ class FlutterwaveSchoolProvider(SchoolPaymentProvider):
         data["reference"] = data.get("tx_ref")
         data["status"] = "success" if data.get("status") == "successful" else data.get("status")
         try:
-            data["amount"] = round(float(data.get("amount")) * 100)
-        except (TypeError, ValueError):
+            amount = Decimal(str(data.get("amount"))) * 100
+            data["amount"] = int(amount) if amount.is_finite() and amount == amount.to_integral_value() else None
+        except (InvalidOperation, TypeError, ValueError):
             data["amount"] = None
         return data
 

@@ -654,6 +654,9 @@ class ParentPaymentDetailView(ParentFeeView):
             if payment.provider == "paystack":
                 transaction_data["reference"] = transaction_data.get("reference")
                 transaction_data["amount"] = transaction_data.get("amount")
+            verified_reference = str(transaction_data.get("reference") or transaction_data.get("tx_ref") or "")
+            if verified_reference != payment.reference:
+                raise serializers.ValidationError({"payment": "The verified transaction does not match this school-fee checkout. Its status has not been changed."})
             if str(transaction_data.get("status", "")).lower() in {"failed", "cancelled", "canceled"}:
                 payment.status = SchoolFeePayment.Status.FAILED
                 payment.save(update_fields=["status", "updated_at"])

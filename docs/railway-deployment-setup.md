@@ -45,7 +45,8 @@ Create these in **backend service → Variables**. Do not paste actual secrets i
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | Full origins with scheme, e.g. `https://your-vercel-project.vercel.app,https://www.yourdomain.ng`. |
 | `AUTH_REFRESH_COOKIE_SAMESITE` | Set to `None` for separate Vercel/Railway domains; the refresh cookie is Secure and HttpOnly. |
 | `CSRF_COOKIE_SAMESITE` | Set to `None` so browser requests can send the CSRF cookie to the Railway API. Both cookies require HTTPS in production. |
-| `FRONTEND_BASE_URL` | Exact HTTPS frontend origin, e.g. `https://www.yourdomain.ng`. The code reads this name when it creates Paystack callback URLs. |
+| `FRONTEND_BASE_URL` | Exact HTTPS frontend origin, e.g. `https://www.yourdomain.ng`. Used to create payment return URLs and account, parent, and platform links. |
+| `PASSWORD_RESET_FRONTEND_URL` | Exact public frontend origin used by account setup and forgot-password links. For the current Netlify site use `https://edustackedng.netlify.app`; change it if the public domain changes. |
 | `EMAIL_BACKEND` | For SendGrid Web API use `apps.core.sendgrid_backend.SendgridBackend`; for SMTP use `django.core.mail.backends.smtp.EmailBackend`. |
 | `PLATFORM_SIGNUP_NOTIFICATION_EMAIL` | EDUstacked inbox to alert when a new school workspace is registered. Defaults to `edustackedng@gmail.com`. |
 | `SENDGRID_SCHOOL_SIGNUP_NOTIFICATION_TEMPLATE_ID` | Optional SendGrid Dynamic Template ID for the platform alert. Receives `school_name`, `administrator_name`, `administrator_email`, `school_email`, `school_phone`, `school_type`, `country`, `state`, `local_government_area`, `verification_status`, `registered_at`, and `review_url`. |
@@ -60,6 +61,8 @@ Create these in **backend service → Variables**. Do not paste actual secrets i
 | `DEFAULT_FROM_EMAIL` | Sender identity authenticated with the email provider. For SendGrid production delivery, use a sender/domain aligned with its SPF/DKIM authentication. |
 | `REDIS_URL` | Optional shared cache URL from a private Railway Redis service, e.g. `${{Redis.REDIS_URL}}`. Without it, Django falls back to per-process memory cache; set this to share API rate-limit cache across workers/instances. |
 | `PAYSTACK_SECRET_KEY` | Start with a Paystack test secret (`sk_test_...`) for test-mode checkout. The key is server-only. Set a live secret only after test-mode acceptance and business approval. |
+| `FLUTTERWAVE_SECRET_KEY` | Flutterwave test secret while testing, then the live secret after switching to live mode. Used only by the backend for hosted checkout and transaction verification. |
+| `FLUTTERWAVE_WEBHOOK_SECRET` | The exact Secret Hash saved under Flutterwave Dashboard → Settings → Webhooks. Keep it identical in Railway and the Flutterwave dashboard. |
 | `CBT_LICENSE_SIGNING_KEY` | Stable, long random secret for central CBT license signing; coordinate the matching verifier secret with each school-local server. |
 | `CBT_PACKAGE_SIGNING_KEY` | A separate stable random secret for signed exam packages; coordinate with local CBT servers. |
 | `CBT_OFFLINE_GRACE_DAYS` | Optional; defaults to `7`, allowed range `0`–`90`. |
@@ -74,7 +77,21 @@ Create these in **backend service → Variables**. Do not paste actual secrets i
 | `AUTH_LOGIN_FAILURE_WINDOW_SECONDS` | Optional; defaults to `900`. |
 | `AUTH_LOGIN_LOCKOUT_SECONDS` | Optional; defaults to `900`. |
 
-The code does **not** read `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`, `FRONTEND_URL`, `PAYSTACK_MODE`, or `PAYSTACK_PUBLIC_KEY`. Use the project-specific names above. In the current provider, test/live selection is controlled by which Paystack secret key is configured; do not add a frontend secret key. `VITE_API_BASE_URL` belongs in Vercel, not Railway.
+The code does **not** read `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`, `FRONTEND_URL`, `PAYSTACK_MODE`, or `PAYSTACK_PUBLIC_KEY`. Use the project-specific names above. Test/live selection is controlled by which provider secret key is configured; do not add a payment secret to the frontend. `VITE_API_BASE_URL` belongs in Vercel, not Railway.
+
+### Flutterwave setup
+
+1. In Railway's backend service, set `FLUTTERWAVE_SECRET_KEY` to the test secret while testing. Switch to the live secret only after a successful end-to-end test.
+2. In the same Railway service, set `FLUTTERWAVE_WEBHOOK_SECRET` to the exact random Secret Hash configured in Flutterwave Dashboard → Settings → Webhooks.
+3. Configure this single webhook URL in Flutterwave:
+
+   `https://<your-railway-api-host>/api/v1/webhooks/flutterwave/`
+
+   It routes verified Flutterwave payments for report-card credits, parent school fees, and SMS bundles to the matching payment record. Enable the `charge.completed` notification and webhook retries.
+4. Set `FRONTEND_BASE_URL` and `DJANGO_CSRF_TRUSTED_ORIGINS` to the exact public frontend origin (for example, `https://your-project.vercel.app`), without a path or trailing slash. `DJANGO_CORS_ALLOWED_ORIGINS` is only needed if a client calls Railway directly instead of using the Vercel `/api` proxy.
+5. Redeploy the Railway backend after saving variables. No database migration is needed for Flutterwave configuration.
+
+Checkout is hosted by Flutterwave and initialized by the backend. After checkout and on webhook delivery, the backend verifies the transaction ID with Flutterwave and checks the reference, status, currency, and exact expected amount before applying credits or fees. Keep the secret key out of all `VITE_` variables and frontend source.
 
 ### Generate secrets locally
 
@@ -133,7 +150,7 @@ To inspect generated SQL for an individual migration locally, use `python manage
 4. Configure Vercel `VITE_API_BASE_URL=/api` and rebuild the frontend; the Vercel rewrite proxies API calls to Railway.
 5. Deploy the backend, inspect build/runtime logs, and confirm Railway health check succeeds at `/api/v1/health/database/`.
 6. Confirm Django admin static assets. If unstyled, finish WhiteNoise/static-host configuration before relying on admin.
-7. Test signup/verification email, login/refresh/logout across the production Vercel/Railway domains, and a Paystack **test-mode** purchase. Do not switch to live Paystack until that flow and webhook are verified.
+7. Test signup/verification email, login/refresh/logout across the production frontend/Railway domains, and a Flutterwave **test-mode** purchase. Do not switch Flutterwave to live until checkout, callback, webhook, and server-side verification have been confirmed.
 8. Configure durable private media storage before uploading real school logos, signatures, student/staff photos, or CBT assets. `MEDIA_ROOT` currently points to local app disk and is not a durable object-storage integration.
 9. Take a database backup and rehearse restore before importing real school data.
 

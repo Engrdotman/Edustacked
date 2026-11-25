@@ -23,6 +23,7 @@ from .serializers import (
 )
 from .services import (
     apply_provider_result, bachs_signature_is_valid, current_balance,
+    flutterwave_signature_is_valid,
     initialize_purchase, paystack_signature_is_valid, platform_adjustment,
 )
 from .providers import BachsProvider, FlutterwaveProvider, PaystackProvider
@@ -172,6 +173,50 @@ class PaystackWebhookView(APIView):
                 defaults={"school": payment.school, "payment": payment,
                           "description": f"Paystack reported {event['event']}. Review the transaction and approved refund policy."},
             )
+        return Response({"received": True})
+
+
+class FlutterwaveWebhookView(APIView):
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
+    throttle_classes = ()
+
+    def post(self, request, **kwargs):
+        if not flutterwave_signature_is_valid(request.headers.get("verif-hash", "")):
+            return Response({"detail": "Invalid webhook signature."}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            event = json.loads(request.body)
+        except (TypeError, ValueError):
+            return Response({"detail": "Invalid event body."}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(event, dict) or not isinstance(event.get("data"), dict):
+            return Response({"detail": "Invalid event body."}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = event["data"]
+        if event.get("event") != "charge.completed":
+            return Response({"received": True})
+        reference = data.get("tx_ref")
+        transaction_id = data.get("id")
+        if not reference or not str(transaction_id or "").isdigit():
+            return Response({"detail": "Payment notification is missing its transaction reference."}, status=status.HTTP_400_BAD_REQUEST)
+        payment = CreditPayment.objects.filter(provider="flutterwave", reference=reference).select_related("school").first()
+        if payment is None:
+            return Response({"received": True})
+
+        # Never grant credits from webhook fields alone; recheck the transaction with Flutterwave.
+        try:
+            verified = FlutterwaveProvider().verify(transaction_id)
+        except (DjangoValidationError, ImproperlyConfigured):
+            # Ask Flutterwave to retry transient verification/configuration failures.
+            return Response({"detail": "Payment verification is temporarily unavailable."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        try:
+            apply_provider_result(payment, verified)
+        except DjangoValidationError:
+            ReconciliationIssue.objects.get_or_create(
+                kind="payment_mismatch", provider_reference=str(reference)[:100],
+                defaults={"school": payment.school, "payment": payment,
+                          "description": "Signed Flutterwave transaction did not match the internal credit purchase amount, currency, or reference. Manual reconciliation is required."},
+            )
+            return Response({"received": True, "reconciliation_required": True})
         return Response({"received": True})
 
 

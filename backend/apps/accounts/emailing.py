@@ -8,6 +8,7 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from datetime import timedelta
 from hashlib import sha256
+from urllib.parse import urlencode
 import secrets
 import logging
 
@@ -15,17 +16,33 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def send_password_setup_email(user, *, school_name="", fail_silently=True):
+def _send_password_action_email(user, *, action, school_name="", fail_silently=True):
     uid = urlsafe_base64_encode(force_bytes(user.pk))
     token = default_token_generator.make_token(user)
-    reset_url = f"{settings.FRONTEND_BASE_URL}/reset-password?uid={uid}&token={token}"
-    subject = "Set up your EDUstacked account"
+    reset_url = (
+        f"{settings.PASSWORD_RESET_FRONTEND_URL}/reset-password?"
+        f"{urlencode({'uid': uid, 'token': token})}"
+    )
+    is_reset = action == "reset"
+    subject = "Reset your EDUstacked password" if is_reset else "Set up your EDUstacked account"
     template_id = getattr(settings, "SENDGRID_PASSWORD_SETUP_TEMPLATE_ID", "")
     if template_id and settings.EMAIL_BACKEND.endswith("SendgridBackend"):
-        message = EmailMessage(subject, "Use the secure link to set up your account.", settings.DEFAULT_FROM_EMAIL, [user.email])
+        message = EmailMessage(subject, "Use the secure link to set your password.", settings.DEFAULT_FROM_EMAIL, [user.email])
         message.dynamic_template_id = template_id
         message.dynamic_template_data = {
+            # Keep the original key for existing SendGrid templates; new templates
+            # should use password_reset_url (or action_url) for their CTA link.
             "password_setup_url": reset_url,
+            "password_reset_url": reset_url,
+            "reset_password_url": reset_url,
+            "action_url": reset_url,
+            "email_purpose": "password_reset" if is_reset else "password_setup",
+            "action_heading": "Set a new password" if is_reset else "Set up your password",
+            "action_message": (
+                "We received a request to reset your EDUstacked password."
+                if is_reset else "Set a password to finish setting up your EDUstacked account."
+            ),
+            "action_button": "Set new password" if is_reset else "Set up account",
             "first_name": user.first_name,
             "full_name": user.get_full_name().strip() or user.email,
             "school_name": school_name,
@@ -34,7 +51,8 @@ def send_password_setup_email(user, *, school_name="", fail_silently=True):
     return send_mail(
         subject=subject,
         message=(
-            "Use this secure link to set or reset your password. "
+            ("Use this secure link to reset your EDUstacked password. " if is_reset else "Use this secure link to set up your EDUstacked password. ")
+            +
             f"The link expires after {settings.PASSWORD_RESET_TIMEOUT // 60} minutes:\n\n"
             f"{reset_url}\n"
         ),
@@ -42,6 +60,16 @@ def send_password_setup_email(user, *, school_name="", fail_silently=True):
         recipient_list=[user.email],
         fail_silently=fail_silently,
     )
+
+
+def send_password_setup_email(user, *, school_name="", fail_silently=True):
+    return _send_password_action_email(
+        user, action="setup", school_name=school_name, fail_silently=fail_silently,
+    )
+
+
+def send_password_reset_email(user, *, fail_silently=True):
+    return _send_password_action_email(user, action="reset", fail_silently=fail_silently)
 
 
 def issue_email_verification(user):

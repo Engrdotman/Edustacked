@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import BrandMark from '../components/BrandMark.jsx'
+import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { academicList, apiRequest } from '../services/api.js'
 
@@ -36,6 +37,7 @@ export default function AssessmentResultsPage({ navigate }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [confirmation, setConfirmation] = useState(null)
 
   const chosenClass = useMemo(() => classes.find((item) => String(item.id) === String(planForm.class_level)), [classes, planForm.class_level])
   const availablePlanComponents = useMemo(() => {
@@ -109,10 +111,16 @@ export default function AssessmentResultsPage({ navigate }) {
   }
 
   async function toggleTemplate(item) {
-    await run(async () => {
-      const updated = await apiRequest(`assessment-components/${item.id}/`, { method: 'PATCH', body: { is_active: !item.is_active } })
-      setTemplates((current) => current.map((entry) => entry.id === updated.id ? updated : entry))
-    }, item.is_active ? 'Component deactivated.' : 'Component activated.')
+    setConfirmation({
+      title: item.is_active ? 'Deactivate this component?' : 'Activate this component?',
+      message: `${item.name} will ${item.is_active ? 'no longer be available for new assessment plans' : 'be available to add to assessment plans'}.`,
+      confirmLabel: item.is_active ? 'Yes, deactivate' : 'Yes, activate',
+      confirmTone: item.is_active ? 'danger' : 'primary',
+      action: async () => run(async () => {
+        const updated = await apiRequest(`assessment-components/${item.id}/`, { method: 'PATCH', body: { is_active: !item.is_active } })
+        setTemplates((current) => current.map((entry) => entry.id === updated.id ? updated : entry))
+      }, item.is_active ? 'Component deactivated.' : 'Component activated.'),
+    })
   }
 
   async function createPlan(event) {
@@ -162,21 +170,51 @@ export default function AssessmentResultsPage({ navigate }) {
   }
 
   async function removePlanComponent(item) {
-    if (!plan || !window.confirm(`Remove ${item.component_name} from this draft assessment plan?`)) return
-    await run(async () => {
-      await apiRequest(`assessment-plans/${plan.id}/components/${item.id}/`, { method: 'DELETE' })
-      if (componentEditId === String(item.id)) {
-        setComponentEditId('')
-        setComponentForm({ component: '', max_score: '', weight: '', position: String(Math.max(1, plan.components?.length || 1)) })
-      }
-      await reloadSelected(plan.id)
-    }, 'Component removed from the draft plan.')
+    if (!plan) return
+    setConfirmation({
+      title: 'Remove this assessment component?',
+      message: `${item.component_name} will be removed from this draft plan. This does not delete the shared component from the school library.`,
+      confirmLabel: 'Yes, remove component',
+      confirmTone: 'danger',
+      action: async () => run(async () => {
+        await apiRequest(`assessment-plans/${plan.id}/components/${item.id}/`, { method: 'DELETE' })
+        if (componentEditId === String(item.id)) {
+          setComponentEditId('')
+          setComponentForm({ component: '', max_score: '', weight: '', position: String(Math.max(1, plan.components?.length || 1)) })
+        }
+        await reloadSelected(plan.id)
+      }, 'Component removed from the draft plan.'),
+    })
   }
 
   async function planAction(action) {
-    const reason = action === 'reopen' ? window.prompt('Reason for reopening this assessment plan:') : ''
-    if (action === 'reopen' && !reason?.trim()) return
-    await run(async () => { await apiRequest(`assessment-plans/${plan.id}/${action}/`, { method: 'POST', body: { reason, version: plan.version } }); await reloadSelected(plan.id); await reloadPlans() }, `Plan ${action === 'publish' ? 'published' : action === 'close' ? 'closed' : 'reopened'}.`)
+    if (!plan) return
+    const verb = action === 'publish' ? 'publish' : action === 'close' ? 'close' : 'reopen'
+    setConfirmation({
+      title: `${verb[0].toUpperCase()}${verb.slice(1)} this assessment plan?`,
+      message: action === 'publish'
+        ? `Publish “${plan.name}” so teachers can enter scores for ${plan.class_name} ${plan.arm_name} · ${plan.subject_name}?`
+        : action === 'close'
+          ? `Close “${plan.name}”? Teachers will no longer be able to enter or change scores until it is reopened.`
+          : `Reopen “${plan.name}” for score entry. Add a short reason so the change is recorded in the audit history.`,
+      confirmLabel: action === 'publish' ? 'Yes, publish plan' : action === 'close' ? 'Yes, close plan' : 'Yes, reopen plan',
+      confirmTone: action === 'close' ? 'danger' : 'primary',
+      requireReason: action === 'reopen',
+      reasonLabel: 'Reason for reopening',
+      reasonPlaceholder: 'e.g. Correcting an approved assessment plan',
+      action: async (reason = '') => run(async () => {
+        await apiRequest(`assessment-plans/${plan.id}/${action}/`, { method: 'POST', body: { reason, version: plan.version } })
+        await reloadSelected(plan.id)
+        await reloadPlans()
+      }, `Plan ${action === 'publish' ? 'published' : action === 'close' ? 'closed' : 'reopened'}.`),
+    })
+  }
+
+  async function confirmAssessmentAction(reason = '') {
+    const action = confirmation?.action
+    if (!action) return
+    await action(reason)
+    setConfirmation(null)
   }
 
   async function saveScores(row) {
@@ -190,10 +228,23 @@ export default function AssessmentResultsPage({ navigate }) {
   }
 
   async function resultAction(row, action) {
-    const reason = action === 'reopen' ? window.prompt('Reason for correcting this approved result:') : ''
-    if (action === 'reopen' && !reason?.trim()) return
+    if (action === 'reopen') {
+      setConfirmation({
+        title: 'Reopen this result for correction?',
+        message: `The approved result for ${row.student_name} will return to an editable state. Add a reason for the audit history.`,
+        confirmLabel: 'Yes, reopen result',
+        requireReason: true,
+        reasonLabel: 'Reason for correction',
+        reasonPlaceholder: 'e.g. Correcting a score entry',
+        action: async (reason) => run(async () => {
+          await apiRequest(`assessment-plans/${plan.id}/results/reopen/`, { method: 'POST', body: { entries: [{ student_id: row.student_id, version: row.version }], reason } })
+          await reloadSelected(plan.id)
+        }, 'Result reopened.'),
+      })
+      return
+    }
     await run(async () => {
-      await apiRequest(`assessment-plans/${plan.id}/results/${action}/`, { method: 'POST', body: { entries: [{ student_id: row.student_id, version: row.version }], reason } })
+      await apiRequest(`assessment-plans/${plan.id}/results/${action}/`, { method: 'POST', body: { entries: [{ student_id: row.student_id, version: row.version }] } })
       await reloadSelected(plan.id)
     }, `Result ${action === 'submit' ? 'submitted' : action === 'approve' ? 'approved' : 'reopened'}.`)
   }
@@ -221,6 +272,18 @@ export default function AssessmentResultsPage({ navigate }) {
         <section className="assessment-panel"><div className="assessment-panel-heading"><div><p className="panel-kicker">ASSESSMENT CONFIGURATION</p><h2>Create an assessment plan</h2></div></div><form className="assessment-form-grid" onSubmit={createPlan}><label className="assessment-field">Session<select required value={planForm.academic_session} onChange={(e) => setPlanForm({ ...planForm, academic_session: e.target.value, term: '' })}><option value="">Choose session</option>{sessions.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label className="assessment-field">Term<select required value={planForm.term} onChange={(e) => setPlanForm({ ...planForm, term: e.target.value })}><option value="">Choose term</option>{terms.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label className="assessment-field">Class<select required value={planForm.class_level} onChange={(e) => setPlanForm({ ...planForm, class_level: e.target.value, class_arm: '' })}><option value="">Choose class</option>{classes.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label className="assessment-field">Arm<select required value={planForm.class_arm} onChange={(e) => setPlanForm({ ...planForm, class_arm: e.target.value })}><option value="">Choose arm</option>{arms.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label className="assessment-field">Subject<select required value={planForm.subject} onChange={(e) => setPlanForm({ ...planForm, subject: e.target.value })}><option value="">Choose subject</option>{subjects.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label className="assessment-field">Grading scale<select required value={planForm.grading_scale} onChange={(e) => setPlanForm({ ...planForm, grading_scale: e.target.value })}><option value="">Choose scale</option>{scales.map((item) => <option value={item.id} key={item.id}>{item.name} / {item.maximum_score}</option>)}</select></label><label className="assessment-field">Assessment plan name<input required maxLength="120" placeholder="e.g. First Term Mathematics" value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} /></label><label className="assessment-field">Calculation<select value={planForm.calculation_method} onChange={(e) => setPlanForm({ ...planForm, calculation_method: e.target.value })}><option value="raw">Raw score addition</option><option value="weighted">Weighted components</option></select></label><button className="primary-button" disabled={saving}>Create draft plan</button></form></section>
         <section className="assessment-panel"><div className="assessment-panel-heading"><div><p className="panel-kicker">SCHOOL COMPONENT LIBRARY</p><h2>{templateEditId ? 'Edit component template' : 'Add component template'}</h2></div></div><form className="assessment-form-grid" onSubmit={createTemplate}><label className="assessment-field">Name<input required maxLength="100" placeholder="e.g. 1st CA, 2nd CA, Examination" value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} /></label><label className="assessment-field">Default maximum score<input type="number" min="0.01" step="0.01" placeholder="e.g. 20" required value={templateForm.max_score} onChange={(e) => setTemplateForm({ ...templateForm, max_score: e.target.value })} /></label><label className="assessment-field">Default weight (optional)<input type="number" min="0.01" step="0.01" placeholder="e.g. 20" value={templateForm.default_weight} onChange={(e) => setTemplateForm({ ...templateForm, default_weight: e.target.value })} /></label><button className="secondary-button" disabled={saving}>{templateEditId ? 'Save component' : 'Create component'}</button>{templateEditId && <button className="text-button" type="button" onClick={() => { setTemplateEditId(''); setTemplateForm({ name: '', max_score: '100.00', default_weight: '' }) }}>Cancel edit</button>}</form><div className="assessment-component-list">{templates.map((item) => <div key={item.id}><strong>{item.name} {item.is_active ? '' : '(inactive)'}</strong><span>Suggested max {item.max_score}{item.default_weight ? ` · ${item.default_weight}% default weight` : ''}<span className="assessment-template-actions"><button className="text-button" type="button" onClick={() => { setTemplateEditId(String(item.id)); setTemplateForm({ name: item.name, max_score: item.max_score, default_weight: item.default_weight || '' }) }}>Edit</button><button className="text-button" type="button" onClick={() => toggleTemplate(item)}>{item.is_active ? 'Deactivate' : 'Activate'}</button></span></span></div>)}</div></section>
       </>}
+      {confirmation && <ConfirmDialog
+        title={confirmation.title}
+        message={confirmation.message}
+        confirmLabel={confirmation.confirmLabel}
+        confirmTone={confirmation.confirmTone}
+        requireReason={confirmation.requireReason}
+        reasonLabel={confirmation.reasonLabel}
+        reasonPlaceholder={confirmation.reasonPlaceholder}
+        busy={saving}
+        onConfirm={confirmAssessmentAction}
+        onCancel={() => setConfirmation(null)}
+      />}
     </section>
   </main>
 }

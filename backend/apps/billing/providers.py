@@ -74,7 +74,7 @@ class FlutterwaveProvider:
 
     def initialize(self, *, email, amount_minor, reference, callback_url, title="EDUstacked", description="Report-card credits"):
         data = self._request("POST", "/payments", {
-            "tx_ref": reference, "amount": f"{amount_minor / 100:.2f}", "currency": "NGN",
+            "tx_ref": reference, "amount": f"{Decimal(amount_minor) / Decimal(100):.2f}", "currency": "NGN",
             "redirect_url": callback_url, "customer": {"email": email},
             "customizations": {"title": title, "description": description},
         })
@@ -89,8 +89,9 @@ class FlutterwaveProvider:
         data["reference"] = data.get("tx_ref")
         data["status"] = "success" if data.get("status") == "successful" else data.get("status")
         try:
-            data["amount"] = round(float(data.get("amount")) * 100)
-        except (TypeError, ValueError):
+            amount = Decimal(str(data.get("amount"))) * 100
+            data["amount"] = int(amount) if amount.is_finite() and amount == amount.to_integral_value() else None
+        except (InvalidOperation, TypeError, ValueError):
             data["amount"] = None
         return data
 

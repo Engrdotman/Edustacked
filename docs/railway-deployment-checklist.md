@@ -35,6 +35,7 @@ Required production variables (set in Railway backend service Variables):
 | `DJANGO_CORS_ALLOWED_ORIGINS` | `https://your-vercel-project.vercel.app,https://www.yourdomain.com` |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://your-vercel-project.vercel.app,https://www.yourdomain.com` |
 | `FRONTEND_BASE_URL` | `https://www.yourdomain.com` |
+| `PASSWORD_RESET_FRONTEND_URL` | `https://edustackedng.netlify.app` (or the exact public frontend origin) |
 | `EMAIL_BACKEND` | `django.core.mail.backends.smtp.EmailBackend` |
 | `EMAIL_HOST` | SMTP hostname (e.g., `smtp.gmail.com`, `smtp.sendgrid.net`) |
 | `EMAIL_PORT` | `587` (for STARTTLS) or `465` (for implicit TLS) |
@@ -45,6 +46,8 @@ Required production variables (set in Railway backend service Variables):
 | `DEFAULT_FROM_EMAIL` | `EDUstacked <noreply@yourdomain.com>` |
 | `PLATFORM_DEMO_REQUEST_NOTIFICATION_EMAIL` | `edustackedng@gmail.com` (receives demo and assisted-onboarding request alerts) |
 | `PAYSTACK_SECRET_KEY` | `sk_test_...` for test mode; `sk_live_...` only after verified |
+| `FLUTTERWAVE_SECRET_KEY` | Flutterwave test secret for testing; live secret only after verified |
+| `FLUTTERWAVE_WEBHOOK_SECRET` | Exact Flutterwave Dashboard → Settings → Webhooks Secret Hash |
 | `CBT_LICENSE_SIGNING_KEY` | Output of `python -c "import secrets; print(secrets.token_urlsafe(64))"` |
 | `CBT_PACKAGE_SIGNING_KEY` | Output of `python -c "import secrets; print(secrets.token_urlsafe(64))"` |
 
@@ -54,6 +57,7 @@ Optional variables:
 - `DB_CONNECT_TIMEOUT`: `5`
 - `REDIS_URL`: `${{Redis.REDIS_URL}}` (private Railway Redis service reference; see [Redis setup](railway-redis-setup.md))
 - `SENDGRID_DEMO_REQUEST_NOTIFICATION_TEMPLATE_ID`: optional Dynamic Template ID for demo/onboarding request alerts; without it, the backend sends a plain-text email
+- Flutterwave webhook URL: `https://<your-railway-api-host>/api/v1/webhooks/flutterwave/` (one URL routes report-card credit, parent-fee, and SMS payments)
 - `DJANGO_SECURE_HSTS_SECONDS`: `31536000` (only after HTTPS verified)
 - `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS`: `false`
 - `DJANGO_SECURE_HSTS_PRELOAD`: `false`

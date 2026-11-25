@@ -1,7 +1,7 @@
 from django.urls import path
 
 from .views import (
-    BachsWebhookView, BillingOverviewView, CreditPackageListView, PaystackWebhookView,
+    BachsWebhookView, BillingOverviewView, CreditPackageListView, FlutterwaveWebhookView, PaystackWebhookView,
     PaymentDetailView, PaymentHistoryView, PlatformBillingAdjustmentView,
     PlatformBillingIssuesView, PurchaseInitializeView,
     ReportCardBillingHistoryView, TransactionHistoryView,
@@ -16,6 +16,7 @@ urlpatterns = [
     path("billing/transactions/", TransactionHistoryView.as_view(), name="billing-transactions"),
     path("billing/report-card-records/", ReportCardBillingHistoryView.as_view(), name="billing-report-cards"),
     path("billing/paystack/webhook/", PaystackWebhookView.as_view(), name="billing-paystack-webhook"),
+    path("billing/flutterwave/webhook/", FlutterwaveWebhookView.as_view(), name="billing-flutterwave-webhook"),
     path("billing/bachs/webhook/", BachsWebhookView.as_view(), name="billing-bachs-webhook"),
     path("platform/billing/adjustments/", PlatformBillingAdjustmentView.as_view(), name="platform-billing-adjustment"),
     path("platform/billing/issues/", PlatformBillingIssuesView.as_view(), name="platform-billing-issues"),

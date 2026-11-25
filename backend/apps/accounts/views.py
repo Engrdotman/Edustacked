@@ -37,6 +37,7 @@ from .emailing import (
     send_demo_request_notification,
     send_email_verification,
     send_password_setup_email,
+    send_password_reset_email,
 )
 from .models import EmailVerificationToken, GoogleIdentity, GoogleLoginChallenge
 from .serializers import (
@@ -586,7 +587,7 @@ class PasswordResetRequestView(APIView):
         email = serializer.validated_data["email"].strip().lower()
         user = User.objects.filter(login_email=email, is_active=True).first()
         if user:
-            send_password_setup_email(user)
+            send_password_reset_email(user)
         return Response(
             {"detail": "If an active account matches that email, password instructions have been sent."},
             status=status.HTTP_200_OK,

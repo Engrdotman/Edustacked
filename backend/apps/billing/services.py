@@ -26,6 +26,11 @@ def paystack_signature_is_valid(raw_body, signature):
     return hmac.compare_digest(expected, signature)
 
 
+def flutterwave_signature_is_valid(signature):
+    secret = getattr(settings, "FLUTTERWAVE_WEBHOOK_SECRET", "")
+    return bool(secret and signature and hmac.compare_digest(secret, signature))
+
+
 def bachs_signature_is_valid(raw_body, headers):
     secret = getattr(settings, "BACHS_WEBHOOK_SECRET", "")
     if not secret:

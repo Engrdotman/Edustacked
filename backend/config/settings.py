@@ -286,6 +286,23 @@ if not DEBUG and urlparse(FRONTEND_BASE_URL).hostname in {"localhost", "127.0.0.
     # A copied local .env value must not make production verification links
     # point back to a developer's computer.
     FRONTEND_BASE_URL = "https://edustacked.vercel.app"
+PASSWORD_RESET_FRONTEND_URL = os.getenv(
+    "PASSWORD_RESET_FRONTEND_URL",
+    "http://localhost:5173" if DEBUG else "https://edustackedng.netlify.app",
+).strip().rstrip("/")
+if not DEBUG and urlparse(PASSWORD_RESET_FRONTEND_URL).hostname in {"localhost", "127.0.0.1"}:
+    PASSWORD_RESET_FRONTEND_URL = "https://edustackedng.netlify.app"
+password_reset_frontend_parts = urlparse(PASSWORD_RESET_FRONTEND_URL)
+if (
+    not password_reset_frontend_parts.hostname
+    or password_reset_frontend_parts.scheme not in ({"http", "https"} if DEBUG else {"https"})
+    or password_reset_frontend_parts.path not in {"", "/"}
+    or password_reset_frontend_parts.query
+    or password_reset_frontend_parts.fragment
+):
+    raise ImproperlyConfigured(
+        "PASSWORD_RESET_FRONTEND_URL must be a valid frontend origin (HTTPS in production)."
+    )
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY", "")
 FLUTTERWAVE_SECRET_KEY = os.getenv("FLUTTERWAVE_SECRET_KEY", "")
 PAYSTACK_WEBHOOK_SECRET = os.getenv("PAYSTACK_WEBHOOK_SECRET", "").strip() or PAYSTACK_SECRET_KEY

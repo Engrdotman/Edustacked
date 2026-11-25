@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import BrandMark from '../components/BrandMark.jsx'
+import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { academicList, academicRequest, ApiError } from '../services/api.js'
 
@@ -74,6 +75,7 @@ export default function AcademicSetupPage({ navigate }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [confirmation, setConfirmation] = useState(null)
 
   const refreshSessions = useCallback(async () => setSessions(await academicList('academic-sessions/')), [])
   const refreshClasses = useCallback(async () => setClasses(await academicList('classes/')), [])
@@ -256,8 +258,19 @@ export default function AcademicSetupPage({ navigate }) {
   }
 
   async function changeStatus(path, field, value, refresh, confirmText) {
-    if (confirmText && !window.confirm(confirmText)) return
-    await submit(() => academicRequest(path, { method: 'PATCH', body: { [field]: value } }), refresh)
+    const action = () => submit(() => academicRequest(path, { method: 'PATCH', body: { [field]: value } }), refresh)
+    if (confirmText) {
+      setConfirmation({ title: 'Confirm this change', message: confirmText, action })
+      return
+    }
+    await action()
+  }
+
+  async function confirmAcademicChange() {
+    const action = confirmation?.action
+    if (!action) return
+    await action()
+    setConfirmation(null)
   }
 
   function cancelAll() {
@@ -376,6 +389,13 @@ export default function AcademicSetupPage({ navigate }) {
           </>
         )}
       </section>
+      {confirmation && <ConfirmDialog
+        title={confirmation.title}
+        message={confirmation.message}
+        busy={saving}
+        onConfirm={confirmAcademicChange}
+        onCancel={() => setConfirmation(null)}
+      />}
     </main>
   )
 }
