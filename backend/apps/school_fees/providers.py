@@ -8,6 +8,8 @@ from urllib.request import Request, urlopen
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 
+from apps.billing.providers import BachsProvider
+
 
 class SchoolPaymentProvider:
     provider = ""
@@ -165,4 +167,6 @@ def provider_for(name):
         return PaystackSchoolProvider()
     if name == "flutterwave":
         return FlutterwaveSchoolProvider()
-    raise ValidationError({"provider": "Choose Paystack or Flutterwave."})
+    if name == "bachs":
+        return BachsProvider()
+    raise ValidationError({"provider": "Choose Paystack, Flutterwave, or Bachs."})

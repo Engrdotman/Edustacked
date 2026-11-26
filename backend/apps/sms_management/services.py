@@ -14,7 +14,7 @@ from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from apps.billing.providers import FlutterwaveProvider, PaystackProvider
+from apps.billing.providers import BachsProvider, FlutterwaveProvider, PaystackProvider
 from apps.schools.models import School
 
 from .models import (
@@ -364,7 +364,9 @@ def _provider_instance(provider):
         return PaystackProvider()
     if provider == SMSPurchase.Provider.FLUTTERWAVE:
         return FlutterwaveProvider()
-    raise ValidationError({"provider": "Choose Paystack or Flutterwave for the SMS bundle checkout."})
+    if provider == SMSPurchase.Provider.BACHS:
+        return BachsProvider()
+    raise ValidationError({"provider": "Choose Paystack, Flutterwave, or Bachs for the SMS bundle checkout."})
 
 
 def initialize_sms_purchase(*, school, user, bundle, provider_name):
@@ -397,8 +399,9 @@ def initialize_sms_purchase(*, school, user, bundle, provider_name):
         payment.save(update_fields=("status", "updated_at"))
         raise ValidationError({"payment": "The payment provider did not return a secure checkout link."})
     payment.authorization_url = authorization_url
-    payment.provider_metadata = {"checkout_id": checkout.get("id", "")}
-    payment.provider_transaction_id = str(checkout.get("id", ""))
+    checkout_id = checkout.get("checkout_id") or checkout.get("id", "")
+    payment.provider_metadata = {"checkout_id": checkout_id}
+    payment.provider_transaction_id = str(checkout_id)
     payment.save(update_fields=("authorization_url", "provider_metadata", "provider_transaction_id", "updated_at"))
     return payment
 
@@ -444,6 +447,8 @@ def verify_sms_purchase(payment, *, transaction_id=""):
     provider = _provider_instance(payment.provider)
     if payment.provider == SMSPurchase.Provider.PAYSTACK:
         data = provider.verify(payment.reference)
+    elif payment.provider == SMSPurchase.Provider.BACHS:
+        data = provider.verify(transaction_id or payment.provider_metadata.get("checkout_id") or payment.provider_transaction_id)
     else:
         transaction_id = transaction_id or payment.provider_transaction_id
         if not transaction_id:

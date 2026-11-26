@@ -72,6 +72,7 @@ class SMSPurchase(models.Model):
     class Provider(models.TextChoices):
         PAYSTACK = "paystack", "Paystack"
         FLUTTERWAVE = "flutterwave", "Flutterwave"
+        BACHS = "bachs", "Bachs"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"

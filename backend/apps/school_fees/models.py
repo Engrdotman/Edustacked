@@ -13,6 +13,7 @@ class SchoolFeeSettings(models.Model):
     class Provider(models.TextChoices):
         PAYSTACK = "paystack", "Paystack"
         FLUTTERWAVE = "flutterwave", "Flutterwave"
+        BACHS = "bachs", "Bachs"
 
     class AccountStatus(models.TextChoices):
         NOT_CONFIGURED = "not_configured", "Not configured"

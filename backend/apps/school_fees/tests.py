@@ -178,6 +178,64 @@ class SchoolFeesApiTests(TestCase):
         self.assertEqual(response.data["settings"]["account_number"], "••••6789")
         provider.connect_account.assert_called_once()
 
+    @override_settings(FRONTEND_BASE_URL="https://edustacked.example")
+    @patch("apps.billing.providers.BachsProvider.connect_capabilities", return_value=set())
+    def test_bachs_connect_is_disabled_until_eduStacked_platform_is_approved(self, connect_capabilities):
+        response = self.api("post", "/api/v1/school-fees/settings/bachs-connect/", {
+            "contact_email": "owner@northside.example", "entity_type": "company",
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("Connect is not enabled", str(response.data))
+        connect_capabilities.assert_called_once()
+
+    @override_settings(BACHS_WEBHOOK_SECRET="bachs-fee-hook")
+    @patch("apps.billing.views.BachsProvider.verify")
+    @patch("apps.school_fees.views.provider_for")
+    def test_bachs_direct_fee_checkout_and_webhook_credit_only_after_server_verification(self, provider_for_mock, verify):
+        self.configure_online(provider="bachs")
+        charge = self.create_schedule().charges.get()
+        provider = Mock()
+        provider.initialize.return_value = {
+            "authorization_url": "https://checkout.bachs.io/c/fee-test", "checkout_id": "chk-fee-test",
+        }
+        provider_for_mock.return_value = provider
+        initialized = self.api("post", "/api/v1/parent/fees/payments/initialize/", {
+            "allocations": [{"fee_charge_id": charge.pk, "amount_minor": 25_000}],
+        }, user=self.parent)
+        self.assertEqual(initialized.status_code, status.HTTP_201_CREATED, initialized.data)
+        payment = SchoolFeePayment.objects.get(reference=initialized.data["reference"])
+        self.assertEqual(payment.provider_metadata["checkout_id"], "chk-fee-test")
+        self.assertEqual(payment.provider_metadata["provider_account_id"], "ACCT_school_account")
+        provider.initialize.assert_called_once()
+        self.assertEqual(provider.initialize.call_args.kwargs["connected_account_id"], "ACCT_school_account")
+
+        verify.return_value = {
+            "id": "charge-fee-test", "reference": payment.reference, "status": "success",
+            "amount": payment.amount_minor, "currency": payment.currency, "channel": "card",
+        }
+        event = {"id": "evt-fee-test", "type": "checkout.completed", "account": "ACCT_school_account", "data": {
+            "checkout_id": "chk-fee-test", "reference": payment.reference,
+            "status": "completed", "payment_status": "paid", "amount": "250.00", "currency": "NGN",
+        }}
+        raw = json.dumps(event, separators=(",", ":")).encode()
+        timestamp = str(int(__import__("time").time()))
+        signature = hmac.new(b"bachs-fee-hook", f"{timestamp}.".encode() + raw, hashlib.sha256).hexdigest()
+        self.client.force_authenticate(user=None)
+        accepted = self.client.generic(
+            "POST", "/api/v1/billing/bachs/webhook/", raw, content_type="application/json",
+            HTTP_X_BACHS_SIGNATURE_V2=f"t={timestamp},v1={signature}",
+        )
+        repeated = self.client.generic(
+            "POST", "/api/v1/billing/bachs/webhook/", raw, content_type="application/json",
+            HTTP_X_BACHS_SIGNATURE_V2=f"t={timestamp},v1={signature}",
+        )
+        self.assertEqual(accepted.status_code, status.HTTP_200_OK, accepted.data)
+        self.assertEqual(repeated.status_code, status.HTTP_200_OK, repeated.data)
+        verify.assert_called_once_with("chk-fee-test", connected_account_id="ACCT_school_account")
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, SchoolFeePayment.Status.SUCCESS)
+        self.assertEqual(payment.ledger_entries.filter(kind=FeeLedgerEntry.Kind.PAYMENT).count(), 1)
+
     @patch("apps.school_fees.views.provider_for")
     def test_parent_can_start_online_payment_only_for_linked_student_and_backend_price(self, provider_for_mock):
         setting = self.configure_online()
@@ -197,6 +255,26 @@ class SchoolFeesApiTests(TestCase):
         foreign_charge = FeeCharge.objects.create(school=self.school, fee_schedule=charge.fee_schedule, student=other_student, enrollment=other_student.enrollments.get(), amount_minor=charge.amount_minor, created_by=self.admin)
         denied = self.api("post", "/api/v1/parent/fees/payments/initialize/", {"allocations": [{"fee_charge_id": foreign_charge.pk, "amount_minor": 1_000}]}, user=self.parent)
         self.assertEqual(denied.status_code, status.HTTP_404_NOT_FOUND)
+
+    @patch("apps.school_fees.views.provider_for")
+    def test_parent_cannot_repeat_a_fee_charge_to_inflate_checkout_amount(self, provider_for_mock):
+        self.configure_online()
+        charge = self.create_schedule().charges.get()
+        provider = Mock()
+        provider.initialize.return_value = {"authorization_url": "https://checkout.example.test/secure"}
+        provider_for_mock.return_value = provider
+        before = SchoolFeePayment.objects.count()
+
+        response = self.api("post", "/api/v1/parent/fees/payments/initialize/", {
+            "allocations": [
+                {"fee_charge_id": charge.pk, "amount_minor": 20_000},
+                {"fee_charge_id": charge.pk, "amount_minor": 20_000},
+            ],
+        }, user=self.parent)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(SchoolFeePayment.objects.count(), before)
+        provider.initialize.assert_not_called()
 
     @patch("apps.school_fees.views.provider_for")
     def test_parent_can_pay_for_two_linked_children_in_one_online_checkout(self, provider_for_mock):
@@ -289,6 +367,37 @@ class SchoolFeesApiTests(TestCase):
         self.assertEqual(callback.data["status"], SchoolFeePayment.Status.FAILED)
         self.assertFalse(FeeLedgerEntry.objects.filter(payment__reference=initialized.data["reference"]).exists())
 
+    @patch("apps.school_fees.views.provider_for")
+    def test_verified_success_recovers_online_payment_previously_marked_failed(self, provider_for_mock):
+        self.configure_online()
+        charge = self.create_schedule().charges.get()
+        provider = Mock()
+        provider.initialize.return_value = {"authorization_url": "https://checkout.example.test/secure"}
+        provider.verify.return_value = {"reference": "", "status": "failed", "amount": 10_000, "currency": "NGN", "id": "123456"}
+        provider_for_mock.return_value = provider
+        initialized = self.api("post", "/api/v1/parent/fees/payments/initialize/", {
+            "allocations": [{"fee_charge_id": charge.pk, "amount_minor": 10_000}],
+        }, user=self.parent)
+        reference = initialized.data["reference"]
+        provider.verify.return_value["reference"] = reference
+        first_check = self.api("post", f"/api/v1/parent/fees/payments/{reference}/", {}, user=self.parent)
+        self.assertEqual(first_check.data["status"], SchoolFeePayment.Status.FAILED)
+        self.assertFalse(FeeLedgerEntry.objects.filter(payment__reference=reference).exists())
+
+        provider.verify.return_value.update({"status": "success", "amount": 10_000})
+        retry = self.api("post", f"/api/v1/parent/fees/payments/{reference}/", {}, user=self.parent)
+
+        self.assertEqual(retry.status_code, status.HTTP_200_OK, retry.data)
+        self.assertEqual(retry.data["status"], SchoolFeePayment.Status.SUCCESS)
+        self.assertEqual(FeeLedgerEntry.objects.filter(payment__reference=reference, kind=FeeLedgerEntry.Kind.PAYMENT).count(), 1)
+
+    def test_malformed_physical_payment_allocations_return_validation_error(self):
+        with self.assertRaises(ValidationError):
+            record_physical_payment(
+                school=self.school, actor=self.admin, amount_minor=10_000,
+                method="cash", allocations=[None],
+            )
+
     @override_settings(PAYSTACK_WEBHOOK_SECRET="school-fee-webhook-secret")
     @patch("apps.school_fees.views.provider_for")
     def test_signed_webhook_verifies_transaction_and_duplicate_event_is_idempotent(self, provider_for_mock):
@@ -313,6 +422,37 @@ class SchoolFeesApiTests(TestCase):
         self.assertEqual(PaymentProviderEvent.objects.count(), 1)
         bad = self.client.post("/api/v1/school-fees/webhooks/paystack/", payload, content_type="application/json", HTTP_X_PAYSTACK_SIGNATURE="invalid")
         self.assertEqual(bad.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    @override_settings(FLUTTERWAVE_WEBHOOK_SECRET="fee-flw-hook")
+    @patch("apps.school_fees.views.provider_for")
+    def test_flutterwave_parent_fee_webhook_requeries_provider_and_allocates_once(self, provider_for_mock):
+        self.configure_online(provider="flutterwave")
+        charge = self.create_schedule().charges.get()
+        provider = Mock()
+        provider.initialize.return_value = {"authorization_url": "https://checkout.example.test/secure"}
+        provider.verify.return_value = {
+            "reference": "", "status": "success", "amount": 25_000,
+            "currency": "NGN", "id": "654321", "channel": "card",
+        }
+        provider_for_mock.return_value = provider
+        initialized = self.api("post", "/api/v1/parent/fees/payments/initialize/", {
+            "allocations": [{"fee_charge_id": charge.pk, "amount_minor": 25_000}],
+        }, user=self.parent)
+        self.assertEqual(initialized.status_code, status.HTTP_201_CREATED, initialized.data)
+        payment = SchoolFeePayment.objects.get(reference=initialized.data["reference"])
+        provider.verify.return_value["reference"] = payment.reference
+        payload = json.dumps({"event": "charge.completed", "data": {"id": 654321, "tx_ref": payment.reference}}).encode()
+        self.client.force_authenticate(user=None)
+
+        first = self.client.post("/api/v1/webhooks/flutterwave/", data=payload, content_type="application/json", HTTP_VERIF_HASH="fee-flw-hook")
+        duplicate = self.client.post("/api/v1/webhooks/flutterwave/", data=payload, content_type="application/json", HTTP_VERIF_HASH="fee-flw-hook")
+        self.assertEqual(first.status_code, status.HTTP_200_OK, first.data)
+        self.assertEqual(duplicate.status_code, status.HTTP_200_OK, duplicate.data)
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, SchoolFeePayment.Status.SUCCESS)
+        self.assertEqual(payment.allocations.count(), 1)
+        self.assertEqual(payment.ledger_entries.filter(kind=FeeLedgerEntry.Kind.PAYMENT).count(), 1)
+        provider.verify.assert_called_once_with(654321)
 
     def test_termii_failure_does_not_undo_physical_payment_and_receipt_code_is_hashed(self):
         charge = self.create_schedule().charges.get()

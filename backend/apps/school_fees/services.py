@@ -194,9 +194,9 @@ def record_physical_payment(*, school, actor, amount_minor, method, allocations,
         raise ValidationError({"amount_minor": "Payment amount must be greater than zero."})
     if method not in SchoolFeePayment.Method.values:
         raise ValidationError({"method": "Choose cash, POS, bank transfer, or another supported method."})
-    if not allocations:
+    if not isinstance(allocations, list) or not allocations:
         raise ValidationError({"allocations": "Choose at least one student fee to receive this payment."})
-    if not isinstance(allocations, list) or any(not isinstance(item, dict) for item in allocations):
+    if any(not isinstance(item, dict) for item in allocations):
         raise ValidationError({"allocations": "Payment allocations must be a list of selected student fees."})
     first = allocations[0]
     first_charge = FeeCharge.objects.filter(pk=first.get("fee_charge_id") or first.get("charge_id"), school=school).first() if first.get("fee_charge_id") or first.get("charge_id") else None
@@ -225,7 +225,11 @@ def confirm_online_payment(payment, provider_result, *, actor=None):
     payment = SchoolFeePayment.objects.select_for_update().get(pk=payment.pk)
     if payment.status == SchoolFeePayment.Status.SUCCESS:
         return payment, False
-    if payment.status != SchoolFeePayment.Status.PENDING:
+    # A provider can complete a charge after an earlier checkout/callback marked
+    # it failed (for example, a timeout or out-of-order event). A server-verified
+    # success may recover a failed online payment; refunded/reversed payments may
+    # never be revived this way.
+    if payment.status not in {SchoolFeePayment.Status.PENDING, SchoolFeePayment.Status.FAILED}:
         return payment, False
     reference = str(provider_result.get("reference") or provider_result.get("tx_ref") or "")
     status_value = str(provider_result.get("status", "")).lower()
@@ -235,7 +239,7 @@ def confirm_online_payment(payment, provider_result, *, actor=None):
         raise ValidationError({"payment": "The provider has not confirmed this payment as successful."})
     if amount is None or int(amount) != payment.amount_minor:
         raise ValidationError({"payment": "The confirmed amount does not match this school's fee payment."})
-    if currency and currency != payment.currency:
+    if currency != payment.currency:
         raise ValidationError({"payment": "The provider confirmed a different currency for this payment."})
     provider_method = str(provider_result.get("channel") or provider_result.get("payment_type") or "").strip().lower().replace(" ", "_")
     payment.method = {
@@ -243,6 +247,7 @@ def confirm_online_payment(payment, provider_result, *, actor=None):
         "bank": SchoolFeePayment.Method.BANK_TRANSFER,
         "banktransfer": SchoolFeePayment.Method.BANK_TRANSFER,
         "bank_transfer": SchoolFeePayment.Method.BANK_TRANSFER,
+        "ngn_bank_transfer": SchoolFeePayment.Method.BANK_TRANSFER,
         "account": SchoolFeePayment.Method.BANK_TRANSFER,
         "ussd": SchoolFeePayment.Method.USSD,
     }.get(provider_method, SchoolFeePayment.Method.OTHER if provider_method else payment.method)

@@ -27,6 +27,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.academics.models import AcademicSession, ClassArm, ClassLevel, Term
+from apps.billing.providers import BachsProvider
 from apps.parent_portal.permissions import HasGuardianPortalAccess
 from apps.parent_portal.services import linked_student_queryset
 from apps.schools.permissions import ROLE_PERMISSIONS, school_allows_capability, authorized_membership
@@ -153,7 +154,8 @@ class SchoolFeeSettingsView(SchoolFeeView):
             row.allow_excess_credit = bool(request.data["allow_excess_credit"])
         if "allowed_channels" in request.data:
             channels = request.data["allowed_channels"]
-            if not isinstance(channels, list) or any(value not in {"card", "bank_transfer", "ussd"} for value in channels):
+            valid_channels = {"card", "bank_transfer"} if row.provider == SchoolFeeSettings.Provider.BACHS else {"card", "bank_transfer", "ussd"}
+            if not isinstance(channels, list) or any(value not in valid_channels for value in channels):
                 raise serializers.ValidationError({"allowed_channels": "Choose card, bank transfer, or USSD payment channels."})
             row.allowed_channels = channels
         try:
@@ -183,6 +185,8 @@ class ConnectPaymentAccountView(SchoolFeeView):
     def post(self, request, **kwargs):
         school = self.school(request)
         provider_name = str(request.data.get("provider", ""))
+        if provider_name == "bachs":
+            raise serializers.ValidationError({"provider": "Use Bachs Connect setup to connect the school account. Bachs needs a hosted identity and capability check, not bank verification here."})
         bank_code = str(request.data.get("bank_code", "")).strip()
         bank_name = str(request.data.get("bank_name", "")).strip()
         account_number = str(request.data.get("account_number", "")).strip()
@@ -221,6 +225,88 @@ class ConnectPaymentAccountView(SchoolFeeView):
         except DjangoValidationError as exc:
             raise serializers.ValidationError(getattr(exc, "message_dict", None) or exc.messages) from exc
         return Response({"detail": f"Bank account verified and connected with {provider_name.title()}. Online school-fee payments are enabled.", "settings": SchoolFeeSettingsView().get(request).data}, status=status.HTTP_200_OK)
+
+
+class BachsSchoolConnectView(SchoolFeeView):
+    fee_permissions = {"POST": "fees.settings", "GET": "fees.settings"}
+
+    def post(self, request, **kwargs):
+        school = self.school(request)
+        contact_email = str(request.data.get("contact_email", "")).strip().lower()
+        entity_type = str(request.data.get("entity_type", "")).strip().lower()
+        row, _ = SchoolFeeSettings.objects.get_or_create(school=school)
+        provider = BachsProvider()
+        callback_url = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/app/finance?bachs_connect=return"
+        if not callback_url.startswith("https://"):
+            raise serializers.ValidationError({"callback_url": "Bachs school onboarding requires a public HTTPS frontend URL."})
+        try:
+            if row.provider == SchoolFeeSettings.Provider.BACHS and row.provider_account_id:
+                account_id = row.provider_account_id
+            else:
+                account = provider.create_connected_school_account(
+                    school_name=school.name, contact_email=contact_email,
+                    entity_type=entity_type,
+                )
+                account_id = account["account_id"]
+                # Save immediately so an expired/failed hosted link can be reissued
+                # without creating a second connected account.
+                row.provider = SchoolFeeSettings.Provider.BACHS
+                row.provider_account_id = account_id
+                row.bank_name = "Bachs Connect"
+                row.bank_code = ""
+                row.account_number = ""
+                row.account_type = ""
+                row.account_name = school.name[:200]
+                row.account_verified_name = ""
+                row.account_status = SchoolFeeSettings.AccountStatus.PENDING
+                row.account_verified_at = None
+                row.online_enabled = False
+                row.allowed_channels = []
+                row.save()
+            onboarding = provider.create_connected_account_link(account_id, return_url=callback_url)
+        except (DjangoValidationError, ImproperlyConfigured) as exc:
+            raise serializers.ValidationError(getattr(exc, "message_dict", None) or getattr(exc, "messages", [str(exc)])) from exc
+        return Response({
+            "detail": "Continue to Bachs to verify the school’s financial representative and activate fee collection. Parent payments stay disabled until Bachs confirms the required account capabilities.",
+            "onboarding_url": onboarding["onboarding_url"],
+            "account_status": row.account_status,
+        }, status=status.HTTP_200_OK)
+
+    def get(self, request, **kwargs):
+        school = self.school(request)
+        row = SchoolFeeSettings.objects.filter(school=school, provider=SchoolFeeSettings.Provider.BACHS).first()
+        if row is None or not row.provider_account_id:
+            raise serializers.ValidationError({"provider": "Start Bachs Connect setup before checking the school account."})
+        try:
+            capabilities = BachsProvider().connected_account_capabilities(row.provider_account_id)
+        except (DjangoValidationError, ImproperlyConfigured) as exc:
+            raise serializers.ValidationError(getattr(exc, "message_dict", None) or getattr(exc, "messages", [str(exc)])) from exc
+        supported_channels = []
+        if capabilities.get("ngn_card_collection") == "active":
+            supported_channels.append("card")
+        if capabilities.get("bank_transfer") == "active":
+            supported_channels.append("bank_transfer")
+        if capabilities.get("payouts") == "active" and supported_channels:
+            row.account_status = SchoolFeeSettings.AccountStatus.VERIFIED
+            row.account_verified_name = school.name[:200]
+            row.account_verified_at = row.account_verified_at or timezone.now()
+            selected = [value for value in row.allowed_channels if value in supported_channels]
+            row.allowed_channels = selected or supported_channels
+        else:
+            row.account_status = SchoolFeeSettings.AccountStatus.PENDING
+            row.account_verified_name = ""
+            row.account_verified_at = None
+            row.online_enabled = False
+            row.allowed_channels = supported_channels
+        try:
+            row.save()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(getattr(exc, "message_dict", None) or exc.messages) from exc
+        return Response({
+            "detail": "Bachs has verified the school account." if row.account_status == SchoolFeeSettings.AccountStatus.VERIFIED else "Bachs is still reviewing the school account. Parent fee payments remain disabled until the required collection and payout capabilities are active.",
+            "settings": SchoolFeeSettingsView().get(request).data,
+            "capabilities": capabilities,
+        })
 
 
 class FeeScheduleListCreateView(SchoolFeeView):
@@ -554,7 +640,9 @@ class ParentPaymentInitializeView(ParentFeeView):
         if len(charge_ids) != len(allocations) or any(not item for item in charge_ids):
             raise serializers.ValidationError({"allocations": "Select valid student fee items."})
         charges = list(FeeCharge.objects.filter(pk__in=charge_ids).select_related("student", "school", "fee_schedule"))
-        if len(charges) != len(set(charge_ids)) or len({charge.school_id for charge in charges}) != 1:
+        # A repeated charge ID is not a second fee. Reject duplicate lines so a
+        # crafted request cannot multiply the amount checked against one balance.
+        if len(charge_ids) != len(set(charge_ids)) or len(charges) != len(charge_ids) or len({charge.school_id for charge in charges}) != 1:
             raise serializers.ValidationError({"allocations": "Online payments can include fees from one school at a time."})
         school = charges[0].school
         linked_ids = set(linked_student_queryset(request.user).values_list("id", flat=True))
@@ -585,21 +673,29 @@ class ParentPaymentInitializeView(ParentFeeView):
             method=SchoolFeePayment.Method.CARD, provider=setting.provider,
             reference=reference, amount_minor=total, currency="NGN", status=SchoolFeePayment.Status.PENDING,
             payer=request.user, guardian=guardian, payer_email=request.user.email,
-            provider_metadata={"pending_allocations": normalized, "subaccount_id": setting.provider_account_id},
+            provider_metadata={
+                "pending_allocations": normalized,
+                "provider_account_id": setting.provider_account_id,
+                "subaccount_id": setting.provider_account_id,
+            },
         )
         callback_url = f"{settings.FRONTEND_BASE_URL}/parent?fees_payment={reference}"
         try:
-            checkout = provider_for(setting.provider).initialize(
-                email=request.user.email, amount_minor=total, reference=reference,
-                callback_url=callback_url, subaccount_id=setting.provider_account_id,
-                channels=setting.allowed_channels,
-            )
+            provider = provider_for(setting.provider)
+            arguments = {
+                "email": request.user.email, "amount_minor": total, "reference": reference,
+                "callback_url": callback_url, "channels": setting.allowed_channels,
+            }
+            if setting.provider == SchoolFeeSettings.Provider.BACHS:
+                checkout = provider.initialize(**arguments, connected_account_id=setting.provider_account_id)
+            else:
+                checkout = provider.initialize(**arguments, subaccount_id=setting.provider_account_id)
         except (DjangoValidationError, ImproperlyConfigured) as exc:
             payment.status = SchoolFeePayment.Status.FAILED
             payment.save(update_fields=["status", "updated_at"])
             raise serializers.ValidationError(getattr(exc, "message_dict", None) or getattr(exc, "messages", [str(exc)])) from exc
         payment.authorization_url = checkout.get("authorization_url", "")
-        payment.provider_metadata["checkout_id"] = checkout.get("id", "")
+        payment.provider_metadata["checkout_id"] = checkout.get("checkout_id") or checkout.get("id", "")
         payment.save(update_fields=["authorization_url", "provider_metadata", "updated_at"])
         return Response({"reference": payment.reference, "authorization_url": payment.authorization_url, "amount_minor": payment.amount_minor, "status": payment.status}, status=status.HTTP_201_CREATED)
 
@@ -638,7 +734,7 @@ class ParentPaymentDetailView(ParentFeeView):
 
     def post(self, request, reference, **kwargs):
         payment = self.get_payment(request, reference)
-        if payment.status != SchoolFeePayment.Status.PENDING:
+        if payment.status not in {SchoolFeePayment.Status.PENDING, SchoolFeePayment.Status.FAILED}:
             student_ids = set(linked_student_queryset(request.user).values_list("id", flat=True))
             return Response(public_payment(payment, student_ids=student_ids))
         try:
@@ -646,6 +742,12 @@ class ParentPaymentDetailView(ParentFeeView):
             if payment.provider == "paystack":
                 result = provider.verify(payment.reference)
                 result = {**result, "reference": result.get("reference"), "status": result.get("status"), "amount": result.get("amount"), "currency": result.get("currency")}
+            elif payment.provider == SchoolFeeSettings.Provider.BACHS:
+                transaction_id = request.data.get("transaction_id") or request.query_params.get("transaction_id") or payment.provider_metadata.get("checkout_id")
+                result = provider.verify(
+                    transaction_id,
+                    connected_account_id=payment.provider_metadata.get("provider_account_id", ""),
+                )
             else:
                 transaction_id = request.data.get("transaction_id") or request.query_params.get("transaction_id") or payment.provider_metadata.get("checkout_id")
                 result = provider.verify(transaction_id)
@@ -741,6 +843,8 @@ class PaymentWebhookView(APIView):
         if payment is None:
             # Unknown provider references cannot update any school balance.
             return Response({"detail": "Payment reference was not found."}, status=404)
+        if PaymentProviderEvent.objects.filter(provider=provider_name, event_id=provider_event_id[:160]).exists():
+            return Response({"detail": "Duplicate event already processed."}, status=200)
         try:
             result = provider_for(provider_name).verify(transaction_id)
             if provider_name == "paystack":

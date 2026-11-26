@@ -1,7 +1,7 @@
 from django.urls import path
 
 from .views import (
-    BankListView, ConnectPaymentAccountView, FeeChargeListView, FeeIssueView,
+    BankListView, BachsSchoolConnectView, ConnectPaymentAccountView, FeeChargeListView, FeeIssueView,
     FeeNotificationRetryView, FeeScheduleDetailView, FeeScheduleListCreateView,
     FinanceOverviewView, ManualPaymentView, ParentFeeView, ParentPaymentDetailView,
     ParentPaymentInitializeView, ParentPaymentReceiptView, ParentReceiptOtpView,
@@ -13,6 +13,7 @@ urlpatterns = [
     path("school-fees/settings/", SchoolFeeSettingsView.as_view(), name="school-fee-settings"),
     path("school-fees/settings/banks/", BankListView.as_view(), name="school-fee-banks"),
     path("school-fees/settings/connect/", ConnectPaymentAccountView.as_view(), name="school-fee-connect-account"),
+    path("school-fees/settings/bachs-connect/", BachsSchoolConnectView.as_view(), name="school-fee-bachs-connect"),
     path("school-fees/overview/", FinanceOverviewView.as_view(), name="school-fee-overview"),
     path("school-fees/schedules/", FeeScheduleListCreateView.as_view(), name="school-fee-schedules"),
     path("school-fees/schedules/<int:pk>/", FeeScheduleDetailView.as_view(), name="school-fee-schedule-detail"),

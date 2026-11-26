@@ -93,6 +93,12 @@ The code does **not** read `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `CORS_ALLOWED
 
 Checkout is hosted by Flutterwave and initialized by the backend. After checkout and on webhook delivery, the backend verifies the transaction ID with Flutterwave and checks the reference, status, currency, and exact expected amount before applying credits or fees. Keep the secret key out of all `VITE_` variables and frontend source.
 
+For a safe test, use Flutterwave's **Test mode** API key (normally prefixed `FLWSECK_TEST-`) in `backend/.env` or a separate Railway staging service. Test transactions do not move real money. Do not replace the key on the active production backend while schools may be paying; that would send their checkout into test mode. Flutterwave's test keys and live keys are separate, while this app uses the same hosted Checkout API flow for either key. Use Flutterwave's published test card/account details in Test mode.
+
+Provider choices are user-selected rather than automatic: report-card credits and SMS bundles offer Flutterwave, Bachs, and Paystack; parent fee checkout uses the provider configured by the school. For Paystack and Flutterwave, the school verifies a receiving bank account in Finance settings. For Bachs, EDUstacked must first have Connect enabled, then the school completes Bachs's hosted onboarding. Parent fee payments are created as Bachs direct charges under that school's connected account, so the school receives the fee proceeds in its Bachs balance. Bachs events must be configured with `event_source=connect` or `all` for these direct charges to reach EDUstacked. The backend verifies every checkout with Bachs before updating the credit, SMS, or fee ledger. These payment routes do not silently retry another provider when a checkout is pending.
+
+Bachs Connect is not enabled on EDUstacked's account yet. Until Bachs activates Connect, report-card credit and SMS checkout can use Bachs, but schools cannot connect Bachs for parent fee collection; their existing Paystack or Flutterwave options remain available.
+
 ### Generate secrets locally
 
 Run this in a trusted local terminal for each independent secret, then paste the output directly into the appropriate Railway secret field. Do not commit the output:

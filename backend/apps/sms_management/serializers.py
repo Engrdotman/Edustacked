@@ -84,7 +84,7 @@ class SMSSendSerializer(serializers.Serializer):
 
 class SMSPurchaseInitSerializer(serializers.Serializer):
     bundle = serializers.IntegerField(min_value=1)
-    provider = serializers.ChoiceField(choices=("flutterwave", "paystack"), default="flutterwave")
+    provider = serializers.ChoiceField(choices=("flutterwave", "bachs", "paystack"), default="flutterwave")
 
 
 class SMSDateRangeSerializer(serializers.Serializer):

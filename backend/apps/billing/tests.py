@@ -3,6 +3,7 @@ import hmac
 import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
+import time
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -176,6 +177,132 @@ class BillingIntegrationTests(ReportCardApiTests):
             self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(CreditAccount.objects.get(school=self.school).balance, 23)
         self.assertEqual(CreditTransaction.objects.filter(payment=payment).count(), 1)
+
+    @override_settings(FLUTTERWAVE_SECRET_KEY="fw-test", FLUTTERWAVE_WEBHOOK_SECRET="fw-hook")
+    @patch("apps.billing.providers.FlutterwaveProvider.initialize", return_value={"authorization_url": "https://checkout.flutterwave.com/test"})
+    @patch("apps.billing.views.FlutterwaveProvider.verify")
+    def test_flutterwave_credit_webhook_verifies_provider_and_credits_once(self, verify, _initialize):
+        package = CreditPackage.objects.create(name="Flutterwave pack", credits=4, price_minor=40_000)
+        started = self.api("post", "/api/v1/billing/purchases/", {"package": package.pk, "provider": "flutterwave"})
+        self.assertEqual(started.status_code, status.HTTP_201_CREATED, started.data)
+        payment = CreditPayment.objects.get(reference=started.data["reference"])
+        verify.return_value = {
+            "id": 8675309, "reference": payment.reference, "status": "success",
+            "amount": payment.amount_minor, "currency": payment.currency,
+            "customer": {"email": payment.customer_email},
+        }
+        raw = json.dumps({"event": "charge.completed", "data": {"id": 8675309, "tx_ref": payment.reference}}, separators=(",", ":")).encode()
+        self.client.force_authenticate(user=None)
+
+        first = self.client.post("/api/v1/webhooks/flutterwave/", data=raw, content_type="application/json", HTTP_VERIF_HASH="fw-hook")
+        duplicate = self.client.post("/api/v1/webhooks/flutterwave/", data=raw, content_type="application/json", HTTP_VERIF_HASH="fw-hook")
+        self.assertEqual(first.status_code, status.HTTP_200_OK, first.data)
+        self.assertEqual(duplicate.status_code, status.HTTP_200_OK, duplicate.data)
+        self.assertEqual(CreditAccount.objects.get(school=self.school).balance, 24)
+        self.assertEqual(CreditTransaction.objects.filter(payment=payment, kind=CreditTransaction.Kind.PURCHASE).count(), 1)
+        verify.assert_called_once_with(8675309)
+
+    @override_settings(BACHS_WEBHOOK_SECRET="bachs-hook")
+    @patch("apps.billing.views.BachsProvider.verify")
+    def test_bachs_signed_webhook_rejects_stale_signature_and_credits_once(self, verify):
+        payment = CreditPayment.objects.create(
+            school=self.school, package_name="Bachs pack", credits=2, amount_minor=20_000,
+            provider="bachs", reference="EDU-BACHS-TEST", customer_email=self.admin.email,
+            created_by=self.admin,
+        )
+        event = {"type": "checkout.completed", "data": {
+            "checkout_id": "chk-credit-test", "reference": payment.reference,
+            "status": "completed", "payment_status": "paid", "amount": "200.00",
+            "currency": "NGN", "customer": {"email": payment.customer_email},
+        }}
+        verify.return_value = {
+            "id": "charge-credit-test", "reference": payment.reference, "status": "success",
+            "amount": payment.amount_minor, "currency": payment.currency,
+            "customer": {"email": payment.customer_email},
+        }
+        raw = json.dumps(event, separators=(",", ":")).encode()
+        timestamp = str(int(time.time()))
+        signature = hmac.new(b"bachs-hook", f"{timestamp}.".encode() + raw, hashlib.sha256).hexdigest()
+        stale_timestamp = str(int(timestamp) - 301)
+        stale_signature = hmac.new(b"bachs-hook", f"{stale_timestamp}.".encode() + raw, hashlib.sha256).hexdigest()
+        self.client.force_authenticate(user=None)
+
+        stale = self.client.post(
+            "/api/v1/billing/bachs/webhook/", data=raw, content_type="application/json",
+            HTTP_X_BACHS_SIGNATURE_V2=f"t={stale_timestamp},v1={stale_signature}",
+        )
+        self.assertEqual(stale.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(CreditAccount.objects.get(school=self.school).balance, 20)
+
+        accepted = self.client.post(
+            "/api/v1/billing/bachs/webhook/", data=raw, content_type="application/json",
+            HTTP_X_BACHS_SIGNATURE_V2=f"t={timestamp},v1={signature}",
+        )
+        repeated = self.client.post(
+            "/api/v1/billing/bachs/webhook/", data=raw, content_type="application/json",
+            HTTP_X_BACHS_SIGNATURE_V2=f"t={timestamp},v1={signature}",
+        )
+        self.assertEqual(accepted.status_code, status.HTTP_200_OK, accepted.data)
+        self.assertEqual(repeated.status_code, status.HTTP_200_OK, repeated.data)
+        self.assertEqual(CreditAccount.objects.get(school=self.school).balance, 22)
+        self.assertEqual(CreditTransaction.objects.filter(payment=payment, kind=CreditTransaction.Kind.PURCHASE).count(), 1)
+        verify.assert_called_once_with("chk-credit-test", connected_account_id="")
+
+    @override_settings(BACHS_WEBHOOK_SECRET="bachs-hook")
+    @patch("apps.billing.views.BachsProvider.verify")
+    def test_bachs_paid_webhook_does_not_credit_until_server_verification_succeeds(self, verify):
+        payment = CreditPayment.objects.create(
+            school=self.school, package_name="Unsettled Bachs pack", credits=5, amount_minor=50_000,
+            provider="bachs", reference="EDU-BACHS-PENDING", customer_email=self.admin.email,
+            created_by=self.admin,
+        )
+        verify.return_value = {
+            "id": "charge-pending-test", "reference": payment.reference, "status": "pending",
+            "amount": payment.amount_minor, "currency": payment.currency,
+        }
+        event = {"type": "checkout.completed", "data": {
+            "checkout_id": "chk-pending-test", "reference": payment.reference,
+            "status": "completed", "payment_status": "paid", "amount": "500.00", "currency": "NGN",
+        }}
+        raw = json.dumps(event, separators=(",", ":")).encode()
+        timestamp = str(int(time.time()))
+        signature = hmac.new(b"bachs-hook", f"{timestamp}.".encode() + raw, hashlib.sha256).hexdigest()
+        self.client.force_authenticate(user=None)
+
+        response = self.client.generic(
+            "POST", "/api/v1/billing/bachs/webhook/", raw, content_type="application/json",
+            HTTP_X_BACHS_SIGNATURE_V2=f"t={timestamp},v1={signature}",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertFalse(response.data.get("reconciliation_required", False))
+        self.assertEqual(CreditAccount.objects.get(school=self.school).balance, 20)
+        self.assertFalse(CreditTransaction.objects.filter(payment=payment, kind=CreditTransaction.Kind.PURCHASE).exists())
+        verify.assert_called_once_with("chk-pending-test", connected_account_id="")
+
+    @override_settings(FLUTTERWAVE_WEBHOOK_SECRET="fw-refund-hook")
+    def test_flutterwave_refund_webhook_creates_one_reconciliation_item_without_silent_credit_clawback(self):
+        payment = CreditPayment.objects.create(
+            school=self.school, package_name="Refunded Flutterwave pack", credits=2,
+            amount_minor=20_000, provider="flutterwave", reference="EDU-FLW-REFUND",
+            provider_transaction_id="778899", customer_email=self.admin.email,
+            created_by=self.admin, status=CreditPayment.Status.SUCCESS,
+        )
+        event = {"event": "refund.completed", "data": {
+            "id": "RF-22", "tx_id": "778899", "status": "completed",
+            "amount_refunded": 200.00,
+        }}
+        raw = json.dumps(event, separators=(",", ":")).encode()
+        self.client.force_authenticate(user=None)
+
+        first = self.client.post("/api/v1/webhooks/flutterwave/", data=raw, content_type="application/json", HTTP_VERIF_HASH="fw-refund-hook")
+        duplicate = self.client.post("/api/v1/webhooks/flutterwave/", data=raw, content_type="application/json", HTTP_VERIF_HASH="fw-refund-hook")
+
+        self.assertEqual(first.status_code, status.HTTP_200_OK, first.data)
+        self.assertTrue(first.data["reconciliation_required"])
+        self.assertEqual(duplicate.status_code, status.HTTP_200_OK, duplicate.data)
+        self.assertEqual(payment.reconciliation_issues.filter(kind="provider_refund").count(), 1)
+        self.assertEqual(CreditAccount.objects.get(school=self.school).balance, 20)
 
     @patch("apps.billing.providers.PaystackProvider.initialize", return_value={"authorization_url": "https://checkout.paystack.com/test"})
     def test_processed_refund_is_audited_without_automatic_negative_balance(self, _initialize):

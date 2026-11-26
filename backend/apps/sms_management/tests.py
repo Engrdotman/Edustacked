@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 from datetime import date
+import time
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -143,6 +144,52 @@ class SMSManagementTests(TestCase):
         self.assertEqual(wallet.paid_value_balance_minor, 375000)
         self.assertEqual(SMSWalletTransaction.objects.filter(kind=SMSWalletTransaction.Kind.PURCHASE).count(), 1)
 
+    @override_settings(BACHS_API_KEY="sk_sandbox_sms-test", BACHS_API_BASE_URL="https://sandbox-api.bachs.io/v1")
+    @patch("apps.sms_management.services.BachsProvider")
+    def test_bachs_sms_checkout_saves_the_checkout_id_for_server_verification(self, provider_class):
+        provider_class.return_value.initialize.return_value = {
+            "authorization_url": "https://checkout.bachs.io/c/sms-test", "checkout_id": "chk-sms-test",
+        }
+        purchase = initialize_sms_purchase(school=self.school, user=self.owner, bundle=self.bundle, provider_name="bachs")
+        self.assertEqual(purchase.provider_metadata["checkout_id"], "chk-sms-test")
+        self.assertEqual(purchase.provider_transaction_id, "chk-sms-test")
+        self.assertEqual(purchase.status, SMSPurchase.Status.PENDING)
+
+    @override_settings(BACHS_WEBHOOK_SECRET="bachs-sms-hook")
+    @patch("apps.billing.views.BachsProvider.verify")
+    def test_bachs_webhook_reverifies_sms_payment_and_credits_once(self, verify):
+        payment = SMSPurchase.objects.create(
+            school=self.school, bundle=self.bundle, bundle_name=self.bundle.name,
+            credits=self.bundle.credits, amount_minor=self.bundle.price_minor,
+            provider=SMSPurchase.Provider.BACHS, reference="SMS-BACHS-UNIQUE-REF",
+            customer_email=self.owner.email, created_by=self.owner,
+            provider_transaction_id="chk-sms-hook-test", provider_metadata={"checkout_id": "chk-sms-hook-test"},
+        )
+        verify.return_value = {
+            "id": "charge-sms-test", "reference": payment.reference, "status": "success",
+            "amount": payment.amount_minor, "currency": payment.currency,
+        }
+        raw = json.dumps({"type": "checkout.completed", "data": {
+            "checkout_id": "chk-sms-hook-test", "reference": payment.reference,
+            "status": "completed", "payment_status": "paid", "amount": "3750.00", "currency": "NGN",
+        }}, separators=(",", ":")).encode()
+        timestamp = str(int(time.time()))
+        signature = hmac.new(b"bachs-sms-hook", f"{timestamp}.".encode() + raw, hashlib.sha256).hexdigest()
+        self.client.force_authenticate(user=None)
+        first = self.client.generic(
+            "POST", "/api/v1/billing/bachs/webhook/", raw, content_type="application/json",
+            HTTP_X_BACHS_SIGNATURE_V2=f"t={timestamp},v1={signature}",
+        )
+        repeated = self.client.generic(
+            "POST", "/api/v1/billing/bachs/webhook/", raw, content_type="application/json",
+            HTTP_X_BACHS_SIGNATURE_V2=f"t={timestamp},v1={signature}",
+        )
+        self.assertEqual(first.status_code, 200, first.data)
+        self.assertEqual(repeated.status_code, 200, repeated.data)
+        self.assertEqual(SMSWallet.objects.get(school=self.school).purchased_balance, self.bundle.credits)
+        self.assertEqual(SMSWalletTransaction.objects.filter(purchase=payment, kind=SMSWalletTransaction.Kind.PURCHASE).count(), 1)
+        verify.assert_called_once_with("chk-sms-hook-test", connected_account_id="")
+
     @patch("apps.sms_management.services.PaystackProvider")
     def test_purchase_checkout_uses_existing_paystack_provider_and_keeps_wallet_pending(self, provider_class):
         provider_class.return_value.initialize.return_value = {"authorization_url": "https://checkout.paystack.com/sms-test"}
@@ -215,6 +262,36 @@ class SMSManagementTests(TestCase):
         self.assertTrue(repeated.data["duplicate"])
         self.assertEqual(verify.call_count, 1)
         self.assertEqual(SMSWallet.objects.get(school=self.school).purchased_balance, 500)
+
+    @override_settings(FLUTTERWAVE_WEBHOOK_SECRET="sms-flw-hook")
+    @patch("apps.sms_management.views.FlutterwaveProvider.verify")
+    def test_flutterwave_webhook_verifies_and_credits_sms_bundle_once(self, verify):
+        from .models import SMSProviderEvent
+
+        payment = SMSPurchase.objects.create(
+            school=self.school, bundle=self.bundle, bundle_name=self.bundle.name,
+            credits=self.bundle.credits, amount_minor=self.bundle.price_minor,
+            provider=SMSPurchase.Provider.FLUTTERWAVE, reference="SMS-FLW-UNIQUE-REF",
+            customer_email=self.owner.email, created_by=self.owner,
+        )
+        verify.return_value = {
+            "id": 987654, "reference": payment.reference, "status": "success",
+            "amount": payment.amount_minor, "currency": "NGN",
+        }
+        payload = {"event": "charge.completed", "data": {"id": 987654, "tx_ref": payment.reference}}
+        raw = json.dumps(payload, separators=(",", ":")).encode()
+        endpoint = "/api/v1/webhooks/flutterwave/"
+        self.client.force_authenticate(user=None)
+
+        first = self.client.generic("POST", endpoint, raw, content_type="application/json", HTTP_VERIF_HASH="sms-flw-hook")
+        duplicate = self.client.generic("POST", endpoint, raw, content_type="application/json", HTTP_VERIF_HASH="sms-flw-hook")
+
+        self.assertEqual(first.status_code, 200, first.data)
+        self.assertEqual(duplicate.status_code, 200, duplicate.data)
+        self.assertEqual(SMSWallet.objects.get(school=self.school).purchased_balance, self.bundle.credits)
+        self.assertEqual(SMSWalletTransaction.objects.filter(purchase=payment).count(), 1)
+        self.assertEqual(SMSProviderEvent.objects.filter(payment=payment).count(), 1)
+        verify.assert_called_once_with(987654)
 
     def test_school_users_cannot_read_platform_sms_analytics_or_other_wallet(self):
         other_school = School.objects.create(name="Other SMS School")

@@ -1,5 +1,4 @@
 import json
-from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ImproperlyConfigured, ValidationError as DjangoValidationError
 from django.db import transaction
@@ -201,6 +200,10 @@ class FlutterwaveWebhookView(APIView):
         payment = CreditPayment.objects.filter(provider="flutterwave", reference=reference).select_related("school").first()
         if payment is None:
             return Response({"received": True})
+        # Once a verified charge is applied, repeated delivery of the same
+        # success notification needs no extra provider API request.
+        if payment.status in {CreditPayment.Status.SUCCESS, CreditPayment.Status.REVERSED}:
+            return Response({"received": True, "duplicate": True})
 
         # Never grant credits from webhook fields alone; recheck the transaction with Flutterwave.
         try:
@@ -223,6 +226,7 @@ class FlutterwaveWebhookView(APIView):
 class BachsWebhookView(APIView):
     permission_classes = (AllowAny,)
     authentication_classes = ()
+    throttle_classes = ()
 
     def post(self, request, **kwargs):
         if not bachs_signature_is_valid(request.body, request.headers):
@@ -234,45 +238,96 @@ class BachsWebhookView(APIView):
         if not isinstance(event, dict) or not isinstance(event.get("data"), dict):
             return Response({"detail": "Invalid event body."}, status=status.HTTP_400_BAD_REQUEST)
         event_data = event["data"]
-        reference = event_data.get("reference")
-        payment = CreditPayment.objects.filter(provider="bachs", reference=reference).first()
-        if payment is None:
-            return Response({"received": True})
-        event_type = event.get("type")
-        if event_type == "collection.succeeded":
-            customer = event_data.get("customer") or {}
-            amount_minor = None
-            try:
-                amount_value = Decimal(str(event_data.get("amount"))) * 100
-                amount_minor = int(amount_value) if amount_value.is_finite() and amount_value == amount_value.to_integral_value() else None
-            except (InvalidOperation, TypeError, ValueError):
-                pass
-            provider_status = event_data.get("status")
-            normalized = {
-                "id": event_data.get("charge_id") or event.get("id", ""),
-                "reference": reference,
-                "status": "success" if provider_status == "SUCCEEDED" else "pending",
-                "amount": amount_minor,
-                "currency": event_data.get("currency"),
-                "customer": customer,
-            }
-            if provider_status != "SUCCEEDED":
-                ReconciliationIssue.objects.get_or_create(
-                    kind="payment_mismatch", provider_reference=str(reference or ""),
-                    defaults={"school": payment.school, "payment": payment,
-                              "description": "Bachs reported a collected amount that needs review before credits can be granted. Manual reconciliation is required."},
-                )
+        reference = str(event_data.get("reference") or "").strip()
+        if not reference:
+            return Response({"detail": "Payment notification is missing its reference."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Bachs uses this one signed endpoint for platform purchases and direct
+        # charges from connected school accounts. A webhook is only a signal to
+        # verify; the signed payload itself never updates a balance.
+        credit_payment = CreditPayment.objects.filter(provider="bachs", reference=reference).select_related("school").first()
+        if credit_payment is not None:
+            payment_kind, payment = "credits", credit_payment
+        else:
+            from apps.school_fees.models import SchoolFeePayment
+            fee_payment = SchoolFeePayment.objects.filter(
+                provider="bachs", reference=reference, channel=SchoolFeePayment.Channel.ONLINE,
+            ).select_related("school").first()
+            if fee_payment is not None:
+                payment_kind, payment = "school_fees", fee_payment
             else:
-                try:
-                    apply_provider_result(payment, normalized)
-                except DjangoValidationError:
-                    ReconciliationIssue.objects.get_or_create(
-                        kind="payment_mismatch", provider_reference=str(reference or ""),
-                        defaults={"school": payment.school, "payment": payment,
-                                  "description": "Signed Bachs success did not match the internal payment amount, currency, email, or reference. Manual reconciliation is required."},
-                    )
-        elif event_type in {"collection.failed", "checkout.expired"}:
-            apply_provider_result(payment, {"status": "failed", "reference": reference})
+                from apps.sms_management.models import SMSPurchase
+                sms_purchase = SMSPurchase.objects.filter(provider="bachs", reference=reference).select_related("school").first()
+                if sms_purchase is None:
+                    return Response({"received": True})
+                payment_kind, payment = "sms", sms_purchase
+
+        event_type = str(event.get("type") or event.get("event") or "").lower()
+        if event_type in {"checkout.expired", "collection.failed"}:
+            if payment_kind == "credits":
+                apply_provider_result(payment, {"status": "failed", "reference": reference})
+            elif payment_kind == "school_fees":
+                from apps.school_fees.models import SchoolFeePayment
+                with transaction.atomic():
+                    locked = SchoolFeePayment.objects.select_for_update().get(pk=payment.pk)
+                    if locked.status == SchoolFeePayment.Status.PENDING:
+                        locked.status = SchoolFeePayment.Status.FAILED
+                        locked.save(update_fields=("status", "updated_at"))
+            else:
+                from apps.sms_management.services import apply_sms_purchase_result
+                apply_sms_purchase_result(payment, {"status": "failed", "reference": reference})
+            return Response({"received": True})
+
+        if event_type not in {"checkout.completed", "collection.succeeded"}:
+            return Response({"received": True})
+        if event_type == "checkout.completed" and str(event_data.get("payment_status") or "").lower() not in {"paid", "succeeded"}:
+            # A completed checkout can be a setup or a no-payment checkout.
+            return Response({"received": True, "payment_collected": False})
+
+        checkout_id = str(event_data.get("checkout_id") or "").strip()
+        if not checkout_id:
+            checkout_id = str(
+                payment.provider_metadata.get("checkout_id")
+                if payment_kind == "school_fees"
+                else payment.provider_transaction_id
+            ).strip()
+        if payment.status in {"success", "partially_reversed", "reversed", "refunded"}:
+            return Response({"received": True, "duplicate": True})
+        if not checkout_id:
+            return Response({"detail": "Payment notification is missing its checkout ID."}, status=status.HTTP_400_BAD_REQUEST)
+
+        connected_account_id = ""
+        if payment_kind == "school_fees":
+            connected_account_id = str(payment.provider_metadata.get("provider_account_id") or "")
+            if not connected_account_id:
+                return Response({"detail": "School payment is missing its connected account."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        try:
+            verified = BachsProvider().verify(checkout_id, connected_account_id=connected_account_id)
+        except (DjangoValidationError, ImproperlyConfigured):
+            # Transient provider failures should be retried by Bachs.
+            return Response({"detail": "Bachs confirmation is temporarily unavailable."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        if verified.get("status") == "pending":
+            return Response({"received": True, "payment_collected": False})
+
+        try:
+            if payment_kind == "credits":
+                apply_provider_result(payment, verified)
+            elif payment_kind == "school_fees":
+                from apps.school_fees.services import confirm_online_payment
+                confirm_online_payment(payment, verified)
+            else:
+                from apps.sms_management.services import apply_sms_purchase_result
+                apply_sms_purchase_result(payment, verified)
+        except DjangoValidationError:
+            ReconciliationIssue.objects.get_or_create(
+                kind="bachs_payment_mismatch", provider_reference=reference[:100],
+                defaults={
+                    "school": payment.school,
+                    "payment": payment if payment_kind == "credits" else None,
+                    "description": "Bachs confirmed a checkout that did not match this EDUstacked order's reference, amount, or currency. No balance was updated; review this payment manually.",
+                },
+            )
+            return Response({"received": True, "reconciliation_required": True})
         return Response({"received": True})
 
 

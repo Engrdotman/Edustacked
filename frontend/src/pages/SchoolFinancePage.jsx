@@ -24,6 +24,8 @@ export default function SchoolFinancePage({ navigate }) {
   const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'cash', payer_email: '', description: '' })
   const [scheduleForm, setScheduleForm] = useState(emptySchedule)
   const [connection, setConnection] = useState(emptyConnection)
+  const [bachsContactEmail, setBachsContactEmail] = useState(user?.email || '')
+  const [bachsEntityType, setBachsEntityType] = useState('company')
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState({ session: '', term: '', class_level: '', method: '', channel: '', status: '', date_from: '', date_to: '', search: '' })
   const [filterTerms, setFilterTerms] = useState([])
@@ -72,6 +74,7 @@ export default function SchoolFinancePage({ navigate }) {
   useEffect(() => {
     let active = true
     if (!connection.provider) return
+    if (connection.provider === 'bachs') { setBanks([]); return () => { active = false } }
     apiRequest(`school-fees/settings/banks/?provider=${connection.provider}`)
       .then((rows) => { if (active) setBanks(rows) })
       .catch((e) => { if (active) setBanks([]); if (active && connection.bank_code) setError(e.message) })
@@ -172,7 +175,7 @@ export default function SchoolFinancePage({ navigate }) {
   }
 
   async function loadBankList(provider) {
-    setConnection((current) => ({ ...current, provider, bank_code: '', bank_name: '' }))
+    setConnection((current) => ({ ...current, provider, bank_code: '', bank_name: '', account_number: '', account_type: '', business_mobile: '' }))
   }
 
   async function connectBank(event) {
@@ -181,6 +184,27 @@ export default function SchoolFinancePage({ navigate }) {
       const result = await apiRequest('school-fees/settings/connect/', { method: 'POST', body: connection })
       await load(); flashSuccess(result.detail)
     } catch (e) { flashError(e.message || 'The bank account could not be verified.') }
+    finally { setBusy(false) }
+  }
+
+  async function connectBachs(event) {
+    event.preventDefault(); setBusy(true); setError(''); setSuccess('')
+    try {
+      const result = await apiRequest('school-fees/settings/bachs-connect/', {
+        method: 'POST', body: { contact_email: bachsContactEmail, entity_type: bachsEntityType },
+      })
+      window.location.assign(result.onboarding_url)
+    } catch (e) { flashError(e.message || 'Bachs could not start school account verification.') }
+    finally { setBusy(false) }
+  }
+
+  async function checkBachsStatus() {
+    setBusy(true); setError(''); setSuccess('')
+    try {
+      const result = await apiRequest('school-fees/settings/bachs-connect/')
+      setSettings(result.settings)
+      flashSuccess(result.detail)
+    } catch (e) { flashError(e.message || 'Bachs account status could not be checked.') }
     finally { setBusy(false) }
   }
 
@@ -248,7 +272,7 @@ export default function SchoolFinancePage({ navigate }) {
         </form>
       </section>
 
-      <section className="fee-panel"><div className="fee-section-heading"><div><p className="panel-kicker">RECEIVE A PAYMENT</p><h2>Record an in-person payment</h2></div><p>Cash, POS, bank transfer, and other approved payments all post to the same student balance ledger.</p></div>
+      <section className="fee-panel"><div className="fee-section-heading"><div><p className="panel-kicker">RECEIVE A PAYMENT</p><h2>Record an in-person payment</h2></div><p>School owners, administrators, and accountants can record cash, POS, bank transfer, or another payment received at school. The entry updates the selected student’s balance and creates an auditable receipt.</p></div>
         <form className="fee-form-grid" onSubmit={recordPayment}>
           <label className="fee-wide-field">Find student or fee on this page<input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search the currently loaded fee records" /></label>
           <label className="fee-wide-field">Student fee<select required value={selectedCharge} onChange={(e) => { setSelectedCharge(e.target.value); const row = charges.find((item) => String(item.id) === e.target.value); setPaymentForm((current) => ({ ...current, amount: row ? (row.outstanding_minor / 100).toFixed(2) : '' })) }}><option value="">Select a fee with a balance</option>{visibleCharges.filter((item) => item.outstanding_minor > 0).map((item) => <option key={item.id} value={item.id}>{item.student_name} · {item.admission_number} · {item.class_name} {item.arm_name} · {item.category} · balance {money(item.outstanding_minor)}</option>)}</select></label>
@@ -266,18 +290,26 @@ export default function SchoolFinancePage({ navigate }) {
         {chargeCount > 200 && <div className="fee-pagination"><button className="secondary-button" type="button" disabled={chargePage <= 1} onClick={() => loadFeePage(chargePage - 1)}>Previous fees</button><button className="secondary-button" type="button" disabled={chargePage >= Math.ceil(chargeCount / 200)} onClick={() => loadFeePage(chargePage + 1)}>Next fees</button></div>}
       </section>
 
-      <section className="fee-panel"><p className="panel-kicker">BANK & ONLINE COLLECTIONS</p><h2>Connect this school’s account</h2>
-        {settings?.account_status === 'verified' && <p className="fee-inline-note">Verified account: <strong>{settings.account_name}</strong> · {settings.bank_name} · {settings.account_number}. Online payments: {settings.online_enabled ? 'enabled' : 'disabled'}.</p>}
-        <form className="fee-form-grid" onSubmit={connectBank}>
-          <label>Payment provider<select value={connection.provider} onChange={(e) => loadBankList(e.target.value)}><option value="flutterwave">Flutterwave</option><option value="paystack">Paystack</option></select></label>
-          <label>Bank<select required value={connection.bank_code} onChange={(e) => { const bank = banks.find((item) => String(item.code) === e.target.value); setConnection({ ...connection, bank_code: e.target.value, bank_name: bank?.name || '' }) }}><option value="">Select bank</option>{banks.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label>
-          <label>Account number<input required inputMode="numeric" maxLength="12" placeholder="10-digit bank account number" value={connection.account_number} onChange={(e) => setConnection({ ...connection, account_number: e.target.value.replace(/\D/g, '') })} /></label>
-          <label>Account type (optional)<input placeholder="e.g. School current account" value={connection.account_type} onChange={(e) => setConnection({ ...connection, account_type: e.target.value })} /></label>
-          <label>School phone (optional)<input type="tel" placeholder="+234…" value={connection.business_mobile} onChange={(e) => setConnection({ ...connection, business_mobile: e.target.value })} /></label>
-          <button className="primary-button" disabled={busy || !connection.bank_code}>Verify account and connect</button>
+      <section className="fee-panel"><p className="panel-kicker">SCHOOL PAYOUT SETUP</p><h2>Where should online fees settle?</h2>
+        <p>Choose a gateway for parent payments. Flutterwave and Paystack use the school’s verified bank destination. Bachs uses its hosted Connect onboarding so each school’s fee payments land in that school’s own Bachs balance.</p>
+        {settings?.account_status === 'verified' && <p className="fee-inline-note">Verified payout account: <strong>{settings.account_name}</strong> · {connection.provider === 'bachs' ? 'Bachs Connect' : `${settings.bank_name} · ${settings.account_number}`}. Online payments: {settings.online_enabled ? 'enabled' : 'disabled'}.</p>}
+        <form className="fee-form-grid" onSubmit={connection.provider === 'bachs' ? connectBachs : connectBank}>
+          <label>Payment gateway<select value={connection.provider} onChange={(e) => loadBankList(e.target.value)}><option value="flutterwave">Flutterwave</option><option value="paystack">Paystack</option><option value="bachs">Bachs</option></select></label>
+          {connection.provider === 'bachs' ? <>
+            <label>School representative’s email<input required type="email" placeholder="The owner’s own email for Bachs verification" value={bachsContactEmail} onChange={(e) => setBachsContactEmail(e.target.value)} /></label>
+            <label>School legal account type<select value={bachsEntityType} onChange={(e) => setBachsEntityType(e.target.value)}><option value="company">Registered school / company</option><option value="individual">Individual proprietor</option></select></label>
+            <button className="primary-button" disabled={busy || !bachsContactEmail.trim()}>Continue to Bachs verification</button>
+          </> : <>
+            <label>Bank<select required value={connection.bank_code} onChange={(e) => { const bank = banks.find((item) => String(item.code) === e.target.value); setConnection({ ...connection, bank_code: e.target.value, bank_name: bank?.name || '' }) }}><option value="">Select bank</option>{banks.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label>
+            <label>Account number<input required inputMode="numeric" maxLength="12" placeholder="10-digit bank account number" value={connection.account_number} onChange={(e) => setConnection({ ...connection, account_number: e.target.value.replace(/\D/g, '') })} /></label>
+            <label>Account type (optional)<input placeholder="e.g. School current account" value={connection.account_type} onChange={(e) => setConnection({ ...connection, account_type: e.target.value })} /></label>
+            <label>School phone (optional)<input type="tel" placeholder="+234…" value={connection.business_mobile} onChange={(e) => setConnection({ ...connection, business_mobile: e.target.value })} /></label>
+            <button className="primary-button" disabled={busy || !connection.bank_code}>Verify account and connect</button>
+          </>}
         </form>
-        <div className="fee-settings-row"><label><input type="checkbox" checked={settings?.allow_excess_credit ?? true} onChange={(e) => saveSettings({ allow_excess_credit: e.target.checked })} /> Allow overpayments to become student credit</label><span>Bank transfer payments are confirmed by the provider checkout. A regular bank transfer cannot be detected automatically without a dedicated bank integration.</span></div>
-        {settings?.account_status === 'verified' && <div className="fee-online-options"><h3>Online collection options</h3><label><input type="checkbox" checked={settings.online_enabled} onChange={(e) => saveSettings({ online_enabled: e.target.checked })} /> Allow parents to pay online</label><p>If every option below is unchecked, the provider account’s default payment methods are shown.</p><div>{[['card', 'Card'], ['bank_transfer', 'Bank transfer'], ['ussd', 'USSD']].map(([value, label]) => <label key={value}><input type="checkbox" checked={(settings.allowed_channels || []).includes(value)} onChange={(e) => { const current = settings.allowed_channels || []; const next = e.target.checked ? [...new Set([...current, value])] : current.filter((item) => item !== value); saveSettings({ allowed_channels: next }) }} /> {label}</label>)}</div></div>}
+        {settings?.provider === 'bachs' && <div className="fee-settings-row"><span>{settings.account_status === 'verified' ? 'Bachs has enabled the school’s fee collection and payout capabilities.' : 'School fee payments remain disabled until Bachs approves card or bank-transfer collection and payouts.'}</span><button className="secondary-button" type="button" onClick={checkBachsStatus} disabled={busy}>Check Bachs approval</button></div>}
+        <div className="fee-settings-row"><label><input type="checkbox" checked={settings?.allow_excess_credit ?? true} onChange={(e) => saveSettings({ allow_excess_credit: e.target.checked })} /> Allow overpayments to become student credit</label><span>For online payments, the backend confirms the transaction with the gateway before applying it to student balances. For walk-in bank transfers, authorized staff record the payment after confirming receipt.</span></div>
+        {settings?.account_status === 'verified' && <div className="fee-online-options"><h3>Parent online payment options</h3><label><input type="checkbox" checked={settings.online_enabled} onChange={(e) => saveSettings({ online_enabled: e.target.checked })} /> Allow parents to pay online</label><p>After the gateway confirms payment, EDUstacked applies it to the student fees selected by the parent. If every option below is unchecked, the gateway’s default payment methods are shown.</p><div>{(connection.provider === 'bachs' ? [['card', 'Card'], ['bank_transfer', 'Bank transfer']] : [['card', 'Card'], ['bank_transfer', 'Bank transfer'], ['ussd', 'USSD']]).map(([value, label]) => <label key={value}><input type="checkbox" checked={(settings.allowed_channels || []).includes(value)} onChange={(e) => { const current = settings.allowed_channels || []; const next = e.target.checked ? [...new Set([...current, value])] : current.filter((item) => item !== value); saveSettings({ allowed_channels: next }) }} /> {label}</label>)}</div></div>}
         <p className="fee-inline-note">Payment provider secret keys are managed by EDUstacked on the backend. They are never requested or stored in this school form. School finance SMS: {settings?.sms_status === 'configured' ? 'Termii is configured.' : 'Termii SMS would be configured soon; payments still save and SMS can be retried after Termii is connected.'}</p>
       </section>
 
