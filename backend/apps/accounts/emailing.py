@@ -25,11 +25,30 @@ def _send_password_action_email(user, *, action, school_name="", fail_silently=T
     )
     is_reset = action == "reset"
     subject = "Reset your EDUstacked password" if is_reset else "Set up your EDUstacked account"
-    template_id = getattr(settings, "SENDGRID_PASSWORD_SETUP_TEMPLATE_ID", "")
+    if is_reset:
+        # Prefer the reset-specific template. Keep the older shared setting as a
+        # fallback so existing deployments continue to send password emails.
+        template_id = (
+            getattr(settings, "SENDGRID_PASSWORD_RESET_TEMPLATE_ID", "")
+            or getattr(settings, "SENDGRID_PASSWORD_SETUP_TEMPLATE_ID", "")
+        )
+    else:
+        template_id = getattr(settings, "SENDGRID_PASSWORD_SETUP_TEMPLATE_ID", "")
     if template_id and settings.EMAIL_BACKEND.endswith("SendgridBackend"):
         message = EmailMessage(subject, "Use the secure link to set your password.", settings.DEFAULT_FROM_EMAIL, [user.email])
         message.dynamic_template_id = template_id
+        timeout_minutes = max(1, (int(settings.PASSWORD_RESET_TIMEOUT) + 59) // 60)
+        if timeout_minutes % 60 == 0:
+            timeout_hours = timeout_minutes // 60
+            expiry_time = f"{timeout_hours} hour" + ("s" if timeout_hours != 1 else "")
+        else:
+            expiry_time = f"{timeout_minutes} minutes"
+        user_name = user.get_full_name().strip() or user.email
         message.dynamic_template_data = {
+            # Variables used by the password reset Dynamic Template.
+            "user_name": user_name,
+            "reset_link": reset_url,
+            "expiry_time": expiry_time,
             # Keep the original key for existing SendGrid templates; new templates
             # should use password_reset_url (or action_url) for their CTA link.
             "password_setup_url": reset_url,
@@ -44,7 +63,7 @@ def _send_password_action_email(user, *, action, school_name="", fail_silently=T
             ),
             "action_button": "Set new password" if is_reset else "Set up account",
             "first_name": user.first_name,
-            "full_name": user.get_full_name().strip() or user.email,
+            "full_name": user_name,
             "school_name": school_name,
         }
         return message.send(fail_silently=fail_silently)

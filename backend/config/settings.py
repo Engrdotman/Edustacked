@@ -275,6 +275,7 @@ GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
 SENDGRID_SANDBOX_MODE = os.getenv("SENDGRID_SANDBOX_MODE", "false").lower() in {"1", "true", "yes"}
 SENDGRID_VERIFICATION_TEMPLATE_ID = os.getenv("SENDGRID_VERIFICATION_TEMPLATE_ID", "").strip()
 SENDGRID_PASSWORD_SETUP_TEMPLATE_ID = os.getenv("SENDGRID_PASSWORD_SETUP_TEMPLATE_ID", "").strip()
+SENDGRID_PASSWORD_RESET_TEMPLATE_ID = os.getenv("SENDGRID_PASSWORD_RESET_TEMPLATE_ID", "").strip()
 SENDGRID_SCHOOL_SIGNUP_NOTIFICATION_TEMPLATE_ID = os.getenv("SENDGRID_SCHOOL_SIGNUP_NOTIFICATION_TEMPLATE_ID", "").strip()
 PLATFORM_SIGNUP_NOTIFICATION_EMAIL = os.getenv(
     "PLATFORM_SIGNUP_NOTIFICATION_EMAIL", "edustackedng@gmail.com"
@@ -321,10 +322,10 @@ if not DEBUG and urlparse(FRONTEND_BASE_URL).hostname in {"localhost", "127.0.0.
     FRONTEND_BASE_URL = "https://edustacked.vercel.app"
 PASSWORD_RESET_FRONTEND_URL = os.getenv(
     "PASSWORD_RESET_FRONTEND_URL",
-    "http://localhost:5173" if DEBUG else "https://edustackedng.netlify.app",
+    FRONTEND_BASE_URL,
 ).strip().rstrip("/")
 if not DEBUG and urlparse(PASSWORD_RESET_FRONTEND_URL).hostname in {"localhost", "127.0.0.1"}:
-    PASSWORD_RESET_FRONTEND_URL = "https://edustackedng.netlify.app"
+    PASSWORD_RESET_FRONTEND_URL = FRONTEND_BASE_URL
 password_reset_frontend_parts = urlparse(PASSWORD_RESET_FRONTEND_URL)
 if (
     not password_reset_frontend_parts.hostname
