@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: edustacked-frontend
+    runtime: node
+    plan: free
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: API_BACKEND_URL
+        value: https://edustacked-production.up.railway.app

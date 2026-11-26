@@ -1,12 +1,14 @@
 import hashlib
 import hmac
 import json
+import re
 from io import BytesIO
 from datetime import date
 from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.core import mail
 from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -255,6 +257,83 @@ class SchoolFeesApiTests(TestCase):
         foreign_charge = FeeCharge.objects.create(school=self.school, fee_schedule=charge.fee_schedule, student=other_student, enrollment=other_student.enrollments.get(), amount_minor=charge.amount_minor, created_by=self.admin)
         denied = self.api("post", "/api/v1/parent/fees/payments/initialize/", {"allocations": [{"fee_charge_id": foreign_charge.pk, "amount_minor": 1_000}]}, user=self.parent)
         self.assertEqual(denied.status_code, status.HTTP_404_NOT_FOUND)
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        FRONTEND_BASE_URL="https://school.example.test",
+    )
+    @patch("apps.school_fees.views.provider_for")
+    def test_invited_parent_can_activate_login_and_pay_with_backend_verified_checkout(self, provider_for_mock):
+        """Exercise the parent path end to end while keeping the provider mocked."""
+        self.configure_online()
+        charge = self.create_schedule(amount=100_000).charges.get()
+        invited_guardian = Guardian.objects.create(
+            school=self.school, full_name="Amina's Parent", phone="08030000002",
+            email="amina-parent@example.test",
+        )
+        link = StudentGuardian.objects.create(
+            school=self.school, student=self.student, guardian=invited_guardian,
+            relationship_type="Parent", is_primary_contact=False,
+            can_receive_communications=True,
+        )
+
+        invitation_response = self.api(
+            "post", f"/api/v1/parent/staff/students/{self.student.pk}/guardians/{link.pk}/invite/", {},
+        )
+        self.assertEqual(invitation_response.status_code, status.HTTP_202_ACCEPTED, invitation_response.data)
+        token_match = re.search(r"token=([^\s]+)", mail.outbox[-1].body)
+        self.assertIsNotNone(token_match, "The invitation email should contain a one-time activation link.")
+
+        self.client.force_authenticate(user=None)
+        activated = self.client.post(
+            "/api/v1/guardian/activate/",
+            {"token": token_match.group(1), "password": "Strong-Parent-Password-42!"},
+            format="json",
+        )
+        self.assertEqual(activated.status_code, status.HTTP_200_OK, activated.data)
+        login = self.client.post(
+            "/api/v1/auth/login/",
+            {"email": invited_guardian.email, "password": "Strong-Parent-Password-42!", "portal": "parent"},
+            format="json",
+        )
+        self.assertEqual(login.status_code, status.HTTP_200_OK, login.data)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
+
+        students = self.client.get("/api/v1/parent/students/", HTTP_X_SCHOOL_ID=str(self.school.pk))
+        self.assertEqual(students.status_code, status.HTTP_200_OK, students.data)
+        self.assertEqual([row["id"] for row in students.data], [self.student.pk])
+        fees = self.client.get(
+            f"/api/v1/parent/students/{self.student.pk}/fees/",
+            HTTP_X_SCHOOL_ID=str(self.school.pk),
+        )
+        self.assertEqual(fees.status_code, status.HTTP_200_OK, fees.data)
+        self.assertEqual(fees.data["charges"][0]["outstanding_minor"], 100_000)
+
+        provider = Mock()
+        provider.initialize.return_value = {"authorization_url": "https://checkout.example.test/parent-fee"}
+        provider.verify.return_value = {
+            "reference": "", "status": "success", "amount": 25_000,
+            "currency": "NGN", "id": "parent-e2e-test", "channel": "card",
+        }
+        provider_for_mock.return_value = provider
+        initialized = self.client.post(
+            "/api/v1/parent/fees/payments/initialize/",
+            {"allocations": [{"fee_charge_id": charge.pk, "amount_minor": 25_000}]},
+            format="json", HTTP_X_SCHOOL_ID=str(self.school.pk),
+        )
+        self.assertEqual(initialized.status_code, status.HTTP_201_CREATED, initialized.data)
+        self.assertEqual(initialized.data["amount_minor"], 25_000)
+        payment = SchoolFeePayment.objects.get(reference=initialized.data["reference"])
+        provider.verify.return_value["reference"] = payment.reference
+        confirmed = self.client.post(
+            f"/api/v1/parent/fees/payments/{payment.reference}/", {},
+            format="json", HTTP_X_SCHOOL_ID=str(self.school.pk),
+        )
+
+        self.assertEqual(confirmed.status_code, status.HTTP_200_OK, confirmed.data)
+        self.assertEqual(confirmed.data["status"], SchoolFeePayment.Status.SUCCESS)
+        self.assertEqual(FeeLedgerEntry.objects.filter(payment=payment, kind=FeeLedgerEntry.Kind.PAYMENT).count(), 1)
+        self.assertEqual(charge_balance_value(charge), 75_000)
 
     @patch("apps.school_fees.views.provider_for")
     def test_parent_cannot_repeat_a_fee_charge_to_inflate_checkout_amount(self, provider_for_mock):

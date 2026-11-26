@@ -1,134 +1,46 @@
-# Media Storage Configuration
+# Durable Media Storage
 
-## Current State (Development Only)
+## What is stored where
 
-The current configuration uses local `MEDIA_ROOT` at `backend/media/`. This works for development but **fails in production** because:
+- Frontend JavaScript, CSS, and bundled images are built into `frontend/dist/` and served by the Render frontend service.
+- Django static assets are collected to `backend/staticfiles/` and served with WhiteNoise.
+- School uploads such as logos and principal signatures use Django's default file storage. Without a bucket configured, that storage is `backend/media/`, which is suitable only for local development and can disappear when the backend container is replaced.
 
-- Railway container instances are **ephemeral** — data is lost on redeploy or restart
-- Media files uploaded by schools (logos, signatures, student photos, CBT assets) will disappear
-- No backup or durability
+The backend now supports a private S3-compatible object-storage bucket. Logo and signature download routes continue to pass through Django's school authorization checks; the bucket does not need public access or browser CORS rules. The report-card renderer reads image files through Django's storage API.
 
-## Production Requirement
+## Configure the backend
 
-Configure persistent object storage before going live. Options:
+Choose an S3-compatible object store, create a private bucket and a restricted access key, then add these variables to the **Railway backend service**:
 
-### Option 1: AWS S3 (Recommended for scalability)
-
-**Advantages:**
-- Industry standard; proven at scale
-- Good bandwidth/performance in Nigeria via CloudFront
-- Fine-grained access control via IAM
-
-**Steps:**
-1. Create AWS S3 bucket (private, no public access)
-2. Install `boto3` and `django-storages`
-3. Configure Django to use S3 as default file storage
-4. Set Railway environment variables for AWS credentials
-
-**Approximate setup time:** 1–2 hours
-
-### Option 2: Railway Volumes (Simpler for early stage)
-
-**Advantages:**
-- No external service; stays within Railway
-- Easier to set up than S3
-- Good for under 100 GB
-
-**Steps:**
-1. Create a Railway Volume attached to the backend service
-2. Point `MEDIA_ROOT` to the volume mount path
-3. Volume persists across redeployments
-
-**Approximate setup time:** 30 minutes
-
-### Option 3: Supabase Storage (Built on S3)
-
-**Advantages:**
-- PostgreSQL + storage bundled
-- Simpler API than raw S3
-- Good for small to medium deployments
-
-**Approximate setup time:** 1 hour
-
-## What Needs to Change
-
-Once object storage is configured, the following will be updated:
-
-**`backend/config/settings.py`:**
-```python
-if not DEBUG:
-    STORAGES = {
-        'default': {
-            'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',
-            'OPTIONS': {
-                'bucket_name': os.getenv('AWS_STORAGE_BUCKET_NAME'),
-                'region_name': os.getenv('AWS_S3_REGION_NAME', 'us-east-1'),
-                's3_addressing_style': 'virtual',
-            },
-        },
-        'staticfiles': {
-            'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
-        },
-    }
-else:
-    STORAGES = {
-        'default': {
-            'BACKEND': 'django.core.files.storage.FileSystemStorage',
-        },
-        'staticfiles': {
-            'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
-        },
-    }
+```text
+AWS_STORAGE_BUCKET_NAME=edustacked-media
+AWS_S3_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
+AWS_S3_REGION_NAME=auto
+AWS_ACCESS_KEY_ID=<storage-access-key>
+AWS_SECRET_ACCESS_KEY=<storage-secret>
+AWS_MEDIA_LOCATION=media
 ```
 
-**`backend/requirements.txt`:**
+For Amazon S3, leave `AWS_S3_ENDPOINT_URL` unset and use the bucket's actual region instead of `auto`. Keep the secret key only in Railway's secret variables. Do not place these values in the frontend or commit them to GitHub.
+
+The backend requirements include `django-storages[s3]`. When `AWS_STORAGE_BUCKET_NAME` is set, Django uses the bucket for uploaded files. When it is unset, local development and CI continue to use `MEDIA_ROOT`.
+
+## Preserve existing uploads
+
+Before the next backend redeploy, save a copy of any logo or signature currently visible in the school profile. App-container media may be ephemeral. If an existing Railway volume is mounted at the current media directory, keep it mounted until files are copied.
+
+After the storage settings have deployed and the bucket variables are active, open the Railway backend shell and run this first:
+
+```bash
+python manage.py migrate_media_to_storage --dry-run
 ```
-django-storages[s3]>=1.14,<2
-boto3>=1.28,<2
+
+If it reports files to copy, run:
+
+```bash
+python manage.py migrate_media_to_storage
 ```
 
-**Railway environment variables:**
-```
-AWS_ACCESS_KEY_ID=<your-key>
-AWS_SECRET_ACCESS_KEY=<your-secret>
-AWS_STORAGE_BUCKET_NAME=edustacked-media-prod
-AWS_S3_REGION_NAME=eu-west-1
-```
+This copies files using their existing storage names and skips files already in the bucket. It does not change database records or delete local copies. If the old container's files were already lost, upload the saved logo and signature again through the school profile page.
 
-## Action Items Before Production Launch
-
-- [ ] Decide on storage provider (S3, Railway Volumes, or Supabase)
-- [ ] Implement storage backend
-- [ ] Test file uploads in staging environment
-- [ ] Configure access controls (private bucket, signed URLs for download)
-- [ ] Set up backup/replication for critical files
-- [ ] Document storage cost and monitor usage
-
-## Temporary Workaround (Do NOT use in production)
-
-If delays require an immediate deployment:
-1. **Set upload limits:** Configure max file size to prevent disk full
-2. **Manual export:** Periodically export school media to an external drive
-3. **Restrict media uploads:** Disable logo/signature uploads until storage is ready
-4. Accept that all media is lost if the Railway instance restarts
-
-**This is not acceptable for production schools.** Real schools need durable storage.
-
-## File Types Needing Storage
-
-- School logos (PNG, JPEG, max 2 MB each)
-- Principal/headmaster signatures (PNG, JPEG, max 500 KB each)
-- Student photos (JPEG, max 1 MB each)
-- Report-card PDFs generated by reportlab (variable size, typically 100–500 KB)
-- CBT exam packages and question assets (binary, variable size)
-
-Total estimated capacity for a 500-student school: **2–5 GB** for a year of data.
-
-## Security Considerations
-
-- Media must be **private** (not publicly downloadable)
-- Access must be **school-scoped** (school A cannot download school B's files)
-- URLs must be **signed/temporary** (5–15 minute expiry for downloads)
-- Deletion must be **soft-delete** (logical deletion in Django, archive in storage)
-
-Implement these in the file storage backend before accepting real school data.
+After copying, verify the school profile still shows the logo/signature and generate a report-card preview. Keep the bucket private; the application serves authorized files through its API.

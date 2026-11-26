@@ -4,7 +4,7 @@ import logging
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import F, Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -57,6 +57,9 @@ def deliver_announcement_sms(announcement_id, actor_id):
         school=announcement.school,
         student__school=announcement.school,
         student__status=Student.Status.ACTIVE,
+        student__enrollments__school=announcement.school,
+        student__enrollments__status=StudentEnrollment.Status.ACTIVE,
+        student__enrollments__academic_session__status=AcademicSession.Status.ACTIVE,
         is_active=True,
         can_receive_communications=True,
         guardian__school=announcement.school,
@@ -348,9 +351,20 @@ class GuardianReportCardPdfView(GuardianReportCardDetailView):
 class GuardianAnnouncementListView(GuardianPortalView):
     def get(self, request, **kwargs):
         now = timezone.now()
-        schools = schools_for_user(request.user)
+        eligible_schools = StudentGuardian.objects.filter(
+            guardian__in=guardian_records_for_user(request.user),
+            school__is_active=True,
+            is_active=True,
+            can_receive_communications=True,
+            guardian__is_active=True,
+            student__school=F("school"),
+            student__status=Student.Status.ACTIVE,
+            student__enrollments__school=F("school"),
+            student__enrollments__status=StudentEnrollment.Status.ACTIVE,
+            student__enrollments__academic_session__status=AcademicSession.Status.ACTIVE,
+        ).values_list("school_id", flat=True).distinct()
         announcements = Announcement.objects.filter(
-            school_id__in=schools, status=Announcement.Status.PUBLISHED,
+            school_id__in=eligible_schools, status=Announcement.Status.PUBLISHED,
             published_at__lte=now,
         ).filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now)).select_related("school")
         paginator = PortalPagination()
@@ -438,6 +452,9 @@ class StaffAnnouncementView(APIView):
             links = StudentGuardian.objects.filter(
                 school=announcement.school, is_active=True, can_receive_communications=True,
                 student__school=announcement.school, student__status=Student.Status.ACTIVE,
+                student__enrollments__school=announcement.school,
+                student__enrollments__status=StudentEnrollment.Status.ACTIVE,
+                student__enrollments__academic_session__status=AcademicSession.Status.ACTIVE,
                 guardian__school=announcement.school, guardian__is_active=True, guardian__user__isnull=False,
             ).values_list("student_id", "guardian__user_id").distinct()
             for student_id, user_id in links:

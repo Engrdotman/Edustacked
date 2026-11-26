@@ -162,6 +162,18 @@ h1 em { color: #1486a8; font-weight: 500; }.intro { max-width: 440px; color: #76
 .announcement-status.published { background:#e6f7f3; color:#28603e; }
 .announcement-admin-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .announcement-admin-list article { align-items:start; }
+.announcement-sms-toggle,.guardian-communications-toggle { display:flex; align-items:flex-start; gap:10px; min-width:0; color:#315b3d; }
+.announcement-sms-toggle input[type="checkbox"],.guardian-communications-toggle input[type="checkbox"] { flex:0 0 auto; width:18px; min-width:18px; height:18px; margin:3px 0 0; accent-color:#454b72; }
+.announcement-sms-toggle > span { display:grid; gap:4px; }
+.announcement-sms-toggle small { color:#68776e; font-size:13px; line-height:1.45; }
+.announcement-sms-result { display:grid; gap:4px; margin:12px 0 0; padding:10px 12px; border-radius:9px; background:#f1f3f2; overflow-wrap:anywhere; }
+.announcement-sms-result.submitted { background:#e8f4eb; color:#28603e; }
+.announcement-sms-result.partial,.announcement-sms-result.failed { background:#fbefec; color:#93382e; }
+.announcement-sms-result.pending { background:#eef1fb; color:#454b72; }
+.announcement-sms-result span { font-size:13px; line-height:1.45; }
+.student-guardian-form { margin-top:12px; padding:16px; border:1px solid #dce5df; border-radius:12px; background:#f8faf8; }
+.student-guardian-form .guardian-communications-toggle { align-self:center; }
+.student-profile > .student-hint { color:#65756b; font-size:13px; line-height:1.5; }
 @media (max-width:700px) { .parent-profile-panel,.parent-report-list article,.parent-notifications article,.announcement-admin-list article { flex-direction:column; align-items:stretch; } .parent-section-heading { align-items:stretch; flex-direction:column; } .parent-student-picker { min-width:0; } .parent-report-list article > div:last-child { justify-content:flex-start; flex-wrap:wrap; } }
 .profile-content { max-width: 920px; }
 .profile-overview { flex-wrap: wrap; gap: 28px 52px; margin: 26px 0 34px; padding: 20px 22px; border: 1px solid #d9d9e0; border-radius: 10px; background: #fff; }

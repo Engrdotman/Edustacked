@@ -1,10 +1,11 @@
 services:
   - type: web
     name: edustacked-frontend
-    env: node
+    runtime: node
     plan: free
-    buildCommand: npm run build
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
     startCommand: npm start
     envVars:
-      - key: VITE_API_BASE_URL
+      - key: API_BACKEND_URL
         value: https://edustacked-production.up.railway.app

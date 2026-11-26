@@ -4,8 +4,8 @@ The portal is a read-only, authenticated view over existing guardian, student, e
 
 ## Account and linking flow
 
-1. Staff create/reuse a school guardian and an active `StudentGuardian` link through the student-management workflow.
-2. A staff member with `students.guardians.manage` issues an invitation for that exact active link. The guardian's email must be present on the school record.
+1. Staff create/reuse a school guardian and an active `StudentGuardian` link through the student-management workflow. On the admission form, entering the guardian's name, phone, and email enables the checked-by-default option to send a setup email after the student is saved.
+2. If no email was entered or delivery failed, a staff member with `students.guardians.manage` can issue or retry an invitation from that student's **Guardians** section. The guardian's email must be present on the school record.
 3. The backend emails a random, single-use activation URL. Only its SHA-256 hash is stored. The default expiry follows Django's `PASSWORD_RESET_TIMEOUT` (one day unless deployment configuration changes it). Resending revokes earlier outstanding invitations.
 4. A new guardian chooses a password; an existing EDUstacked account must verify its password before the guardian profile is attached. Activation creates no staff membership or role.
 5. Access is computed from active `Guardian.user` associations and active guardian-student links. Revoking the link or deactivating the guardian immediately removes portal access while preserving student/enrollment history.

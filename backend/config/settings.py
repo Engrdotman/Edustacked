@@ -168,6 +168,39 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# User uploads must live outside an ephemeral app filesystem in production.
+# Local development and CI keep the normal MEDIA_ROOT fallback unless a bucket
+# is configured. An S3-compatible bucket can be configured on the backend host.
+AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME", "").strip()
+default_storage = {"BACKEND": "django.core.files.storage.FileSystemStorage"}
+if AWS_STORAGE_BUCKET_NAME:
+    s3_options = {
+        "bucket_name": AWS_STORAGE_BUCKET_NAME,
+        "location": os.getenv("AWS_MEDIA_LOCATION", "media").strip("/"),
+        "default_acl": None,
+        "querystring_auth": True,
+        "file_overwrite": False,
+        "signature_version": os.getenv("AWS_S3_SIGNATURE_VERSION", "s3v4").strip(),
+    }
+    for option, variable in (
+        ("endpoint_url", "AWS_S3_ENDPOINT_URL"),
+        ("region_name", "AWS_S3_REGION_NAME"),
+        ("access_key", "AWS_ACCESS_KEY_ID"),
+        ("secret_key", "AWS_SECRET_ACCESS_KEY"),
+    ):
+        value = os.getenv(variable, "").strip()
+        if value:
+            s3_options[option] = value
+    default_storage = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": s3_options,
+    }
+
+STORAGES = {
+    "default": default_storage,
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
+
 # Use a shared cache in deployments that provide Redis. Keeping the local-memory
 # backend as a fallback lets local development and CI run without Redis.
 REDIS_URL = os.getenv("REDIS_URL", "").strip()
@@ -409,10 +442,9 @@ else:
         in {"1", "true", "yes"}
     )
 
-# The frontend and API are served through the same Vercel origin in production.
-# Django still sees the browser's original Origin on unsafe proxied requests.
-# Keep the known production site trusted even if Railway has a copied local
-# FRONTEND_BASE_URL; the explicit environment list remains available for other clients.
+# Production frontends should use a same-origin /api proxy to the backend.
+# Set FRONTEND_BASE_URL to the deployed frontend origin: it supplies email links
+# and adds that host to CSRF trusted origins for proxied unsafe requests.
 frontend_parts = urlparse(FRONTEND_BASE_URL)
 frontend_origin = ""
 if frontend_parts.scheme in ({"http", "https"} if DEBUG else {"https"}) and frontend_parts.netloc:

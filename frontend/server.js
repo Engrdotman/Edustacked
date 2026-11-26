@@ -9,7 +9,9 @@ const __dirname = dirname(__filename)
 
 const app = express()
 const PORT = process.env.PORT || 3000
-const API_BACKEND = process.env.VITE_API_BASE_URL || 'https://edustacked-production.up.railway.app'
+// Keep the backend origin server-side. The browser calls this service at /api,
+// so login cookies remain first-party when the UI is hosted on Render.
+const API_BACKEND = process.env.API_BACKEND_URL || process.env.VITE_API_BASE_URL || 'https://edustacked-production.up.railway.app'
 
 console.log('Starting frontend server...')
 console.log(`API Backend: ${API_BACKEND}`)

@@ -1,5 +1,6 @@
 import re
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from django.core import mail
 from django.contrib.auth import get_user_model
@@ -14,6 +15,7 @@ from apps.report_cards.models import ReportCard, ReportCardRevision
 from apps.schools.models import School, SchoolMembership
 from apps.academics.models import ClassArm, ClassLevel
 from apps.students.models import Guardian, Student, StudentEnrollment, StudentGuardian
+from apps.sms_management.models import SMSMessageBatch, SMSMessageLog
 from rest_framework.test import APIClient
 
 
@@ -236,6 +238,18 @@ class ParentPortalApiTests(TestCase):
         other_student = Student.objects.create(
             school=self.other, admission_number="S-001", first_name="Tomi", last_name="Adebayo",
         )
+        other_session = AcademicSession.objects.create(
+            school=self.other, name="2026/2027", start_date=date(2026, 9, 1), end_date=date(2027, 6, 30),
+        )
+        AcademicSession.objects.filter(pk=other_session.pk).update(status=AcademicSession.Status.ACTIVE)
+        other_session.refresh_from_db()
+        other_level = ClassLevel.objects.create(school=self.other, name="JSS 1", code="JSS1", category="junior_secondary")
+        other_arm = ClassArm.objects.create(school=self.other, class_level=other_level, name="A")
+        StudentEnrollment.objects.create(
+            school=self.other, student=other_student, academic_session=other_session,
+            class_level=other_level, class_arm=other_arm, enrollment_date=date(2026, 9, 1),
+            status=StudentEnrollment.Status.ACTIVE,
+        )
         other_guardian = Guardian.objects.create(
             school=self.other, full_name="Bola Adebayo", phone="555-0199", email="bola@example.test", user=other_parent,
         )
@@ -304,6 +318,110 @@ class ParentPortalApiTests(TestCase):
         self.client.force_authenticate(self.other_admin)
         denied = self.api("get", "/api/v1/parent/staff/announcements/", school=self.school)
         self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
+
+    @override_settings(TERMII_API_KEY="test-termii-key", TERMII_SENDER_ID="EDUstacked")
+    @patch("apps.sms_management.services.termii_send_raw", return_value="termii-test-message-1")
+    def test_sms_announcement_sends_once_to_parent_linked_to_four_students(self, send_raw):
+        self.guardian.phone = "08012345678"
+        self.guardian.save(update_fields=("phone", "updated_at"))
+
+        children = [self.student]
+        self.client.force_authenticate(self.admin)
+        for index in range(2, 5):
+            child = Student.objects.create(
+                school=self.school, admission_number=f"P-00{index}",
+                first_name=f"Child{index}", last_name="Okafor",
+            )
+            StudentEnrollment.objects.create(
+                school=self.school, student=child, academic_session=self.session,
+                class_level=self.level, class_arm=self.arm,
+                enrollment_date=date(2026, 9, 1), status=StudentEnrollment.Status.ACTIVE,
+            )
+            linked = self.api("post", f"/api/v1/students/{child.pk}/guardians/", {
+                "guardian_id": self.guardian.pk,
+                "relationship_type": "mother",
+                "can_receive_communications": True,
+            })
+            self.assertEqual(linked.status_code, status.HTTP_201_CREATED, linked.data)
+            children.append(child)
+
+        excluded_student = Student.objects.create(
+            school=self.school, admission_number="P-005", first_name="Excluded", last_name="Okafor",
+        )
+        StudentEnrollment.objects.create(
+            school=self.school, student=excluded_student, academic_session=self.session,
+            class_level=self.level, class_arm=self.arm,
+            enrollment_date=date(2026, 9, 1), status=StudentEnrollment.Status.ACTIVE,
+        )
+        opted_out = Guardian.objects.create(school=self.school, full_name="Opted Out", phone="08022223333")
+        StudentGuardian.objects.create(
+            school=self.school, student=excluded_student, guardian=opted_out,
+            relationship_type="father", can_receive_communications=False,
+        )
+
+        inactive_student = Student.objects.create(
+            school=self.school, admission_number="P-006", first_name="Inactive", last_name="Okafor",
+            status=Student.Status.INACTIVE,
+        )
+        inactive_guardian = Guardian.objects.create(school=self.school, full_name="Inactive Child Contact", phone="08033334444")
+        StudentGuardian.objects.create(
+            school=self.school, student=inactive_student, guardian=inactive_guardian,
+            relationship_type="father", can_receive_communications=True,
+        )
+
+        foreign_student = Student.objects.create(
+            school=self.other, admission_number="S-006", first_name="Foreign", last_name="Student",
+        )
+        foreign_guardian = Guardian.objects.create(school=self.other, full_name="Foreign Contact", phone="08044445555")
+        StudentGuardian.objects.create(
+            school=self.other, student=foreign_student, guardian=foreign_guardian,
+            relationship_type="mother", can_receive_communications=True,
+        )
+
+        self.client.force_authenticate(self.admin)
+        draft = self.api("post", "/api/v1/parent/staff/announcements/", {
+            "title": "School closes early", "message": "The school closes at 1 pm today.", "send_sms": True,
+        })
+        self.assertEqual(draft.status_code, status.HTTP_201_CREATED, draft.data)
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            published = self.api("post", f"/api/v1/parent/staff/announcements/{draft.data['id']}/publish/", {})
+        self.assertEqual(published.status_code, status.HTTP_200_OK, published.data)
+        self.assertEqual(len(callbacks), 1)
+
+        announcement = Announcement.objects.get(pk=draft.data["id"])
+        self.assertEqual(announcement.sms_status, Announcement.SMSStatus.SUBMITTED)
+        self.assertEqual(announcement.sms_recipient_count, 1)
+        self.assertEqual(announcement.sms_submitted_count, 1)
+        self.assertEqual(announcement.sms_error, "")
+        send_raw.assert_called_once_with("2348012345678", "The school closes at 1 pm today.")
+        self.assertEqual(SMSMessageBatch.objects.filter(school=self.school).count(), 1)
+        log = SMSMessageLog.objects.get(school=self.school)
+        self.assertEqual(log.phone, "2348012345678")
+        self.assertEqual(log.status, SMSMessageLog.Status.SUBMITTED)
+        self.assertEqual(PortalNotification.objects.filter(user=self.parent, announcement=announcement).count(), 1)
+        self.assertEqual(len(children), 4)
+        self.client.force_authenticate(self.parent)
+        linked_students = self.api("get", "/api/v1/parent/students/")
+        self.assertEqual(linked_students.status_code, status.HTTP_200_OK, linked_students.data)
+        self.assertEqual({row["id"] for row in linked_students.data}, {child.pk for child in children})
+
+    @override_settings(TERMII_API_KEY="test-termii-key", TERMII_SENDER_ID="EDUstacked")
+    @patch("apps.sms_management.services.termii_send_raw")
+    def test_sms_announcement_fails_clearly_when_no_eligible_guardian_phone_exists(self, send_raw):
+        self.link.can_receive_communications = False
+        self.link.save(update_fields=("can_receive_communications",))
+        self.client.force_authenticate(self.admin)
+        draft = self.api("post", "/api/v1/parent/staff/announcements/", {
+            "title": "School update", "message": "An update for families.", "send_sms": True,
+        })
+        with self.captureOnCommitCallbacks(execute=True):
+            published = self.api("post", f"/api/v1/parent/staff/announcements/{draft.data['id']}/publish/", {})
+        self.assertEqual(published.status_code, status.HTTP_200_OK, published.data)
+        announcement = Announcement.objects.get(pk=draft.data["id"])
+        self.assertEqual(announcement.sms_status, Announcement.SMSStatus.FAILED)
+        self.assertIn("No active student", announcement.sms_error)
+        send_raw.assert_not_called()
+        self.assertFalse(SMSMessageBatch.objects.filter(school=self.school).exists())
 
     def test_announcement_expiry_must_follow_publication(self):
         self.client.force_authenticate(self.admin)
