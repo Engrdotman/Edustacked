@@ -62,7 +62,7 @@ export default function AuthenticatedHome({ navigate }) {
     <main className="app-page">
       <header className="app-topbar"><BrandMark navigate={navigate} /><button className="text-button" type="button" onClick={handleSignOut} disabled={working}>Sign out</button></header>
       <section className="app-content">
-        <p className="eyebrow"><span className="status-dot status-dot-online" /> AUTHENTICATED SESSION</p>
+        <p className="eyebrow"><span className="status-dot status-dot-online" /> YOUR EDUSTACKED WORKSPACE</p>
         <h1 className="app-heading">Good to have<br /><em>you here.</em></h1>
         <p className="intro">You’re signed in as <strong>{user?.first_name || user?.email}</strong>.</p>
 
@@ -100,7 +100,7 @@ export default function AuthenticatedHome({ navigate }) {
           {error && <p className="form-error" role="alert">{error}</p>}
           {!user?.is_superuser && !selectedSchool && schools.length === 1 && schools[0].school_verification_status === 'suspended' && <p className="form-error" role="alert">Your school account is currently suspended. Please contact support.</p>}
           {!user?.is_superuser && !selectedSchool && schools.length === 1 && schools[0].school_verification_status === 'rejected' && <p className="school-status school-status-rejected" role="status">Your school is awaiting further information. {schools[0].school_verification_reason}</p>}
-          {selectedSchool && <p className="selection-note" role="status">Selected: {selectedSchool.school_name}. School access is verified by the API on every request.</p>}
+          {selectedSchool && <p className="selection-note" role="status">You have access to the {selectedSchool.school_name} workspace.</p>}
           {!selectedSchool && guardianProfile && <p className="selection-note" role="status">Your parent portal access is active for the students linked to your account.</p>}
         </section>
 

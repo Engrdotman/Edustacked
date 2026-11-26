@@ -33,14 +33,27 @@ class AnnouncementSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Announcement
-        fields = ("id", "school", "school_name", "title", "message", "status", "published_at", "expires_at", "created_at", "updated_at")
-        read_only_fields = ("school", "school_name", "status", "published_at", "created_at", "updated_at")
+        fields = (
+            "id", "school", "school_name", "title", "message", "status", "published_at", "expires_at",
+            "send_sms", "sms_status", "sms_recipient_count", "sms_submitted_count", "sms_error",
+            "created_at", "updated_at",
+        )
+        read_only_fields = (
+            "school", "school_name", "status", "published_at", "sms_status", "sms_recipient_count",
+            "sms_submitted_count", "sms_error", "created_at", "updated_at",
+        )
 
     def validate(self, attrs):
         expires = attrs.get("expires_at", getattr(self.instance, "expires_at", None))
         published = getattr(self.instance, "published_at", None)
+        send_sms = attrs.get("send_sms", getattr(self.instance, "send_sms", False))
+        message = attrs.get("message", getattr(self.instance, "message", ""))
         if expires and published and expires <= published:
             raise serializers.ValidationError({"expires_at": "Expiry must be later than publication."})
+        if self.instance and self.instance.status == Announcement.Status.PUBLISHED and send_sms != self.instance.send_sms:
+            raise serializers.ValidationError({"send_sms": "SMS delivery cannot be changed after an announcement is published."})
+        if send_sms and len(message) > 5000:
+            raise serializers.ValidationError({"message": "SMS announcements must be 5,000 characters or fewer."})
         return attrs
 
 

@@ -30,10 +30,22 @@ class Announcement(models.Model):
         PUBLISHED = "published", "Published"
         ARCHIVED = "archived", "Archived"
 
+    class SMSStatus(models.TextChoices):
+        NOT_REQUESTED = "not_requested", "Not requested"
+        PENDING = "pending", "Pending"
+        SUBMITTED = "submitted", "Submitted"
+        PARTIAL = "partial", "Partially submitted"
+        FAILED = "failed", "Failed"
+
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="parent_announcements")
     title = models.CharField(max_length=180)
     message = models.TextField(max_length=10000)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
+    send_sms = models.BooleanField(default=False)
+    sms_status = models.CharField(max_length=16, choices=SMSStatus.choices, default=SMSStatus.NOT_REQUESTED)
+    sms_recipient_count = models.PositiveSmallIntegerField(default=0)
+    sms_submitted_count = models.PositiveSmallIntegerField(default=0)
+    sms_error = models.CharField(max_length=300, blank=True)
     published_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="parent_announcements_created")

@@ -1,6 +1,8 @@
 from datetime import date, timedelta
+import logging
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, HttpResponse
@@ -36,6 +38,88 @@ from .services import (
     activate_guardian_invitation, guardian_records_for_user,
     issue_guardian_invitation, linked_student_queryset, schools_for_user,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def deliver_announcement_sms(announcement_id, actor_id):
+    """Send one school-wide SMS to active, contactable guardians after publish commits."""
+    announcement = Announcement.objects.select_related("school").filter(
+        pk=announcement_id, status=Announcement.Status.PUBLISHED, send_sms=True,
+        sms_status=Announcement.SMSStatus.PENDING,
+    ).first()
+    if announcement is None:
+        return
+
+    from apps.sms_management.services import normalize_phone, send_school_sms
+
+    raw_phones = StudentGuardian.objects.filter(
+        school=announcement.school,
+        student__school=announcement.school,
+        student__status=Student.Status.ACTIVE,
+        is_active=True,
+        can_receive_communications=True,
+        guardian__school=announcement.school,
+        guardian__is_active=True,
+    ).exclude(guardian__phone="").values_list("guardian__phone", flat=True).distinct()
+
+    phones = []
+    seen = set()
+    for raw_phone in raw_phones:
+        try:
+            normalized = normalize_phone(raw_phone)
+        except DjangoValidationError:
+            continue
+        if normalized not in seen:
+            seen.add(normalized)
+            phones.append(normalized)
+
+    if not phones:
+        announcement.sms_status = Announcement.SMSStatus.FAILED
+        announcement.sms_error = "No active student has an opted-in guardian with a valid phone number. Check guardian contacts in Student management."
+        announcement.save(update_fields=("sms_status", "sms_error", "updated_at"))
+        return
+    if len(phones) > 200:
+        announcement.sms_status = Announcement.SMSStatus.FAILED
+        announcement.sms_recipient_count = len(phones)
+        announcement.sms_error = f"This announcement has {len(phones)} unique guardian numbers. SMS is limited to 200 per send; use School SMS to split the audience."
+        announcement.save(update_fields=("sms_status", "sms_recipient_count", "sms_error", "updated_at"))
+        return
+
+    try:
+        batch = send_school_sms(
+            school=announcement.school,
+            actor=get_user_model().objects.filter(pk=actor_id).first(),
+            recipients=phones,
+            message=announcement.message,
+            idempotency_key=f"announcement:{announcement.pk}:sms",
+        )
+    except Exception as exc:
+        # Provider/configuration/credit errors should be visible to school staff;
+        # retain the details in server logs without exposing secrets to the UI.
+        logger.exception("Announcement SMS submission failed for announcement %s", announcement.pk)
+        detail = getattr(exc, "messages", None) or getattr(exc, "message", None)
+        if isinstance(detail, (list, tuple)):
+            detail = " ".join(str(item) for item in detail)
+        if isinstance(detail, dict):
+            detail = " ".join(str(item) for item in detail.values())
+        announcement.sms_status = Announcement.SMSStatus.FAILED
+        announcement.sms_recipient_count = len(phones)
+        announcement.sms_error = str(detail or "SMS could not be submitted. Check the school SMS credits and Termii setup.")[:300]
+        announcement.save(update_fields=("sms_status", "sms_recipient_count", "sms_error", "updated_at"))
+        return
+
+    submitted = sum(row["status"] in ("submitted", "delivered") for row in batch["messages"])
+    announcement.sms_recipient_count = batch["recipient_count"]
+    announcement.sms_submitted_count = submitted
+    announcement.sms_status = {
+        "submitted": Announcement.SMSStatus.SUBMITTED,
+        "partial": Announcement.SMSStatus.PARTIAL,
+        "failed": Announcement.SMSStatus.FAILED,
+    }.get(batch["status"], Announcement.SMSStatus.PENDING)
+    errors = [row["last_error"] for row in batch["messages"] if row["last_error"]]
+    announcement.sms_error = (errors[0] if errors else "")[:300]
+    announcement.save(update_fields=("sms_status", "sms_recipient_count", "sms_submitted_count", "sms_error", "updated_at"))
 
 
 class PortalPagination(PageNumberPagination):
@@ -341,6 +425,11 @@ class StaffAnnouncementView(APIView):
             announcement.status = Announcement.Status.PUBLISHED
             announcement.published_at = timezone.now()
             announcement.updated_by = request.user
+            if announcement.send_sms:
+                announcement.sms_status = Announcement.SMSStatus.PENDING
+                announcement.sms_recipient_count = 0
+                announcement.sms_submitted_count = 0
+                announcement.sms_error = ""
             try:
                 announcement.save()
             except DjangoValidationError as exc:
@@ -348,7 +437,8 @@ class StaffAnnouncementView(APIView):
             from .services import notify_guardians_for_student
             links = StudentGuardian.objects.filter(
                 school=announcement.school, is_active=True, can_receive_communications=True,
-                guardian__is_active=True, guardian__user__isnull=False,
+                student__school=announcement.school, student__status=Student.Status.ACTIVE,
+                guardian__school=announcement.school, guardian__is_active=True, guardian__user__isnull=False,
             ).values_list("student_id", "guardian__user_id").distinct()
             for student_id, user_id in links:
                 from .models import PortalNotification
@@ -357,6 +447,10 @@ class StaffAnnouncementView(APIView):
                     defaults={"announcement": announcement, "kind": "announcement_published",
                               "title": announcement.title, "message": f"A new announcement is available from {announcement.school.name}."},
                 )
+            if announcement.send_sms:
+                announcement_id = announcement.pk
+                actor_id = request.user.pk
+                transaction.on_commit(lambda: deliver_announcement_sms(announcement_id, actor_id))
         return Response(AnnouncementSerializer(announcement).data)
 
     @transaction.atomic

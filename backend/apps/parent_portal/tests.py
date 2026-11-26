@@ -230,6 +230,81 @@ class ParentPortalApiTests(TestCase):
         self.assertTrue(notice.data["results"])
         self.assertEqual(self.api("post", "/api/v1/parent/staff/announcements/", {"title": "No", "message": "No"}).status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_announcements_only_reach_contactable_guardians_in_their_school(self):
+        manager = self.make_user("portal-manager", SchoolMembership.Role.SCHOOL_MANAGER, self.school)
+        other_parent = self.make_user("parent-south", SchoolMembership.Role.MEMBER, self.other)
+        other_student = Student.objects.create(
+            school=self.other, admission_number="S-001", first_name="Tomi", last_name="Adebayo",
+        )
+        other_guardian = Guardian.objects.create(
+            school=self.other, full_name="Bola Adebayo", phone="555-0199", email="bola@example.test", user=other_parent,
+        )
+        StudentGuardian.objects.create(
+            school=self.other, student=other_student, guardian=other_guardian,
+            relationship_type="mother", can_receive_communications=True,
+        )
+
+        self.client.force_authenticate(self.admin)
+        north_draft = self.api("post", "/api/v1/parent/staff/announcements/", {
+            "title": "North notice", "message": "For North families only.",
+        })
+        self.assertEqual(north_draft.status_code, status.HTTP_201_CREATED, north_draft.data)
+        self.client.force_authenticate(self.other_admin)
+        south_draft = self.api("post", "/api/v1/parent/staff/announcements/", {
+            "title": "South notice", "message": "For South families only.",
+        }, school=self.other)
+        self.assertEqual(south_draft.status_code, status.HTTP_201_CREATED, south_draft.data)
+
+        self.client.force_authenticate(self.admin)
+        self.api("post", f"/api/v1/parent/staff/announcements/{north_draft.data['id']}/publish/", {})
+        self.client.force_authenticate(self.other_admin)
+        self.api("post", f"/api/v1/parent/staff/announcements/{south_draft.data['id']}/publish/", {}, school=self.other)
+
+        self.client.force_authenticate(self.parent)
+        north_rows = self.api("get", "/api/v1/parent/announcements/").data["results"]
+        self.assertEqual([row["title"] for row in north_rows], ["North notice"])
+        self.assertEqual(
+            PortalNotification.objects.filter(user=self.parent, announcement_id=north_draft.data["id"]).count(), 1,
+        )
+        self.client.force_authenticate(other_parent)
+        south_rows = self.api("get", "/api/v1/parent/announcements/").data["results"]
+        self.assertEqual([row["title"] for row in south_rows], ["South notice"])
+        self.assertEqual(
+            PortalNotification.objects.filter(user=other_parent, announcement_id=south_draft.data["id"]).count(), 1,
+        )
+
+        self.client.force_authenticate(manager)
+        manager_rows = self.api("get", "/api/v1/parent/staff/announcements/")
+        self.assertEqual(manager_rows.status_code, status.HTTP_200_OK, manager_rows.data)
+        self.assertEqual(len(manager_rows.data), 1)
+        self.client.force_authenticate(self.teacher)
+        teacher_rows = self.api("get", "/api/v1/parent/staff/announcements/")
+        self.assertEqual(teacher_rows.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(self.admin)
+        archived = self.api("post", f"/api/v1/parent/staff/announcements/{north_draft.data['id']}/archive/", {})
+        self.assertEqual(archived.status_code, status.HTTP_200_OK, archived.data)
+        self.link.can_receive_communications = False
+        self.link.save(update_fields=("can_receive_communications",))
+
+        self.client.force_authenticate(self.admin)
+        private_draft = self.api("post", "/api/v1/parent/staff/announcements/", {
+            "title": "Opt-in notice", "message": "Only contactable guardians should receive this.",
+        })
+        self.assertEqual(private_draft.status_code, status.HTTP_201_CREATED, private_draft.data)
+        private_published = self.api("post", f"/api/v1/parent/staff/announcements/{private_draft.data['id']}/publish/", {})
+        self.assertEqual(private_published.status_code, status.HTTP_200_OK, private_published.data)
+        self.assertEqual(
+            PortalNotification.objects.filter(user=self.parent, announcement_id=private_draft.data["id"]).count(), 0,
+        )
+
+        self.client.force_authenticate(self.parent)
+        self.assertEqual(self.api("get", "/api/v1/parent/announcements/").data["results"], [])
+
+        self.client.force_authenticate(self.other_admin)
+        denied = self.api("get", "/api/v1/parent/staff/announcements/", school=self.school)
+        self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_announcement_expiry_must_follow_publication(self):
         self.client.force_authenticate(self.admin)
         created = self.api("post", "/api/v1/parent/staff/announcements/", {
@@ -240,6 +315,24 @@ class ParentPortalApiTests(TestCase):
         published = self.api("post", f"/api/v1/parent/staff/announcements/{created.data['id']}/publish/", {})
         self.assertEqual(published.status_code, status.HTTP_400_BAD_REQUEST, published.data)
         self.assertEqual(Announcement.objects.get(pk=created.data["id"]).status, Announcement.Status.DRAFT)
+
+    def test_expired_published_announcement_is_hidden_from_guardian_portal(self):
+        self.client.force_authenticate(self.admin)
+        created = self.api("post", "/api/v1/parent/staff/announcements/", {
+            "title": "Past event", "message": "This event has passed.",
+            "expires_at": (timezone.now() + timedelta(days=1)).isoformat(),
+        })
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
+        published = self.api("post", f"/api/v1/parent/staff/announcements/{created.data['id']}/publish/", {})
+        self.assertEqual(published.status_code, status.HTTP_200_OK, published.data)
+        Announcement.objects.filter(pk=created.data["id"]).update(
+            published_at=timezone.now() - timedelta(days=3),
+            expires_at=timezone.now() - timedelta(days=1),
+        )
+
+        self.client.force_authenticate(self.parent)
+        rows = self.api("get", "/api/v1/parent/announcements/").data["results"]
+        self.assertEqual(rows, [])
 
     def test_guardian_cannot_access_staff_or_billing_operations(self):
         for path in ("/api/v1/students/", "/api/v1/attendance/registers/", "/api/v1/assessment-plans/", "/api/v1/billing/credits/"):

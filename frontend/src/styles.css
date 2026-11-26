@@ -156,7 +156,8 @@ h1 em { color: #1486a8; font-weight: 500; }.intro { max-width: 440px; color: #76
 .parent-notifications article.unread { border-left:4px solid #43835c; padding-left:14px; }
 .parent-notifications article.read { opacity:.78; }
 .announcement-form { display:grid; gap:14px; }
-.announcement-form textarea { width:100%; resize:vertical; }
+.announcement-form label { min-width:0; }
+.announcement-form textarea { width:100%; max-width:100%; min-width:0; resize:vertical; }
 .announcement-status { display:inline-block; padding:4px 9px; border-radius:999px; background:#edf1ed; color:#4d5c52; font-size:12px; text-transform:capitalize; }
 .announcement-status.published { background:#e6f7f3; color:#28603e; }
 .announcement-admin-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
@@ -1232,6 +1233,16 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
   .dashboard-topbar { gap:8px; }
   .dashboard-kpi { padding:12px; }
   .dashboard-kpi strong { font-size:21px; }
+}
+
+@media (min-width:761px) and (max-width:900px) {
+  .school-dashboard { grid-template-columns:minmax(0,1fr); }
+  .dashboard-sidebar { position:static; height:auto; min-height:0; gap:15px; padding:14px 18px; }
+  .dashboard-sidebar nav { flex:none; display:flex; min-width:0; max-width:100%; gap:6px; overflow-x:auto; overflow-y:hidden; padding-bottom:5px; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; scroll-snap-type:x proximity; scrollbar-width:thin; }
+  .dashboard-nav { flex:0 0 auto; min-width:max-content; white-space:nowrap; scroll-snap-align:start; }
+  .dashboard-user { display:none; }
+  .dashboard-columns { grid-template-columns:minmax(0,1fr); }
+  .dashboard-content { padding:24px clamp(18px,4vw,32px); }
 }
 
 /* Branded authentication screens */

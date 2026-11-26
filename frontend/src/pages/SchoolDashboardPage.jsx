@@ -16,6 +16,7 @@ const actions = [
   ['Services & licenses', '/app/services', ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal']],
   ['Report cards', '/app/report-cards', ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher']],
   ['Reports & analytics', '/app/reports', ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal', 'teacher', 'accountant', 'receptionist']],
+  ['Parent announcements', '/app/announcements', ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal']],
   ['Billing & credits', '/app/billing', ['platform_superadmin', 'school_owner', 'school_admin', 'accountant']],
   ['SMS & messaging', '/app/sms', ['school_owner', 'school_admin', 'school_manager', 'principal']],
   ['School fees', '/app/finance', ['platform_superadmin', 'school_owner', 'school_admin', 'accountant']],
@@ -51,6 +52,11 @@ export default function SchoolDashboardPage({ navigate }) {
     metrics.credit_balance != null && ['Report-card credits', metrics.credit_balance, 'Available balance'],
   ].filter(Boolean)
   const permittedActions = actions.filter(([, , roles]) => roles.includes(role))
+  const announcementAction = permittedActions.find(([label]) => label === 'Parent announcements')
+  const quickActions = [
+    ...(announcementAction ? [announcementAction] : []),
+    ...permittedActions.filter(([label]) => label !== 'Parent announcements').slice(0, 4),
+  ]
   const activity = [
     metrics.results?.submitted != null && [`${metrics.results.submitted} result submissions awaiting review`, '/app/assessments'],
     metrics.report_cards?.review != null && [`${metrics.report_cards.review} report cards in review`, '/app/report-cards'],
@@ -65,7 +71,7 @@ export default function SchoolDashboardPage({ navigate }) {
         <div className="dashboard-kpis">{cards.map(([label, value, note, path]) => path ? <button type="button" className="dashboard-kpi dashboard-kpi-link" key={label} onClick={() => navigate(path)}><span>{label}</span><strong>{value}</strong><small>{note} · View records →</small></button> : <article className="dashboard-kpi" key={label}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>)}</div>
         <div className="dashboard-columns"><article className="dashboard-panel"><div className="dashboard-panel-heading"><h2>Academic overview</h2><button className="text-button" onClick={() => navigate('/app/reports')}>View reports</button></div>
           {metrics.class_performance?.length ? <div className="dashboard-performance">{metrics.class_performance.map((item) => <div key={item.class_name}><span>{item.class_name}</span><span className="dashboard-bar"><i style={{ width: `${Math.min(100, item.average_percentage)}%` }} /></span><strong>{item.average_percentage}%</strong></div>)}</div> : data?.filters?.classes?.length ? <div className="dashboard-class-list">{data.filters.classes.slice(0, 8).map((item) => <button key={item.id} onClick={() => navigate('/app/academics')}><span>{item.name}</span><span>Manage class →</span></button>)}</div> : <p className="dashboard-empty">Class overview will appear when there is academic structure available to your role.</p>}
-        </article><article className="dashboard-panel"><h2>Needs attention</h2>{activity.length ? activity.map(([label, path]) => <button className="dashboard-activity" key={label} onClick={() => navigate(path)}>{label} <span>→</span></button>) : <p className="dashboard-empty">No pending review items are available for this account.</p>}<h2 className="dashboard-actions-title">Quick actions</h2><div className="dashboard-quick-actions">{permittedActions.slice(0, 4).map(([label, path]) => <button key={path} onClick={() => navigate(path)}>{label} →</button>)}</div></article></div>
+        </article><article className="dashboard-panel"><h2>Needs attention</h2>{activity.length ? activity.map(([label, path]) => <button className="dashboard-activity" key={label} onClick={() => navigate(path)}>{label} <span>→</span></button>) : <p className="dashboard-empty">No pending review items are available for this account.</p>}<h2 className="dashboard-actions-title">Quick actions</h2><div className="dashboard-quick-actions">{quickActions.map(([label, path]) => <button key={path} onClick={() => navigate(path)}>{label} →</button>)}</div></article></div>
         <p className="dashboard-footer">EDUstacked · {selectedSchool?.school_name}</p>
       </div>
     </section>
