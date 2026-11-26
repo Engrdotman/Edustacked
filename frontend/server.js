@@ -1,7 +1,8 @@
 import express from 'express'
-import { createProxyMiddleware } from 'express-http-proxy'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import http from 'http'
+import https from 'https'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -13,24 +14,43 @@ const API_BACKEND = process.env.VITE_API_BASE_URL || 'https://edustacked-product
 console.log('Starting frontend server...')
 console.log(`API Backend: ${API_BACKEND}`)
 
-// Proxy API requests to the backend
-app.use('/api', createProxyMiddleware({
-  target: API_BACKEND,
-  changeOrigin: true,
-  pathRewrite: (path) => {
-    console.log(`[PROXY] Original path: ${path}`)
-    // Keep the full path as-is, the backend expects /api/v1/...
-    return path
-  },
-  onError: (err, req, res) => {
+// Simple proxy for API requests
+app.all('/api/*', async (req, res) => {
+  const targetUrl = new URL(req.originalUrl.replace(/^\/api/, '/api'), API_BACKEND)
+  
+  console.log(`[PROXY] ${req.method} ${req.path} -> ${targetUrl.href}`)
+  
+  try {
+    const protocol = targetUrl.protocol === 'https:' ? https : http
+    
+    const proxyReq = protocol.request(targetUrl, {
+      method: req.method,
+      headers: {
+        ...req.headers,
+        host: targetUrl.host,
+      },
+    }, (proxyRes) => {
+      console.log(`[PROXY] Response: ${req.path} -> ${proxyRes.statusCode}`)
+      
+      res.writeHead(proxyRes.statusCode, proxyRes.headers)
+      proxyRes.pipe(res)
+    })
+    
+    proxyReq.on('error', (err) => {
+      console.error(`[PROXY ERROR] ${req.method} ${req.path}:`, err.message)
+      res.status(502).json({ error: 'API gateway error', details: err.message })
+    })
+    
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      req.pipe(proxyReq)
+    } else {
+      proxyReq.end()
+    }
+  } catch (err) {
     console.error(`[PROXY ERROR] ${req.method} ${req.path}:`, err.message)
     res.status(502).json({ error: 'API gateway error', details: err.message })
-  },
-  onProxyRes: (proxyRes, req, res) => {
-    console.log(`[PROXY] ${req.method} ${req.path} -> ${proxyRes.statusCode}`)
-  },
-  logLevel: 'info',
-}))
+  }
+})
 
 // Serve static files from the dist directory
 app.use(express.static(join(__dirname, 'dist'), {
