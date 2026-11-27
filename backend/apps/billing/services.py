@@ -160,10 +160,6 @@ def _validated_success(payment, data):
         or data.get("currency") != payment.currency
     ):
         raise ValidationError({"payment": "Verified provider transaction does not match this purchase."})
-    customer = data.get("customer") or {}
-    email = customer.get("email")
-    if email and email.strip().lower() != payment.customer_email.strip().lower():
-        raise ValidationError({"payment": "Verified provider customer does not match this purchase."})
 
 
 @transaction.atomic
