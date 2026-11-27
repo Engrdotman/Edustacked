@@ -19,6 +19,8 @@ from sendgrid.helpers.mail import (
     MailSettings,
     Personalization,
     SandBoxMode,
+    ClickTracking,
+    TrackingSettings,
     To,
 )
 
@@ -59,6 +61,11 @@ class SendgridBackend(BaseEmailBackend):
         template_id = getattr(message, "dynamic_template_id", "")
         if template_id:
             mail.template_id = template_id
+
+        if getattr(message, "disable_click_tracking", False):
+            tracking_settings = TrackingSettings()
+            tracking_settings.click_tracking = ClickTracking(False, False)
+            mail.tracking_settings = tracking_settings
 
         for content, mimetype in getattr(message, "alternatives", []):
             if mimetype == "text/html":

@@ -1331,6 +1331,89 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 @media(prefers-reduced-motion:reduce) { .scroll-reveal,.scroll-reveal.is-visible { opacity:1; transform:none; transition:none; } .company-section.is-visible .company-feature-card,.company-section.is-visible .company-step-card { animation:none; } .company-menu-toggle .menu-icon i,.hero-slide-grid,.hero-slide-controls>button { transition:none; } .auth-page-login .auth-card-login,.auth-page-signup .signup-card,.auth-page-login .auth-visual,.auth-page-signup .auth-visual,::view-transition-old(auth-form-card),::view-transition-new(auth-form-card) { animation:none; } }
 @media(max-width:480px) { .whatsapp-float { right:14px; bottom:14px; min-height:54px; gap:8px; padding:8px 13px 8px 9px; } .whatsapp-float svg { flex-basis:36px; width:36px; height:36px; } .whatsapp-float strong { font-size:12px; } .whatsapp-float small { font-size:9px; } }
 
+/* Simple, consistent EDUstacked visual system. */
+:root {
+  --brand-accent:#1486a8;
+  --palette-ink:#454b72;
+  --palette-blue:#1486a8;
+  --palette-mint:#7bd4c4;
+  --palette-paper:#f2f1ed;
+  --palette-line:#d9d9e0;
+  --palette-soft:#e6f7f3;
+  --palette-blue-soft:#e7f4f7;
+  color:var(--palette-ink);
+  background:var(--palette-paper);
+  font-family:Inter,'Segoe UI',Arial,sans-serif;
+}
+
+.auth-page-split {
+  min-height:100vh;
+  min-height:100dvh;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:0;
+  padding:0;
+  color:#1e293b;
+  background:#fff;
+}
+.auth-visual,.auth-page-signup .auth-visual {
+  position:sticky;
+  top:0;
+  min-height:100vh;
+  min-height:100dvh;
+  padding:clamp(32px,6vw,88px);
+  border-radius:0;
+  color:#fff;
+  background:linear-gradient(135deg,#39415f 0%,#176b8d 55%,#1486a8 100%);
+  box-shadow:none;
+  animation:none!important;
+}
+.auth-visual .brand,.auth-visual .brand-name,.auth-visual .brand-name span { color:#fff; }
+.auth-visual .brand-mark { border:0; border-radius:10px; background:#454b72; box-shadow:none; }
+.auth-visual .brand-mark::before,.auth-visual .brand-mark::after { display:none; }
+.auth-visual .brand-letter-e,.auth-visual .brand-letter-s { color:#fff; text-shadow:none; }
+.auth-visual-copy { max-width:540px; }
+.auth-visual-copy>p { color:#7bd4c4; font-size:11px; letter-spacing:.12em; }
+.auth-visual-copy h2 { max-width:520px; color:#fff; font:500 clamp(38px,4.5vw,62px)/1.08 Georgia,'Times New Roman',serif; letter-spacing:-.035em; }
+.auth-visual-copy>span,.auth-visual>small { color:rgba(255,255,255,.82); }
+.auth-panel,.auth-panel-signup { width:min(100%,620px); max-width:620px; padding:clamp(24px,5vw,72px); }
+.auth-panel .auth-card,.auth-panel-signup .signup-card {
+  width:100%; max-width:none; margin:0; padding:0; border:0; border-radius:0;
+  color:#1e293b; background:#fff; box-shadow:none;
+}
+.auth-panel .auth-card h1,.auth-card h1 { color:#1e293b; font-family:Inter,'Segoe UI',Arial,sans-serif; font-weight:650; }
+.auth-card-login h1,.auth-card-login>.auth-intro { text-align:left; }
+.signup-card>.eyebrow,.signup-card>h1,.signup-card>.auth-intro { justify-content:flex-start; text-align:left; }
+.auth-intro { color:#667169; }
+.auth-mode-tabs { display:flex; width:max-content; gap:4px; margin:0 0 38px; padding:4px; border-radius:10px; background:#f1f3f1; }
+.auth-mode-tabs button { min-width:104px; min-height:42px; padding:8px 16px; border:0; border-radius:8px; color:#526057; background:transparent; font:600 14px Inter,'Segoe UI',Arial,sans-serif; cursor:pointer; }
+.auth-mode-tabs button.is-active { color:#454b72; background:#fff; box-shadow:0 1px 4px rgba(35,48,78,.12); }
+.auth-form label { color:#1e293b; }
+.auth-form input,.auth-form select,.auth-form textarea,.auth-form .password-field input {
+  border-color:#d9d9e0; border-radius:9px; color:#1e293b; background:#fff;
+}
+.auth-form input::placeholder,.auth-form textarea::placeholder { color:#929b94; opacity:1; }
+.auth-form input:focus,.auth-form select:focus,.auth-form textarea:focus { border-color:#1486a8; }
+.primary-button { border-radius:9px; color:#fff; background:#454b72; }
+.primary-button:hover:not(:disabled) { background:#343958; }
+.auth-link,.signin-text-button { color:#454b72; }
+.auth-page-login .auth-card-login,.auth-page-signup .signup-card { view-transition-name:none; animation:none!important; }
+.auth-page-signup { align-items:stretch; }
+.auth-page-signup .auth-panel-signup { align-self:start; }
+.auth-page-signup .signup-card { padding-bottom:20px; }
+.auth-page-signup .auth-form { gap:9px; }
+.auth-page-signup .signup-section-title { color:#454b72; border-color:#d9d9e0; }
+.auth-page-signup .sign-up-page-header { display:block; }
+.auth-page-signup .sign-up-page-header .signin-text-button { display:none; }
+
+@media(max-width:760px) {
+  .auth-page-split,.auth-page-signup { grid-template-columns:1fr; gap:0; padding:0; }
+  .auth-visual,.auth-page-signup .auth-visual { position:relative; top:auto; min-height:180px; height:auto; max-height:none; padding:22px 24px; }
+  .auth-visual-copy { margin:34px 0 0; }
+  .auth-visual-copy h2 { font-size:clamp(30px,8vw,42px); }
+  .auth-panel,.auth-panel-signup { width:100%; max-width:none; padding:30px 24px 42px; }
+  .auth-mode-tabs { margin-bottom:28px; }
+}
+
 
 /* Story section expand/collapse */
 .story-expand-button { 
@@ -1871,7 +1954,7 @@ img,.school-logo-preview img,.principal-signature-preview img,.cbt-question-imag
 
 /* Shared, branded loading state */
 .loading-screen { position:relative; display:grid; min-height:100vh; min-height:100svh; place-items:center; overflow:hidden; padding:24px; background:radial-gradient(ellipse at 50% 20%,rgba(123,212,196,.2),transparent 42%),#f2f1ed; }
-.loading-card { position:relative; display:grid; width:min(100%,390px); justify-items:center; gap:14px; padding:36px 30px 30px; border:1px solid rgba(69,75,114,.13); border-radius:22px; background:rgba(255,255,255,.92); box-shadow:0 24px 70px rgba(37,54,78,.1); animation:loading-card-in .42s ease-out both; }
+.loading-card { position:relative; display:grid; width:min(100%,280px); justify-items:center; gap:12px; padding:22px; border:1px solid rgba(69,75,114,.1); border-radius:16px; background:rgba(255,255,255,.92); box-shadow:0 12px 36px rgba(37,54,78,.08); animation:loading-card-in .42s ease-out both; }
 .loading-brand-wrap { position:relative; display:grid; width:170px; height:62px; place-items:center; }
 .loading-brand-wrap .brand { position:relative; z-index:1; gap:10px; }
 .loading-brand-wrap .brand-mark { flex-basis:44px; width:44px; height:44px; border-radius:13px; }
@@ -1940,3 +2023,124 @@ img,.school-logo-preview img,.principal-signature-preview img,.cbt-question-imag
 @media(prefers-reduced-motion:reduce) {
   .pwa-status-banner { animation:none; }
 }
+
+/* Keep the long school signup form scrolling beside a stable first-screen brand panel. */
+.auth-page-signup { align-items:start; }
+.auth-page-signup .auth-visual {
+  align-self:start;
+  height:100vh;
+  height:100dvh;
+  min-height:100vh;
+  min-height:100dvh;
+  justify-content:space-between;
+}
+.auth-page-signup .auth-visual-copy {
+  display:block;
+  visibility:visible;
+  opacity:1;
+  transform:none;
+  margin:auto 0;
+}
+.auth-page-signup .auth-visual-copy h2 { max-width:12ch; }
+.auth-page-signup .auth-panel-signup { align-self:start; }
+@media(max-width:760px) {
+  .auth-page-signup .auth-visual { height:auto; min-height:0; }
+  .auth-page-signup .auth-visual-copy { margin:34px 0 0; }
+  .auth-page-signup .auth-visual-copy h2 { max-width:14ch; }
+}
+
+/* Apply the public hero's navy, teal, and mint palette across signed-in pages. */
+:root {
+  --brand-accent:#1486a8;
+  --palette-ink:#454b72;
+  --palette-blue:#1486a8;
+  --palette-mint:#7bd4c4;
+  --palette-paper:#f2f1ed;
+  --palette-line:#d9d9e0;
+  --palette-soft:#e6f7f3;
+  --palette-blue-soft:#e7f4f7;
+}
+body { color:#26374e; font-family:Inter,'Segoe UI',Arial,sans-serif; }
+.app-page,.platform-page,.onboarding-page,.school-dashboard { color:#26374e; background:#f2f1ed; }
+.app-page .app-topbar,.platform-page .app-topbar { border-color:#d9d9e0; background:transparent; }
+.app-page .brand-mark,.platform-page .brand-mark { background:linear-gradient(145deg,#454b72 0%,#1486a8 78%,#7bd4c4 100%); }
+.app-page .app-topbar>.text-button,.platform-page .app-topbar .text-button { background:transparent; }
+.app-content .eyebrow,.app-content .panel-kicker,.dashboard-content>.panel-kicker,.platform-header { color:#176b8d; }
+.app-content .app-heading,.app-content h1,.platform-content h1,.onboarding-content h1,.dashboard-content h1 { color:#263850; }
+.app-content .app-heading em { color:#1486a8; }
+.app-content .intro,.app-content .intro strong,.dashboard-subtitle { color:#526276; }
+.app-page .primary-button,.platform-page .primary-button,.onboarding-page .primary-button,
+.dashboard-content .primary-button,.parent-portal-page .primary-button {
+  border-color:#454b72;
+  color:#fff;
+  background:#454b72;
+}
+.app-page .primary-button:hover:not(:disabled),.platform-page .primary-button:hover:not(:disabled),
+.onboarding-page .primary-button:hover:not(:disabled),.dashboard-content .primary-button:hover:not(:disabled) { background:#343958; }
+.app-page .secondary-button,.platform-page .secondary-button,.onboarding-page .secondary-button,
+.dashboard-content .secondary-button {
+  border-color:#cdd9e3;
+  color:#344b6b;
+  background:#fff;
+}
+.app-page .text-button,.platform-page .text-button,.onboarding-page .text-button,
+.dashboard-content .text-button { color:#176b8d; }
+.app-page :is(input,select,textarea),.platform-page :is(input,select,textarea),
+.onboarding-page :is(input,select,textarea),.dashboard-content :is(input,select,textarea) { color:#26374e; }
+.app-page :is(input,select,textarea):focus,.platform-page :is(input,select,textarea):focus,
+.onboarding-page :is(input,select,textarea):focus,.dashboard-content :is(input,select,textarea):focus {
+  border-color:#1486a8;
+  outline-color:rgba(20,134,168,.28);
+}
+.app-page :is(.access-panel,.academic-panel,.academic-copy-card,.attendance-panel,.assessment-panel,
+  .report-card-panel,.reports-panel,.billing-panel,.parent-panel,.cbt-panel,.membership-directory,
+  .student-form,.student-list,.student-profile,.settings-card,.platform-school-card,.platform-audit-list article,
+  .platform-detail-grid>div,.onboarding-step) {
+  border-color:#d9dfe8;
+  background:#fff;
+  box-shadow:0 8px 22px rgba(49,65,98,.045);
+}
+.app-page :is(.panel-kicker,.dashboard-onboarding-link),.app-page .academic-panel h3,
+.app-page .academic-form h3,.app-page .assessment-panel h2,.app-page .report-card-panel h2,
+.app-page .reports-panel h2,.app-page .billing-panel h2,.platform-content h2,.onboarding-content h2 { color:#344b6b; }
+.app-page :is(.academic-field,.student-fields label,.assessment-field,.reports-filter-panel label,
+  .attendance-selectors label,.report-card-filters label,.fee-form-grid label) { color:#344b6b; }
+.app-page table th,.platform-page table th { color:#fff; background:#454b72; }
+.app-page table td,.platform-page table td { border-color:#e4e8ef; }
+.staff-seat-capacity { display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; }
+.staff-seat-capacity>div { display:grid; gap:6px; }
+.staff-seat-capacity>div>span { color:#64748b; font-size:13px; }
+.staff-seat-capacity>div:last-child { display:flex; align-items:end; gap:12px; flex-wrap:wrap; }
+.staff-seat-capacity label { display:grid; gap:6px; color:#344b6b; font-size:12px; font-weight:700; }
+.staff-seat-capacity select { min-height:40px; padding:8px 10px; border:1px solid #d9dfe8; border-radius:7px; background:#fff; color:#26374e; }
+.platform-sms-active-toggle { display:flex!important; grid-template-columns:auto 1fr; align-items:center; gap:8px!important; }
+.platform-sms-active-toggle input { width:auto!important; }
+
+.school-dashboard { background:#f2f1ed; }
+.dashboard-sidebar {
+  color:#fff;
+  background:linear-gradient(180deg,#39415f 0%,#176b8d 100%);
+  scrollbar-color:#7bd4c4 #39415f;
+}
+.dashboard-sidebar .brand-mark { background:#1486a8; }
+.dashboard-sidebar nav { scrollbar-color:#7bd4c4 #39415f; }
+.dashboard-nav { color:#edf4fb; }
+.dashboard-nav:hover,.dashboard-nav.active { color:#fff; background:rgba(123,212,196,.2); }
+.dashboard-user { border-color:rgba(255,255,255,.2); }
+.dashboard-user span { color:#c8d8e7; }
+.dashboard-topbar { border-color:#d9d9e0; background:#fff; }
+.dashboard-topbar>div { color:#526276; }
+.dashboard-content>.panel-kicker { color:#1486a8; }
+.dashboard-content h1 { color:#263850; }
+.dashboard-subtitle,.dashboard-empty,.dashboard-footer { color:#64748b; }
+.dashboard-kpi,.dashboard-panel { border-color:#d9dfe8; background:#fff; box-shadow:0 8px 22px rgba(49,65,98,.045); }
+.dashboard-kpi span,.dashboard-panel h2 { color:#344b6b; }
+.dashboard-kpi strong,.dashboard-performance strong { color:#454b72; }
+.dashboard-kpi small,.dashboard-class-list button span:last-child,.dashboard-activity span { color:#64748b; }
+.dashboard-class-list button,.dashboard-activity { border-color:#e4e8ef; color:#344b6b; }
+.dashboard-class-list button:hover,.dashboard-activity:hover { color:#176b8d; background:#f5fafb; }
+.dashboard-bar { background:#e7edf3; }
+.dashboard-bar i { background:linear-gradient(90deg,#1486a8,#7bd4c4); }
+.dashboard-quick-actions button { border-color:#d9dfe8; color:#344b6b; background:#fff; }
+.dashboard-quick-actions button:hover { border-color:#1486a8; background:#f5fafb; }
+.dashboard-onboarding-link { color:#176b8d; }

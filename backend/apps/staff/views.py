@@ -10,8 +10,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.schools.models import School
 from apps.schools.permissions import authorized_membership
 from apps.schools.tenancy import SchoolScopedQuerySetMixin
+from apps.billing.models import StaffSeatAccount, StaffSeatPlan
 from .models import StaffProfile, TeacherAssignment, TeacherProfile
 from .permissions import HasStaffPermission
 from .serializers import (
@@ -68,7 +70,16 @@ class StaffListCreateView(StaffViewMixin, ListCreateAPIView):
         return StaffDirectorySerializer
 
     def perform_create(self, serializer):
-        serializer.save(school=self.get_school())
+        school = self.get_school()
+        with transaction.atomic():
+            School.objects.select_for_update().get(pk=school.pk)
+            plan = StaffSeatPlan.current()
+            account, _ = StaffSeatAccount.objects.get_or_create(school=school)
+            current_count = StaffProfile.objects.filter(school=school).exclude(status=StaffProfile.Status.FORMER).count()
+            seat_limit = plan.included_seats + account.purchased_seats
+            if current_count >= seat_limit:
+                raise serializers.ValidationError({"detail": f"This school has reached its {seat_limit}-staff limit. Buy additional one-time staff seats in Billing to add more staff."})
+            serializer.save(school=school)
 
 
 class StaffDetailView(StaffViewMixin, RetrieveUpdateAPIView):

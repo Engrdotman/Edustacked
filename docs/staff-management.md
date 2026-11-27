@@ -8,6 +8,8 @@ You can also add the employment profile first and invite the login later, then e
 
 Employment states are active, inactive, suspended, and former. Former records are historical and cannot be reactivated. Teacher designations are stored separately from the staff profile. Assignment rows explicitly name a teacher, academic session, class, arm, subject, and start/end dates. A responsibility change ends the old row and creates a linked replacement; duplicate active assignments for the same teacher and academic placement are rejected. Multiple teachers and subjects remain allowed. There is no hardcoded teaching-load limit.
 
+Staff seats are counted from non-former staff profiles. Each school includes the current platform-configured seat allowance (initially 15). A school administrator can purchase extra one-time seats from Staff management; seats are added only after payment verification. The default add-on is ₦3,000 per seat, and platform administrators can change both values under Platform administration → SMS management → Staff seats. Seat prices are stored in kobo. Existing staff remain available if the included allowance is lowered; new staff creation is blocked until the school has capacity.
+
 ## API
 
 Use the authenticated active school in `X-School-ID`; the server resolves it against the user's membership.

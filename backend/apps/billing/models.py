@@ -33,7 +33,27 @@ class CreditPackage(models.Model):
         return f"{self.name} ({self.credits} credits)"
 
 
+class StaffSeatPlan(models.Model):
+    included_seats = models.PositiveSmallIntegerField(default=15)
+    additional_seat_price_minor = models.PositiveBigIntegerField(default=300_000, help_text="One-time price in kobo per additional staff seat.")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @classmethod
+    def current(cls):
+        plan, _ = cls.objects.get_or_create(pk=1)
+        return plan
+
+
+class StaffSeatAccount(models.Model):
+    school = models.OneToOneField(School, on_delete=models.CASCADE, related_name="staff_seat_account")
+    purchased_seats = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class CreditPayment(models.Model):
+    class ProductType(models.TextChoices):
+        REPORT_CARD_CREDITS = "credits", "Report-card credits"
+        STAFF_SEATS = "staff_seats", "Additional staff seats"
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
         SUCCESS = "success", "Successful"
@@ -41,6 +61,8 @@ class CreditPayment(models.Model):
         REVERSED = "reversed", "Reversed / under review"
 
     school = models.ForeignKey(School, on_delete=models.PROTECT, related_name="credit_payments")
+    product_type = models.CharField(max_length=16, choices=ProductType.choices, default=ProductType.REPORT_CARD_CREDITS)
+    seat_count = models.PositiveSmallIntegerField(default=0)
     package = models.ForeignKey(CreditPackage, null=True, on_delete=models.PROTECT, related_name="payments")
     package_name = models.CharField(max_length=100)
     credits = models.PositiveIntegerField()

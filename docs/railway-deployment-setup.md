@@ -45,7 +45,7 @@ Create these in **backend service → Variables**. Do not paste actual secrets i
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | Full origins with scheme, e.g. `https://your-vercel-project.vercel.app,https://www.yourdomain.ng`. |
 | `AUTH_REFRESH_COOKIE_SAMESITE` | Set to `None` for separate Vercel/Railway domains; the refresh cookie is Secure and HttpOnly. |
 | `CSRF_COOKIE_SAMESITE` | Set to `None` so browser requests can send the CSRF cookie to the Railway API. Both cookies require HTTPS in production. |
-| `FRONTEND_BASE_URL` | Exact HTTPS frontend origin, e.g. `https://www.yourdomain.ng`. Used to create payment return URLs and account, parent, and platform links. |
+| `FRONTEND_BASE_URL` | Exact HTTPS frontend origin, e.g. `https://edustackedng.netlify.app`. Used to create payment return URLs and account, parent, and platform links. Set one origin only; do not combine it with the Render API URL or a comma. |
 | `PASSWORD_RESET_FRONTEND_URL` | Exact public frontend origin used by account setup and forgot-password links. For the current Netlify site use `https://edustackedng.netlify.app`; change it if the public domain changes. |
 | `EMAIL_BACKEND` | For SendGrid Web API use `apps.core.sendgrid_backend.SendgridBackend`; for SMTP use `django.core.mail.backends.smtp.EmailBackend`. |
 | `PLATFORM_SIGNUP_NOTIFICATION_EMAIL` | EDUstacked inbox to alert when a new school workspace is registered. Defaults to `edustackedng@gmail.com`. |

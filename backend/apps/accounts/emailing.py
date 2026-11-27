@@ -34,7 +34,18 @@ def _send_password_action_email(user, *, action, school_name="", fail_silently=T
         )
     else:
         template_id = getattr(settings, "SENDGRID_PASSWORD_SETUP_TEMPLATE_ID", "")
-    if template_id and settings.EMAIL_BACKEND.endswith("SendgridBackend"):
+    sendgrid_backend = settings.EMAIL_BACKEND.endswith("SendgridBackend")
+    if is_reset and sendgrid_backend and not template_id:
+        timeout_minutes = max(1, (int(settings.PASSWORD_RESET_TIMEOUT) + 59) // 60)
+        message = EmailMessage(
+            subject,
+            f"Use this secure link to reset your EDUstacked password. It expires in {timeout_minutes} minutes.\n\n{reset_url}\n",
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email],
+        )
+        message.disable_click_tracking = True
+        return message.send(fail_silently=fail_silently)
+    if template_id and sendgrid_backend:
         message = EmailMessage(subject, "Use the secure link to set your password.", settings.DEFAULT_FROM_EMAIL, [user.email])
         message.dynamic_template_id = template_id
         timeout_minutes = max(1, (int(settings.PASSWORD_RESET_TIMEOUT) + 59) // 60)
@@ -66,6 +77,7 @@ def _send_password_action_email(user, *, action, school_name="", fail_silently=T
             "full_name": user_name,
             "school_name": school_name,
         }
+        message.disable_click_tracking = is_reset
         return message.send(fail_silently=fail_silently)
     return send_mail(
         subject=subject,

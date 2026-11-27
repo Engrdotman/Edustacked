@@ -49,6 +49,10 @@ export default function LoginPage({ navigate, sessionRequired = false }) {
         <small>Built for schools · edustackedng@gmail.com</small>
       </section>
       <div className="auth-panel"><section className="auth-card auth-card-login" aria-labelledby="login-title">
+        <div className="auth-mode-tabs" aria-label="Account access">
+          <button type="button" onClick={() => navigate('/signup')}>Sign up</button>
+          <button type="button" className="is-active" aria-current="page">Sign in</button>
+        </div>
         <h1 id="login-title">Welcome back.</h1>
         <p className="auth-intro">{sessionRequired ? 'Your session needs a fresh sign-in. Enter your account details to continue.' : 'Choose your account type, then sign in to continue.'}</p>
         <label htmlFor="login-portal">I am signing in as  </label>
@@ -63,9 +67,9 @@ export default function LoginPage({ navigate, sessionRequired = false }) {
         {new URLSearchParams(window.location.search).get('verify') === '1' && <p className="form-success" role="status">Enter your email address and request a fresh verification link.</p>}
         <form className="auth-form" onSubmit={handleSubmit}>
           <label htmlFor="email">Email address</label>
-          <input id="email" name="email" type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} />
+          <input id="email" name="email" type="email" autoComplete="username" placeholder="you@school.com" required value={email} onChange={(event) => setEmail(event.target.value)} />
           <label htmlFor="password">Password</label>
-          <PasswordField id="password" name="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
+          <PasswordField id="password" name="password" autoComplete="current-password" placeholder="Enter your password" required value={password} onChange={(event) => setPassword(event.target.value)} />
           {error && <p className="form-error" role="alert">{error}</p>}
           <button className="primary-button" type="submit" disabled={submitting}>
             {submitting ? 'Signing in…' : 'Sign in'}
@@ -81,7 +85,6 @@ export default function LoginPage({ navigate, sessionRequired = false }) {
         {(new URLSearchParams(window.location.search).get('registered') === '1' || new URLSearchParams(window.location.search).get('verify') === '1' || error.toLowerCase().includes('verify your email')) && <button className="text-button auth-link" type="button" onClick={resendVerification}>Resend verification email</button>}
         <div className='auth-link-flex-spaceinbtw'>
           
-        <button className="text-button auth-link" type="button" onClick={() => navigate('/signup')}>Register a school</button>
    <button className="text-button auth-link" type="button" onClick={() => navigate('/forgot-password')}>
           Forgot your password?
         </button>

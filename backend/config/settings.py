@@ -315,11 +315,23 @@ EMAIL_VERIFICATION_TIMEOUT = int(os.getenv("EMAIL_VERIFICATION_TIMEOUT", "86400"
 FRONTEND_BASE_URL = os.getenv(
     "FRONTEND_BASE_URL",
     "http://localhost:5173" if DEBUG else "https://edustacked.vercel.app",
-).rstrip("/")
+).strip().rstrip("/")
 if not DEBUG and urlparse(FRONTEND_BASE_URL).hostname in {"localhost", "127.0.0.1"}:
     # A copied local .env value must not make production verification links
     # point back to a developer's computer.
     FRONTEND_BASE_URL = "https://edustacked.vercel.app"
+frontend_base_parts = urlparse(FRONTEND_BASE_URL)
+if (
+    "," in FRONTEND_BASE_URL
+    or not frontend_base_parts.hostname
+    or frontend_base_parts.scheme not in ({"http", "https"} if DEBUG else {"https"})
+    or frontend_base_parts.path not in {"", "/"}
+    or frontend_base_parts.query
+    or frontend_base_parts.fragment
+):
+    raise ImproperlyConfigured(
+        "FRONTEND_BASE_URL must be one frontend origin only (HTTPS in production); do not include the API host."
+    )
 PASSWORD_RESET_FRONTEND_URL = os.getenv(
     "PASSWORD_RESET_FRONTEND_URL",
     FRONTEND_BASE_URL,

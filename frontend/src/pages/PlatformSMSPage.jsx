@@ -6,6 +6,7 @@ const money = (minor) => new Intl.NumberFormat('en-NG', { style: 'currency', cur
 const todayISO = () => new Date().toISOString().slice(0, 10)
 const minusDays = (count) => { const date = new Date(); date.setDate(date.getDate() - count); return date.toISOString().slice(0, 10) }
 const blankBundle = { name: '', credits: '', price_minor: '', display_order: '0', is_active: true }
+const blankCreditPackage = { name: '', credits: '', price_minor: '', description: '', display_order: '0', is_active: true }
 
 export default function PlatformSMSPage({ navigate }) {
   const [data, setData] = useState({ overview: {}, schools: [], bundles: [], configuration: {} })
@@ -15,6 +16,10 @@ export default function PlatformSMSPage({ navigate }) {
   const [config, setConfig] = useState({ monthly_free_allowance: 50, provider_cost_per_credit_minor: 600, low_balance_threshold: 100 })
   const [bundle, setBundle] = useState(blankBundle)
   const [editingBundle, setEditingBundle] = useState(null)
+  const [creditPackages, setCreditPackages] = useState([])
+  const [creditPackage, setCreditPackage] = useState(blankCreditPackage)
+  const [editingCreditPackage, setEditingCreditPackage] = useState(null)
+  const [staffSeatPlan, setStaffSeatPlan] = useState({ included_seats: 15, additional_seat_price_minor: 300000 })
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
   const [working, setWorking] = useState(false)
@@ -26,8 +31,8 @@ export default function PlatformSMSPage({ navigate }) {
     try {
       const query = new URLSearchParams({ from, to })
       if (search.trim()) query.set('q', search.trim())
-      const result = await apiRequest(`platform/sms/overview/?${query}`)
-      setData(result); setConfig(result.configuration); setError('')
+      const [result, packages, plan] = await Promise.all([apiRequest(`platform/sms/overview/?${query}`), apiRequest('platform/billing/packages/'), apiRequest('platform/billing/staff-seats/')])
+      setData(result); setConfig(result.configuration); setCreditPackages(packages); setStaffSeatPlan(plan); setError('')
     } catch (requestError) { setError(requestError.message || 'SMS platform analytics could not be loaded.') }
     finally { setLoading(false) }
   }, [from, to, search])
@@ -61,6 +66,31 @@ export default function PlatformSMSPage({ navigate }) {
     setWorking(true); setError(''); setSuccess('')
     try { await apiRequest(`platform/sms/bundles/${item.id}/`, { method: 'PATCH', body: { is_active: !item.is_active } }); setSuccess(`${item.name} bundle ${item.is_active ? 'hidden from schools' : 'made available'}.`); await load() }
     catch (requestError) { setError(requestError.message || 'Bundle availability could not be changed.') }
+    finally { setWorking(false) }
+  }
+
+  function beginEditCreditPackage(item) {
+    setEditingCreditPackage(item.id)
+    setCreditPackage({ name: item.name, credits: String(item.credits), price_minor: String(item.price_minor), description: item.description || '', display_order: String(item.display_order), is_active: item.is_active })
+  }
+
+  async function saveCreditPackage(event) {
+    event.preventDefault(); setWorking(true); setError(''); setSuccess('')
+    const payload = { ...creditPackage, credits: Number(creditPackage.credits), price_minor: Number(creditPackage.price_minor), display_order: Number(creditPackage.display_order) }
+    try {
+      await apiRequest(editingCreditPackage ? `platform/billing/packages/${editingCreditPackage}/` : 'platform/billing/packages/', { method: editingCreditPackage ? 'PATCH' : 'POST', body: payload })
+      setSuccess(editingCreditPackage ? 'Report-card credit package updated.' : 'Report-card credit package created.')
+      setCreditPackage(blankCreditPackage); setEditingCreditPackage(null); await load()
+    } catch (requestError) { setError(requestError.message || 'Report-card credit package could not be saved.') }
+    finally { setWorking(false) }
+  }
+
+  async function saveStaffSeatPlan(event) {
+    event.preventDefault(); setWorking(true); setError(''); setSuccess('')
+    try {
+      const saved = await apiRequest('platform/billing/staff-seats/', { method: 'PATCH', body: { included_seats: Number(staffSeatPlan.included_seats), additional_seat_price_minor: Number(staffSeatPlan.additional_seat_price_minor) } })
+      setStaffSeatPlan(saved); setSuccess('Included staff seats and one-time extra-seat price saved.')
+    } catch (requestError) { setError(requestError.message || 'Staff seat pricing could not be saved.') }
     finally { setWorking(false) }
   }
 
@@ -105,6 +135,11 @@ export default function PlatformSMSPage({ navigate }) {
         <div className="platform-sms-table-wrap"><table className="platform-sms-table"><thead><tr><th>School</th><th>Messages</th><th>Segments</th><th>Free used</th><th>Paid used</th><th>Free left</th><th>Prepaid left</th><th>Bundle payments</th><th>Provider cost</th><th>SMS controls</th><th>Last activity</th><th></th></tr></thead><tbody>{data.schools?.map((school) => <tr key={school.school_id}><td>{school.school_name}<small>{school.school_status.replaceAll('_', ' ')}</small></td><td>{school.messages}</td><td>{school.segments}</td><td>{school.free_used}</td><td>{school.paid_used}</td><td>{school.free_remaining}</td><td>{school.purchased_balance}</td><td>{school.bundle_purchases} · {money(school.cash_collected_minor)}</td><td>{money(school.provider_cost_minor)}</td><td>{school.sending_suspended ? 'Paused' : 'Active'}<button className="text-button" disabled={working} onClick={() => setSuspension(school)}>{school.sending_suspended ? 'Resume' : 'Pause'}</button></td><td>{school.last_sms_at ? new Date(school.last_sms_at).toLocaleString() : 'No activity'}</td><td><button className="secondary-button" disabled={working} onClick={() => openSchool(school)}>Details</button></td></tr>)}</tbody></table></div>
         {!data.schools?.length && !loading && <p className="dashboard-empty">No school SMS activity was found for this date range.</p>}
       </section>
+      <section className="platform-user-section"><div className="platform-user-heading"><div><p className="panel-kicker">REPORT-CARD BILLING</p><h2>Report-card credit packages</h2></div><span>Prices are entered in kobo</span></div>
+        <div className="platform-sms-bundle-list">{creditPackages.map((item) => <article key={item.id}><div><strong>{item.name}</strong><span>{Number(item.credits).toLocaleString()} credits · {money(item.price_minor)}</span><small>{item.is_active ? 'Available to schools' : 'Hidden from schools'} · {item.description || 'No description'}</small></div><button className="secondary-button" disabled={working} onClick={() => beginEditCreditPackage(item)}>Edit</button></article>)}</div>
+        <form className="platform-sms-settings platform-sms-bundle-form" onSubmit={saveCreditPackage}><h3>{editingCreditPackage ? 'Edit credit package' : 'Add credit package'}</h3><label>Package name<input required maxLength="100" value={creditPackage.name} onChange={(event) => setCreditPackage({ ...creditPackage, name: event.target.value })} /></label><label>Credits<input type="number" min="1" required value={creditPackage.credits} onChange={(event) => setCreditPackage({ ...creditPackage, credits: event.target.value })} /></label><label>Price (kobo)<input type="number" min="1" required value={creditPackage.price_minor} onChange={(event) => setCreditPackage({ ...creditPackage, price_minor: event.target.value })} /><small>For example, ₦1,000 is 100,000 kobo.</small></label><label>Description<input maxLength="240" value={creditPackage.description} onChange={(event) => setCreditPackage({ ...creditPackage, description: event.target.value })} /></label><label>Display order<input type="number" min="0" value={creditPackage.display_order} onChange={(event) => setCreditPackage({ ...creditPackage, display_order: event.target.value })} /></label><label className="platform-sms-active-toggle"><input type="checkbox" checked={creditPackage.is_active} onChange={(event) => setCreditPackage({ ...creditPackage, is_active: event.target.checked })} /> Available for purchase</label><button className="primary-button" disabled={working}>{working ? 'Saving…' : editingCreditPackage ? 'Save credit package' : 'Create credit package'}</button>{editingCreditPackage && <button className="text-button" type="button" onClick={() => { setCreditPackage(blankCreditPackage); setEditingCreditPackage(null) }}>Cancel editing</button>}</form>
+      </section>
+      <section className="platform-user-section"><div className="platform-user-heading"><div><p className="panel-kicker">STAFF SEATS</p><h2>Included seats and add-on price</h2></div><span>One-time purchase</span></div><form className="platform-sms-settings" onSubmit={saveStaffSeatPlan}><label>Included staff seats per school<input type="number" min="0" max="10000" required value={staffSeatPlan.included_seats ?? 15} onChange={(event) => setStaffSeatPlan({ ...staffSeatPlan, included_seats: event.target.value })} /></label><label>Price per extra seat (kobo)<input type="number" min="1" required value={staffSeatPlan.additional_seat_price_minor ?? 300000} onChange={(event) => setStaffSeatPlan({ ...staffSeatPlan, additional_seat_price_minor: event.target.value })} /><small>₦{(Number(staffSeatPlan.additional_seat_price_minor || 0) / 100).toLocaleString('en-NG')} one time per seat</small></label><button className="primary-button" disabled={working}>Save staff seat pricing</button></form></section>
       {detail && <section className="platform-user-section platform-sms-detail"><div className="platform-user-heading"><div><p className="panel-kicker">SCHOOL DETAIL</p><h2>{detail.school_name}</h2></div><button className="text-button" onClick={() => setDetail(null)}>Close details</button></div><div className="platform-detail-grid">{[['Free remaining', detail.free_remaining], ['Prepaid balance', detail.purchased_balance], ['Messages', detail.messages], ['Segments', detail.segments], ['Bundle cash', money(detail.cash_collected_minor)], ['Provider cost', money(detail.provider_cost_minor)], ['Paid value consumed', money(detail.paid_sales_value_consumed_minor)], ['Paid cost', money(detail.paid_provider_cost_minor)]].map(([name, value]) => <div key={name}><span>{name}</span><strong>{value}</strong></div>)}</div><h3>Recent bundle purchases</h3><div className="school-sms-history">{detail.purchases?.map((row) => <article key={row.id}><strong>{row.bundle_name} · {row.status}</strong><span>{row.credits.toLocaleString()} credits · {money(row.amount_minor)} · {row.provider} · {new Date(row.created_at).toLocaleString()}</span></article>)}{!detail.purchases?.length && <p className="dashboard-empty">No bundle purchases found.</p>}</div><h3>Monthly free allowance history</h3><div className="school-sms-history">{detail.monthly_allowances?.map((row) => <article key={row.month_start}><strong>{new Date(`${row.month_start}T00:00:00`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</strong><span>{row.used_credits} used of {row.allowance_credits} free credits</span></article>)}</div><h3>Recent SMS and delivery status</h3><div className="school-sms-history">{detail.messages?.map((row) => <article key={row.id}><strong>{row.phone} · {row.status}</strong><span>{row.free_credits} free · {row.paid_credits} paid · {row.actual_provider_cost_minor == null ? 'estimated cost' : money(row.actual_provider_cost_minor)}</span><p>{row.message}</p>{row.last_error && <small>{row.last_error}</small>}</article>)}{!detail.messages?.length && <p className="dashboard-empty">No messages found for this school.</p>}</div><h3>Recent wallet transactions</h3><div className="school-sms-history">{detail.transactions?.map((row) => <article key={row.id}><strong>{row.description}</strong><span>{row.credits > 0 ? '+' : ''}{row.credits} credits · {new Date(row.created_at).toLocaleString()}</span></article>)}</div></section>}
       <section className="platform-user-section"><div className="platform-user-heading"><div><p className="panel-kicker">PLATFORM SETTINGS</p><h2>SMS allowance and provider cost</h2></div><span>Provider credentials stay in Railway variables</span></div><form className="platform-sms-settings" onSubmit={saveConfig}><label>Free SMS per school each month<input type="number" min="0" max="10000" required value={config.monthly_free_allowance ?? 50} onChange={(event) => setConfig({ ...config, monthly_free_allowance: event.target.value })} /></label><label>Provider cost per credit (kobo)<input type="number" min="1" required value={config.provider_cost_per_credit_minor ?? 600} onChange={(event) => setConfig({ ...config, provider_cost_per_credit_minor: event.target.value })} /><small>₦{(Number(config.provider_cost_per_credit_minor || 0) / 100).toFixed(2)} per segment</small></label><label>Low balance alert threshold<input type="number" min="0" required value={config.low_balance_threshold ?? 100} onChange={(event) => setConfig({ ...config, low_balance_threshold: event.target.value })} /></label><button className="primary-button" disabled={working}>Save settings</button></form>
         <h3>Prepaid bundles</h3><div className="platform-sms-bundle-list">{data.bundles?.map((item) => <article key={item.id}><div><strong>{item.name}</strong><span>{item.credits.toLocaleString()} credits · {money(item.price_minor)}</span><small>{item.is_active ? 'Available to schools' : 'Hidden from schools'}</small></div><div><button className="secondary-button" disabled={working} onClick={() => beginEdit(item)}>Edit</button><button className="text-button" disabled={working} onClick={() => toggleBundle(item)}>{item.is_active ? 'Deactivate' : 'Activate'}</button></div></article>)}</div>

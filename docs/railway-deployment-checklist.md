@@ -36,6 +36,7 @@ Required production variables (set in Railway backend service Variables):
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://your-vercel-project.vercel.app,https://www.yourdomain.com` |
 | `FRONTEND_BASE_URL` | `https://www.yourdomain.com` |
 | `PASSWORD_RESET_FRONTEND_URL` | `https://edustackedng.netlify.app` (or the exact public frontend origin) |
+| `SENDGRID_PASSWORD_RESET_TEMPLATE_ID` | Active SendGrid Dynamic Template ID using the matching HTML and plain-text versions in `docs/templates/` |
 | `EMAIL_BACKEND` | `django.core.mail.backends.smtp.EmailBackend` |
 | `EMAIL_HOST` | SMTP hostname (e.g., `smtp.gmail.com`, `smtp.sendgrid.net`) |
 | `EMAIL_PORT` | `587` (for STARTTLS) or `465` (for implicit TLS) |

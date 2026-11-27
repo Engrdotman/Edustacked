@@ -1,7 +1,8 @@
 import json
 
 from django.core.exceptions import ImproperlyConfigured, ValidationError as DjangoValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.http import Http404
 from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.exceptions import PermissionDenied
@@ -15,13 +16,14 @@ from apps.schools.permissions import HasSchoolPermission, IsPlatformSuperadmin
 from apps.schools.tenancy import resolve_authorized_school
 
 from .models import CreditAccount, CreditPackage, CreditPayment, CreditTransaction, ReconciliationIssue, ReportCardBilling
+from .models import StaffSeatAccount, StaffSeatPlan
 from .serializers import (
     AdjustmentSerializer, CreditPackageSerializer, CreditPaymentSerializer,
     CreditTransactionSerializer, IssueResolutionSerializer, PurchaseSerializer,
-    ReconciliationIssueSerializer, ReportCardBillingSerializer,
+    ReconciliationIssueSerializer, ReportCardBillingSerializer, StaffSeatPurchaseSerializer, StaffSeatPlanSerializer,
 )
 from .services import (
-    apply_provider_result, bachs_signature_is_valid, current_balance,
+    apply_provider_result, bachs_signature_is_valid, current_balance, initialize_staff_seat_purchase,
     flutterwave_signature_is_valid,
     initialize_purchase, paystack_signature_is_valid, platform_adjustment,
 )
@@ -55,6 +57,38 @@ class CreditPackageListView(SchoolBillingView):
         return Response(CreditPackageSerializer(packages, many=True).data)
 
 
+class PlatformCreditPackageListView(APIView):
+    permission_classes = (IsAuthenticated, IsPlatformSuperadmin)
+
+    def get(self, request, **kwargs):
+        return Response(CreditPackageSerializer(CreditPackage.objects.all(), many=True).data)
+
+    def post(self, request, **kwargs):
+        serializer = CreditPackageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            package = serializer.save()
+        except IntegrityError as exc:
+            raise serializers.ValidationError({"name": "A package with this name already exists."}) from exc
+        return Response(CreditPackageSerializer(package).data, status=status.HTTP_201_CREATED)
+
+
+class PlatformCreditPackageDetailView(APIView):
+    permission_classes = (IsAuthenticated, IsPlatformSuperadmin)
+
+    def patch(self, request, pk, **kwargs):
+        package = CreditPackage.objects.filter(pk=pk).first()
+        if package is None:
+            raise Http404
+        serializer = CreditPackageSerializer(package, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            package = serializer.save()
+        except IntegrityError as exc:
+            raise serializers.ValidationError({"name": "A package with this name already exists."}) from exc
+        return Response(CreditPackageSerializer(package).data)
+
+
 class PurchaseInitializeView(SchoolBillingView):
     required_school_permission = "billing.purchase"
 
@@ -70,6 +104,46 @@ class PurchaseInitializeView(SchoolBillingView):
         except (DjangoValidationError, ImproperlyConfigured) as exc:
             raise serializers.ValidationError(getattr(exc, "message_dict", None) or getattr(exc, "messages", [str(exc)])) from exc
         return Response(CreditPaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
+
+
+class StaffSeatCapacityView(SchoolBillingView):
+    required_school_permission = "staff.view"
+
+    def get(self, request, **kwargs):
+        school = self.school(request)
+        plan = StaffSeatPlan.current()
+        account, _ = StaffSeatAccount.objects.get_or_create(school=school)
+        from apps.staff.models import StaffProfile
+        active_count = StaffProfile.objects.filter(school=school).exclude(status=StaffProfile.Status.FORMER).count()
+        return Response({"included_seats": plan.included_seats, "purchased_seats": account.purchased_seats, "staff_count": active_count, "seat_limit": plan.included_seats + account.purchased_seats, "additional_seat_price_minor": plan.additional_seat_price_minor})
+
+
+class StaffSeatPurchaseView(SchoolBillingView):
+    required_school_permission = "billing.purchase"
+
+    def post(self, request, **kwargs):
+        school = self.school(request)
+        serializer = StaffSeatPurchaseSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            payment = initialize_staff_seat_purchase(school, request.user, serializer.validated_data["seats"], serializer.validated_data["provider"])
+        except (DjangoValidationError, ImproperlyConfigured) as exc:
+            raise serializers.ValidationError(getattr(exc, "message_dict", None) or getattr(exc, "messages", [str(exc)])) from exc
+        return Response(CreditPaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
+
+
+class PlatformStaffSeatPlanView(APIView):
+    permission_classes = (IsAuthenticated, IsPlatformSuperadmin)
+
+    def get(self, request, **kwargs):
+        return Response(StaffSeatPlanSerializer(StaffSeatPlan.current()).data)
+
+    def patch(self, request, **kwargs):
+        plan = StaffSeatPlan.current()
+        serializer = StaffSeatPlanSerializer(plan, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 class PaymentHistoryView(SchoolBillingView):

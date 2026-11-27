@@ -121,7 +121,13 @@ class BachsProvider:
             with urlopen(request, timeout=15) as response:
                 result = json.loads(response.read().decode("utf-8"))
         except (HTTPError, URLError, TimeoutError, ValueError) as exc:
-            raise ValidationError({"payment": "Bachs could not be reached or rejected this request. Retry shortly or check your Bachs API settings."}) from exc
+            if isinstance(exc, HTTPError):
+                try:
+                    detail = exc.read().decode("utf-8", errors="replace")[:500]
+                except Exception:
+                    detail = ""
+                raise ValidationError({"payment": f"Bachs rejected the checkout request (HTTP {exc.code}). Check sandbox key, API permissions, and request fields. {detail}"}) from exc
+            raise ValidationError({"payment": "Bachs could not be reached. Check the API URL and try again."}) from exc
         if not isinstance(result, dict):
             raise ValidationError({"payment": "Bachs returned an invalid response."})
         return result

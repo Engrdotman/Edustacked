@@ -7,6 +7,7 @@ import OwnershipTransferPanel from '../components/OwnershipTransferPanel.jsx'
 const blankStaff = { staff_number: '', first_name: '', middle_name: '', last_name: '', work_email: '', phone: '', job_title: '', department: '', employment_type: 'full_time', employment_start_date: '', employment_end_date: '', status: 'active', user: '' }
 const blankAssignment = { teacher: '', academic_session: '', class_level: '', class_arm: '', subject: '', start_date: '', end_date: '' }
 const localDateText = () => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}` }
+const money = (minor) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(Number(minor || 0) / 100)
 const assignmentIsEffectiveToday = (item) => item.status === 'active' && item.start_date <= localDateText() && (!item.end_date || item.end_date >= localDateText()) && (!item.academic_session_start_date || item.academic_session_start_date <= localDateText()) && (!item.academic_session_end_date || item.academic_session_end_date >= localDateText())
 function assignmentStatusLabel(item) {
   if (item.status !== 'active') return `Assignment ${item.status}`
@@ -37,6 +38,7 @@ export default function StaffManagementPage({ navigate }) {
   const role = selectedSchool?.role
   const canManage = ['platform_superadmin', 'school_owner', 'school_admin', 'school_manager', 'principal'].includes(role)
   const canInvite = ['platform_superadmin', 'school_owner', 'school_admin', 'principal'].includes(role)
+  const canBuySeats = ['platform_superadmin', 'school_owner', 'school_admin'].includes(role)
   const isTeacher = role === 'teacher'
   const [rows, setRows] = useState([])
   const [memberships, setMemberships] = useState([])
@@ -63,6 +65,8 @@ export default function StaffManagementPage({ navigate }) {
   const [message, setMessage] = useState('')
   const [invite, setInvite] = useState({ email: '', first_name: '', last_name: '', role: 'teacher' })
   const [inviteRetryId, setInviteRetryId] = useState(null)
+  const [seatCapacity, setSeatCapacity] = useState(null)
+  const [seatProvider, setSeatProvider] = useState('flutterwave')
 
   const loadAssignments = useCallback(async (filterValues = filters) => {
     const params = new URLSearchParams(Object.entries(filterValues).filter(([, value]) => value))
@@ -79,10 +83,12 @@ export default function StaffManagementPage({ navigate }) {
         const params = new URLSearchParams()
         if (search.trim()) params.set('search', search.trim())
         if (statusFilter) params.set('status', statusFilter)
-        const [staffRows, activeStaffRows, sessionRows, classRows, subjectRows, assignmentResult, membershipRows] = await Promise.all([
+        const [staffRows, activeStaffRows, sessionRows, classRows, subjectRows, assignmentResult, membershipRows, capacity] = await Promise.all([
           listAll(`staff/${params.size ? `?${params}` : ''}`), listAll('staff/?status=active'), academicList('academic-sessions/'), academicList('classes/'), academicList('subjects/'), listAll('assignments/'),
           canInvite && selectedSchool?.school_id ? listAll(`schools/${selectedSchool.school_id}/memberships/`) : Promise.resolve([]),
+          apiRequest('billing/staff-seats/capacity/'),
         ])
+        setSeatCapacity(capacity)
         setRows(staffRows); setSessions(sessionRows); setClasses(classRows.filter((r) => r.is_active)); setSubjects(subjectRows.filter((r) => r.is_active)); setAssignments(assignmentResult)
         setAssignableTeachers(activeStaffRows)
         setMemberships(membershipRows)
@@ -98,6 +104,19 @@ export default function StaffManagementPage({ navigate }) {
   }, [isTeacher, canManage, canInvite, selectedSchool?.school_id, search, statusFilter])
 
   useEffect(() => { reload() }, [reload])
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search)
+    const reference = query.get('reference')
+    if (!reference || !selectedSchool?.school_id) return
+    const body = {}
+    if (query.get('transaction_id')) body.transaction_id = query.get('transaction_id')
+    if (query.get('checkout_id')) body.checkout_id = query.get('checkout_id')
+    apiRequest(`billing/payments/${encodeURIComponent(reference)}/`, { method: 'POST', body })
+      .then((payment) => { setMessage(payment.status === 'success' ? 'Staff seat purchase confirmed.' : 'Payment is still pending. Refresh this page in a moment to check again.'); return reload() })
+      .catch((requestError) => setError(requestError.message || 'Could not verify the staff seat payment.'))
+      .finally(() => { query.delete('reference'); query.delete('transaction_id'); query.delete('checkout_id'); const searchText = query.toString(); window.history.replaceState({}, '', `${window.location.pathname}${searchText ? `?${searchText}` : ''}`) })
+  }, [selectedSchool?.school_id])
 
   async function chooseClass(value) {
     setAssignmentForm((current) => ({ ...current, class_level: value, class_arm: '', subject: '' }))
@@ -115,6 +134,16 @@ export default function StaffManagementPage({ navigate }) {
       await apiRequest(editingId ? `staff/${editingId}/` : 'staff/', { method: editingId ? 'PATCH' : 'POST', body: payload })
       setMessage(editingId ? 'Staff profile updated.' : 'Staff profile created.'); setStaffForm(blankStaff); setEditingId(null); setShowStaffForm(false); await reload()
     } catch (e) { setError(e.message || 'Could not save staff profile.') }
+    finally { setBusy(false) }
+  }
+
+  async function buyStaffSeat() {
+    setBusy(true); setError(''); setMessage('')
+    try {
+      const payment = await apiRequest('billing/staff-seats/purchase/', { method: 'POST', body: { seats: 1, provider: seatProvider } })
+      if (!payment.authorization_url) throw new Error('The payment provider did not return a checkout link.')
+      window.location.assign(payment.authorization_url)
+    } catch (requestError) { setError(requestError.message || 'A staff seat checkout could not be started.') }
     finally { setBusy(false) }
   }
 
@@ -218,6 +247,7 @@ export default function StaffManagementPage({ navigate }) {
     <section className={`app-content student-page ${isTeacher ? 'teacher-assignments-page' : ''}`}><p className="eyebrow">{selectedSchool?.school_name} · {isTeacher ? 'MY TEACHING' : 'STAFF'}</p><h1 className="app-heading">{isTeacher ? <>My teaching <em>assignments</em></> : <>Staff &amp; <em>teachers</em></>}</h1><p className="intro">{isTeacher ? 'Review the sessions, classes, arms, and subjects assigned to your teacher account.' : 'Employment profiles are separate from account access. Teaching responsibilities are recorded by session, class, arm, and subject.'}</p>
       {(error || message) && <div className="action-feedback" aria-live="polite">{error && <p className="form-error" role="alert">{error}</p>}{message && <p className="success-message" role="status">{message}</p>}</div>}
       {!isTeacher && <div className="student-toolbar"><input aria-label="Search staff" placeholder="Search name, staff number, or job title" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && reload()} /><select aria-label="Filter staff by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="">All staff</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="suspended">Suspended</option><option value="former">Former</option></select>{canManage && <button className="primary-button" onClick={() => { setStaffForm(blankStaff); setEditingId(null); setShowStaffForm(!showStaffForm) }}>Add staff</button>}</div>}
+      {!isTeacher && canManage && seatCapacity && <section className="student-profile staff-seat-capacity"><div><strong>Staff seats: {seatCapacity.staff_count} of {seatCapacity.seat_limit}</strong><span>{seatCapacity.included_seats} included · {seatCapacity.purchased_seats} extra purchased · one-time price {money(seatCapacity.additional_seat_price_minor)} per seat</span></div>{canBuySeats ? <div><label>Payment method<select value={seatProvider} onChange={(event) => setSeatProvider(event.target.value)}><option value="flutterwave">Flutterwave</option><option value="bachs">Bachs</option><option value="paystack">Paystack</option></select></label><button className="secondary-button" disabled={busy} onClick={buyStaffSeat}>Buy one extra seat</button></div> : <span>Ask a school owner or administrator to add seats.</span>}</section>}
       {canInvite && <form className="membership-invite" onSubmit={sendInvite}><div><p className="panel-kicker">SCHOOL ACCESS</p><h2>Invite a staff member</h2></div><label>Email<input type="email" required placeholder="teacher@school.edu.ng" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} /></label><label>First name<input required placeholder="e.g. Amina" value={invite.first_name} onChange={(e) => setInvite({ ...invite, first_name: e.target.value })} /></label><label>Last name<input placeholder="e.g. Yusuf" value={invite.last_name} onChange={(e) => setInvite({ ...invite, last_name: e.target.value })} /></label><label>Role<select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })}><option value="principal">Principal</option><option value="school_manager">School administrator</option><option value="teacher">Teacher</option><option value="accountant">Bursar</option><option value="receptionist">Other staff</option></select></label><button className="primary-button" disabled={busy}>{busy ? 'Sending…' : 'Invite staff'}</button>{inviteRetryId && <button className="secondary-button invite-retry-button" type="button" onClick={retryInvite} disabled={busy}>{busy ? 'Retrying…' : 'Retry setup email'}</button>}</form>}
       {canInvite && <section className="membership-directory" aria-labelledby="school-access-title"><div className="membership-directory-heading"><div><p className="panel-kicker">SCHOOL ACCESS</p><h2 id="school-access-title">School login accounts</h2></div><span>{memberships.length} account{memberships.length === 1 ? '' : 's'}</span></div><p className="membership-directory-note">Invited accounts appear here immediately. This role controls dashboard access; linking an account to a staff profile does not change its role.</p><div className="membership-account-list">{memberships.map((membership) => { const roleDraft = membershipRoleDrafts[membership.id] || membership.role; const canEditRole = membership.is_active && membership.role !== 'school_owner' && Number(membership.account_id) !== Number(user?.id); return <article className="membership-account-row" key={membership.id}><div><strong>{[membership.first_name, membership.last_name].filter(Boolean).join(' ') || membership.email}</strong><span>{membership.email} · {membership.role.replaceAll('_', ' ')}</span></div><div className="membership-account-actions"><span className={`membership-account-status ${membership.user_email_verified && membership.is_active ? 'is-active' : ''}`}>{!membership.is_active ? 'School access paused' : membership.user_email_verified ? 'Email verified' : 'Awaiting email verification'}</span>{canEditRole && <div className="membership-role-editor"><label className="visually-hidden" htmlFor={`membership-role-${membership.id}`}>School role for {membership.email}</label><select id={`membership-role-${membership.id}`} value={roleDraft} disabled={busy} onChange={(event) => setMembershipRoleDrafts((current) => ({ ...current, [membership.id]: event.target.value }))}><option value="principal">Principal</option>{(user?.is_superuser || membership.role === 'school_admin') && <option value="school_admin">School admin</option>}<option value="school_manager">School manager</option><option value="teacher">Teacher</option><option value="accountant">Accountant</option><option value="receptionist">Receptionist</option></select><button className="small-button" type="button" disabled={busy || roleDraft === membership.role} onClick={() => saveMembershipRole(membership)}>{busy ? 'Saving…' : 'Save role'}</button></div>}{membership.is_active && !membership.user_email_verified && <button className="text-button" type="button" disabled={busy} onClick={() => retryInvite(membership.id)}>{busy ? 'Sending…' : 'Resend setup email'}</button>}</div></article>})}{memberships.length === 0 && <p className="academic-empty">No school login accounts are available to manage yet.</p>}</div></section>}
       {canManage && !canInvite && <p className="academic-hint">You can manage employment profiles and teaching assignments. Only a school owner, school admin, or principal can create school login accounts.</p>}

@@ -84,11 +84,37 @@ class TermSerializer(ValidatedModelSerializer):
 
 class ClassLevelSerializer(ValidatedModelSerializer):
     school = serializers.PrimaryKeyRelatedField(read_only=True)
+    departments = serializers.ListField(child=serializers.CharField(max_length=100), write_only=True, required=False)
 
     class Meta:
         model = ClassLevel
-        fields = ("id", "school", "name", "code", "category", "description", "is_active", "created_at", "updated_at")
+        fields = ("id", "school", "name", "code", "category", "departments", "description", "is_active", "created_at", "updated_at")
         read_only_fields = ("id", "school", "created_at", "updated_at")
+
+    def validate_departments(self, values):
+        cleaned = list(dict.fromkeys(value.strip() for value in values if value.strip()))
+        if len(cleaned) > 30:
+            raise serializers.ValidationError("A class can have at most 30 departments.")
+        return cleaned
+
+    def create(self, validated_data):
+        departments = validated_data.pop("departments", [])
+        instance = super().create(validated_data)
+        self._save_departments(instance, departments)
+        return instance
+
+    def update(self, instance, validated_data):
+        departments = validated_data.pop("departments", None)
+        instance = super().update(instance, validated_data)
+        if departments is not None:
+            self._save_departments(instance, departments)
+        return instance
+
+    @staticmethod
+    def _save_departments(class_level, names):
+        from apps.academics.models import ClassDepartment
+        for name in names:
+            ClassDepartment.objects.get_or_create(school=class_level.school, class_level=class_level, name=name)
 
 
 class PromotionCriteriaSerializer(ValidatedModelSerializer):

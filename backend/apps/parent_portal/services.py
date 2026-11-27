@@ -6,9 +6,10 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.db import transaction
 from django.utils import timezone
+from django.utils.html import escape
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 
@@ -73,18 +74,33 @@ def issue_guardian_invitation(link, actor):
         expires_at=now + timedelta(seconds=settings.PASSWORD_RESET_TIMEOUT),
     )
     activation_url = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/guardian/activate?token={token}"
+    safe_activation_url = escape(activation_url)
+    safe_name = escape(guardian.full_name)
+    safe_school_name = escape(guardian.school.name)
+    subject = f"Activate your {guardian.school.name} parent portal"
+    text_body = (
+        f"Hello {guardian.full_name},\n\n"
+        "Your school invited you to the EDUstacked parent portal. "
+        f"Activate access within {settings.PASSWORD_RESET_TIMEOUT // 60} minutes using this one-time link:\n\n"
+        f"{activation_url}\n\nIf you were not expecting this invitation, contact the school."
+    )
+    html_body = f'''<!doctype html><html><body style="margin:0;background:#f2f1ed;font-family:Arial,sans-serif;color:#26374e;padding:32px 12px">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
+        <table role="presentation" width="600" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden" cellspacing="0" cellpadding="0">
+          <tr><td style="background:#454b72;padding:24px 30px;color:#fff;font-size:22px;font-weight:bold">EDUstacked</td></tr>
+          <tr><td style="padding:32px 30px"><p>Hello {safe_name},</p>
+            <h1 style="font-size:24px;color:#26374e">Activate your parent portal</h1>
+            <p style="line-height:1.7;color:#526276">{safe_school_name} invited you to access the EDUstacked parent portal. Use the button below to choose your password. This one-time link expires in {settings.PASSWORD_RESET_TIMEOUT // 60} minutes.</p>
+            <p style="margin:28px 0"><a href="{safe_activation_url}" style="display:inline-block;background:#454b72;color:#fff;text-decoration:none;padding:14px 24px;border-radius:7px;font-weight:bold">Activate account</a></p>
+            <p style="font-size:13px;color:#64748b">If the button does not open, copy this link into your browser:</p>
+            <p style="font-size:13px;word-break:break-all"><a href="{safe_activation_url}" style="color:#1486a8">{safe_activation_url}</a></p>
+            <p style="font-size:13px;color:#64748b">If you were not expecting this invitation, contact your school.</p>
+          </td></tr><tr><td style="background:#f8fafc;padding:18px 30px;text-align:center;font-size:12px;color:#64748b">Smart School Management. Simplified.</td></tr>
+        </table></td></tr></table></body></html>'''
     try:
-        sent = send_mail(
-            subject=f"Activate your {guardian.school.name} parent portal",
-            message=(
-                f"Hello {guardian.full_name},\n\n"
-                "Your school invited you to the EDUstacked parent portal. "
-                f"Activate access within {settings.PASSWORD_RESET_TIMEOUT // 60} minutes using this one-time link:\n\n"
-                f"{activation_url}\n\nIf you were not expecting this invitation, contact the school."
-            ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[email], fail_silently=False,
-        )
+        message = EmailMultiAlternatives(subject, text_body, settings.DEFAULT_FROM_EMAIL, [email])
+        message.attach_alternative(html_body, "text/html")
+        sent = message.send(fail_silently=False)
     except Exception as exc:
         invitation.revoked_at = timezone.now()
         invitation.save(update_fields=("revoked_at",))

@@ -13,7 +13,7 @@ from apps.schools.models import School
 
 from .models import (
     CreditAccount, CreditPayment, CreditTransaction, ReconciliationIssue,
-    ReportCardBilling,
+    ReportCardBilling, StaffSeatAccount, StaffSeatPlan,
 )
 from .providers import BachsProvider, FlutterwaveProvider, PaystackProvider
 
@@ -110,6 +110,43 @@ def initialize_purchase(school, user, package, provider_name="paystack", provide
     return payment
 
 
+@transaction.atomic
+def initialize_staff_seat_purchase(school, user, seats, provider_name="flutterwave"):
+    provider_name = (provider_name or "flutterwave").lower()
+    providers = {"flutterwave": FlutterwaveProvider, "bachs": BachsProvider, "paystack": PaystackProvider}
+    provider_class = providers.get(provider_name)
+    if provider_class is None:
+        raise ValidationError({"provider": "Choose Flutterwave, Bachs, or Paystack."})
+    email = (user.email or "").strip()
+    if not email:
+        raise ValidationError({"email": "A valid account email is required to purchase staff seats."})
+    seats = int(seats)
+    plan = StaffSeatPlan.current()
+    amount_minor = plan.additional_seat_price_minor * seats
+    reference = f"EDU{secrets.token_hex(14)}"
+    payment = CreditPayment.objects.create(
+        school=school, product_type=CreditPayment.ProductType.STAFF_SEATS, seat_count=seats,
+        package_name=f"{seats} additional staff seat{'s' if seats != 1 else ''}",
+        credits=0, amount_minor=amount_minor, provider=provider_name, reference=reference,
+        customer_email=email, created_by=user,
+    )
+    callback_url = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/app/staff?reference={reference}"
+    if not settings.DEBUG and not callback_url.startswith("https://"):
+        raise ValidationError({"callback_url": "Checkout requires an HTTPS frontend callback in production."})
+    provider = provider_class()
+    if provider_name == "flutterwave":
+        checkout = provider.initialize(email=email, amount_minor=amount_minor, reference=reference, callback_url=callback_url, title="EDUstacked staff seats", description=payment.package_name)
+    else:
+        checkout = provider.initialize(email=email, amount_minor=amount_minor, reference=reference, callback_url=callback_url)
+    if not checkout.get("authorization_url", "").startswith("https://"):
+        raise ValidationError({"payment": "The provider returned an invalid checkout URL."})
+    payment.authorization_url = checkout["authorization_url"]
+    payment.provider_metadata = {"access_code": checkout.get("access_code", ""), "checkout_id": checkout.get("checkout_id", "")}
+    payment.provider_transaction_id = str(checkout.get("checkout_id", ""))
+    payment.save(update_fields=("authorization_url", "provider_metadata", "provider_transaction_id", "updated_at"))
+    return payment
+
+
 def _validated_success(payment, data):
     expected_amount = payment.amount_minor
     try:
@@ -140,16 +177,21 @@ def apply_provider_result(payment, data):
         _validated_success(payment, data)
         if payment.status == CreditPayment.Status.REVERSED:
             return payment
-        account = _locked_account(payment.school)
         if payment.status != CreditPayment.Status.SUCCESS:
-            account.balance += payment.credits
-            account.save(update_fields=("balance", "updated_at"))
-            CreditTransaction.objects.create(
-                school=payment.school, kind=CreditTransaction.Kind.PURCHASE,
-                amount=payment.credits, description=f"Verified purchase: {payment.package_name}",
-                payment=payment, actor=None, reference_key=f"payment:{payment.reference}",
-                metadata={"provider": payment.provider, "provider_transaction_id": str(data.get("id", ""))},
-            )
+            if payment.product_type == CreditPayment.ProductType.STAFF_SEATS:
+                account, _ = StaffSeatAccount.objects.select_for_update().get_or_create(school=payment.school)
+                account.purchased_seats += payment.seat_count
+                account.save(update_fields=("purchased_seats", "updated_at"))
+            else:
+                account = _locked_account(payment.school)
+                account.balance += payment.credits
+                account.save(update_fields=("balance", "updated_at"))
+                CreditTransaction.objects.create(
+                    school=payment.school, kind=CreditTransaction.Kind.PURCHASE,
+                    amount=payment.credits, description=f"Verified purchase: {payment.package_name}",
+                    payment=payment, actor=None, reference_key=f"payment:{payment.reference}",
+                    metadata={"provider": payment.provider, "provider_transaction_id": str(data.get("id", ""))},
+                )
         payment.status = CreditPayment.Status.SUCCESS
         payment.verified_at = timezone.now()
         payment.provider_transaction_id = str(data.get("id", ""))

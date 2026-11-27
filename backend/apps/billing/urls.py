@@ -5,12 +5,19 @@ from .views import (
     PaymentDetailView, PaymentHistoryView, PlatformBillingAdjustmentView,
     PlatformBillingIssuesView, PurchaseInitializeView,
     ReportCardBillingHistoryView, TransactionHistoryView,
+    PlatformCreditPackageListView, PlatformCreditPackageDetailView,
+    StaffSeatPurchaseView, StaffSeatCapacityView, PlatformStaffSeatPlanView,
 )
 
 urlpatterns = [
     path("billing/credits/", BillingOverviewView.as_view(), name="billing-credits"),
     path("billing/packages/", CreditPackageListView.as_view(), name="billing-packages"),
+    path("platform/billing/packages/", PlatformCreditPackageListView.as_view(), name="platform-credit-packages"),
+    path("platform/billing/packages/<int:pk>/", PlatformCreditPackageDetailView.as_view(), name="platform-credit-package-detail"),
+    path("platform/billing/staff-seats/", PlatformStaffSeatPlanView.as_view(), name="platform-staff-seat-plan"),
     path("billing/purchases/", PurchaseInitializeView.as_view(), name="billing-purchase-init"),
+    path("billing/staff-seats/capacity/", StaffSeatCapacityView.as_view(), name="billing-staff-seats-capacity"),
+    path("billing/staff-seats/purchase/", StaffSeatPurchaseView.as_view(), name="billing-staff-seats-purchase"),
     path("billing/payments/", PaymentHistoryView.as_view(), name="billing-payments"),
     path("billing/payments/<str:reference>/", PaymentDetailView.as_view(), name="billing-payment-detail"),
     path("billing/transactions/", TransactionHistoryView.as_view(), name="billing-transactions"),
