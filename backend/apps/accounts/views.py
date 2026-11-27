@@ -69,6 +69,10 @@ def _portal_access_denial(user, portal):
         return "This sign-in is for EDUstacked platform administrators. School owners and staff should use School sign in."
     if portal in {"school", "parent"} and user.is_superuser:
         return "Platform administrator accounts use the separate Platform sign in page."
+    if portal == "school" and not SchoolMembership.objects.filter(
+        user=user, is_active=True, school__is_active=True,
+    ).exists():
+        return "This account does not have an active school staff or owner login. Choose Parent or guardian sign in, or ask your school to invite you as staff."
     if portal == "parent":
         from apps.students.models import Guardian
         if not Guardian.objects.filter(

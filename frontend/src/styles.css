@@ -578,6 +578,8 @@ button.attendance-register-row:hover { border-color:#83a989; background:#f6faf6;
 .signup-card .auth-form > label,.signup-card .auth-form > input,.signup-card .auth-form > select,.signup-card .auth-form > textarea,.signup-card .auth-form > .form-error,.signup-card .auth-form > button { grid-column:1 / -1; }
 .signup-card .auth-form > label { margin-top:12px; color:#354b3c; font-size:14px; font-weight:650; }
 .signup-card .auth-form input,.signup-card .auth-form select,.signup-card .auth-form textarea { width:100%; min-height:44px; padding:10px 12px; border:1px solid #cbd8cd; border-radius:7px; color:#203c2c; background:#fff; font:inherit; }
+.signup-card .auth-form .password-field { grid-column:1 / -1; }
+.signup-card .auth-form .password-field + label { margin-top:20px; }
 .signup-card .auth-form textarea { resize:vertical; }
 .signup-section-title { grid-column:1 / -1; margin-top:18px; padding-top:14px; border-top:1px solid #e6ece6; color:#203c2c; font-size:15px; font-weight:750; }
 .onboarding-page { min-height:100vh; background:#e6f7f3; }
